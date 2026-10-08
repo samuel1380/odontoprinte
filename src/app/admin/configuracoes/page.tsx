@@ -22,6 +22,7 @@ import {
   Check,
   AlertTriangle,
   ExternalLink,
+  Copy,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -41,11 +42,11 @@ export default function AdminConfiguracoesPage() {
   const [normalPrefix, setNormalPrefix] = useState("A");
   const [retryPrefix, setRetryPrefix] = useState("00A");
 
-  // Form State - Inteligência Artificial (Groq / Gemini / OpenAI / Mistral / Compatível)
-  const [aiProvider, setAiProvider] = useState<AIProvider>("GROQ");
+  // Form State - Inteligência Artificial (Google Gemini como Prioridade #1)
+  const [aiProvider, setAiProvider] = useState<AIProvider>("GEMINI");
   const [aiApiKey, setAiApiKey] = useState("");
   const [aiCustomEndpoint, setAiCustomEndpoint] = useState("");
-  const [aiModel, setAiModel] = useState("llama-3.3-70b-versatile");
+  const [aiModel, setAiModel] = useState("gemini-1.5-flash");
   const [aiEnabled, setAiEnabled] = useState(true);
   const [showApiKey, setShowApiKey] = useState(false);
   const [isTestingAi, setIsTestingAi] = useState(false);
@@ -62,6 +63,14 @@ export default function AdminConfiguracoesPage() {
     success: boolean;
     message: string;
     latency?: number;
+    details?: {
+      provider?: string;
+      model?: string;
+      source?: string;
+      note?: string;
+      rawError?: string;
+      diagnosticReport?: string;
+    };
   } | null>(null);
 
   useEffect(() => {
@@ -83,15 +92,25 @@ export default function AdminConfiguracoesPage() {
 
         // Carrega configurações de IA salvas
         const aiCfg = AIService.getConfig();
-        // Se não houver provedor salvo ou chave local, mas o Render tiver Groq/Gemini, prioriza
+        // Se não houver chave local, mas o Render tiver provedor preferencial, prioriza
         if (!aiCfg.apiKey && envStatus.preferredProvider) {
           setAiProvider(envStatus.preferredProvider);
+          if (envStatus.preferredProvider === "GEMINI") {
+            setAiModel("gemini-1.5-flash");
+          } else {
+            setAiModel("llama-3.3-70b-versatile");
+          }
         } else {
-          setAiProvider(aiCfg.provider);
+          setAiProvider(aiCfg.provider || "GEMINI");
+          setAiModel(
+            aiCfg.model ||
+              (aiCfg.provider === "GROQ"
+                ? "llama-3.3-70b-versatile"
+                : "gemini-1.5-flash")
+          );
         }
         setAiApiKey(aiCfg.apiKey || "");
         setAiCustomEndpoint(aiCfg.customEndpoint || "");
-        setAiModel(aiCfg.model || "llama-3.3-70b-versatile");
         setAiEnabled(aiCfg.enabled ?? true);
       } finally {
         setIsLoading(false);
@@ -103,10 +122,10 @@ export default function AdminConfiguracoesPage() {
   const handleProviderChange = (newProvider: AIProvider) => {
     setAiProvider(newProvider);
     setTestResult(null);
-    if (newProvider === "GROQ") {
-      setAiModel("llama-3.3-70b-versatile");
-    } else if (newProvider === "GEMINI") {
+    if (newProvider === "GEMINI") {
       setAiModel("gemini-1.5-flash");
+    } else if (newProvider === "GROQ") {
+      setAiModel("llama-3.3-70b-versatile");
     } else if (newProvider === "OPENAI") {
       setAiModel("gpt-4o-mini");
     } else if (newProvider === "MISTRAL") {
@@ -116,9 +135,17 @@ export default function AdminConfiguracoesPage() {
     }
   };
 
+  const handleCopyDiagnostic = () => {
+    const report =
+      testResult?.details?.diagnosticReport ||
+      `[DIAGNÓSTICO ODONTOIA]\nProvedor: ${aiProvider}\nModelo: ${aiModel}\nMensagem: ${testResult?.message}`;
+    navigator.clipboard.writeText(report);
+    toast.success("Diagnóstico técnico copiado! Cole aqui no chat para analisarmos.");
+  };
+
   const hasKeyFromRender =
-    (aiProvider === "GROQ" && Boolean(renderAiStatus?.groq)) ||
     (aiProvider === "GEMINI" && Boolean(renderAiStatus?.gemini)) ||
+    (aiProvider === "GROQ" && Boolean(renderAiStatus?.groq)) ||
     (aiProvider === "OPENAI" && Boolean(renderAiStatus?.openai)) ||
     (aiProvider === "MISTRAL" && Boolean(renderAiStatus?.mistral));
 
@@ -455,6 +482,35 @@ export default function AdminConfiguracoesPage() {
                   Selecione o Provedor de IA
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                  {/* Google Gemini (PRIORIDADE #1) */}
+                  <div
+                    onClick={() => handleProviderChange("GEMINI")}
+                    className={`cursor-pointer rounded-xl border-2 p-3 transition-all ${
+                      aiProvider === "GEMINI"
+                        ? "border-blue-600 bg-blue-50/70 shadow-sm ring-1 ring-blue-500/20"
+                        : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <Sparkles className="w-4 h-4 text-blue-600" />
+                        <span className="text-sm font-bold text-slate-900">Google Gemini</span>
+                      </div>
+                      {aiProvider === "GEMINI" ? (
+                        <Badge className="bg-blue-600 text-white text-[10px] px-1.5 py-0 h-4">
+                          Ativo ⭐
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-blue-700 border-blue-300 text-[9px] px-1 py-0 h-4">
+                          Recomendado
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      Motor principal, cota gratuita e precisão clínica com <strong>Gemini 1.5 Flash</strong>.
+                    </p>
+                  </div>
+
                   {/* Groq */}
                   <div
                     onClick={() => handleProviderChange("GROQ")}
@@ -476,32 +532,7 @@ export default function AdminConfiguracoesPage() {
                       )}
                     </div>
                     <p className="text-[11px] text-slate-600 leading-relaxed">
-                      Respostas instantâneas (&lt; 0.5s). Modelo <strong>Llama 3.3 70B</strong>.
-                    </p>
-                  </div>
-
-                  {/* Google Gemini */}
-                  <div
-                    onClick={() => handleProviderChange("GEMINI")}
-                    className={`cursor-pointer rounded-xl border-2 p-3 transition-all ${
-                      aiProvider === "GEMINI"
-                        ? "border-brand-600 bg-brand-50/70 shadow-sm ring-1 ring-brand-500/20"
-                        : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <Sparkles className="w-4 h-4 text-blue-500" />
-                        <span className="text-sm font-bold text-slate-900">Google Gemini</span>
-                      </div>
-                      {aiProvider === "GEMINI" && (
-                        <Badge className="bg-brand-600 text-white text-[10px] px-1.5 py-0 h-4">
-                          Ativo
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-slate-600 leading-relaxed">
-                      Precisão clínica avançada e cota gratuita com <strong>Gemini 2.0 Flash</strong>.
+                      Respostas ultra-rápidas (&lt; 0.5s) e fallback resiliente com <strong>Llama 3.3 70B</strong>.
                     </p>
                   </div>
 
@@ -827,27 +858,68 @@ export default function AdminConfiguracoesPage() {
                 </div>
               </div>
 
-              {/* Status do Teste de Conexão */}
+              {/* Status do Teste de Conexão com Diagnóstico Detalhado */}
               {testResult && (
                 <div
-                  className={`p-3 rounded-lg border text-xs flex items-center justify-between transition-all ${
+                  className={`p-4 rounded-xl border text-xs transition-all space-y-3 ${
                     testResult.success
-                      ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                      : "bg-rose-50 border-rose-200 text-rose-800"
+                      ? "bg-emerald-50/90 border-emerald-300 text-emerald-900"
+                      : "bg-rose-50/90 border-rose-300 text-rose-900"
                   }`}
                 >
-                  <div className="flex items-center gap-2">
-                    {testResult.success ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    ) : (
-                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      {testResult.success ? (
+                        <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                      ) : (
+                        <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+                      )}
+                      <div>
+                        <span className="font-bold text-sm block">
+                          {testResult.success
+                            ? "Conexão Estabelecida com Sucesso!"
+                            : "Aviso / Falha na Conexão com a IA"}
+                        </span>
+                        <span className="text-xs text-slate-700">{testResult.message}</span>
+                      </div>
+                    </div>
+                    {testResult.latency !== undefined && (
+                      <Badge
+                        variant="outline"
+                        className={`font-mono text-[10px] shrink-0 ${
+                          testResult.success
+                            ? "bg-white border-emerald-300 text-emerald-700"
+                            : "bg-white border-rose-300 text-rose-700"
+                        }`}
+                      >
+                        ⚡ {testResult.latency}ms
+                      </Badge>
                     )}
-                    <span className="font-medium">{testResult.message}</span>
                   </div>
-                  {testResult.latency !== undefined && (
-                    <Badge variant="outline" className="font-mono text-[10px] bg-white border-emerald-300 text-emerald-700">
-                      ⚡ {testResult.latency}ms
-                    </Badge>
+
+                  {/* Relatório Técnico de Diagnóstico e Botão de Cópia */}
+                  {testResult.details?.diagnosticReport && (
+                    <div className="pt-2 border-t border-slate-200/60">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="font-semibold text-[11px] text-slate-700 flex items-center gap-1">
+                          <Info className="w-3.5 h-3.5 text-slate-500" />
+                          Relatório Técnico de Diagnóstico (Pronto para copiar):
+                        </span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={handleCopyDiagnostic}
+                          className="h-7 text-[11px] px-2.5 font-semibold gap-1.5 bg-white hover:bg-slate-50 border-slate-300 text-slate-700 shadow-xs cursor-pointer"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          Copiar Diagnóstico
+                        </Button>
+                      </div>
+                      <pre className="bg-slate-950 text-slate-100 p-3 rounded-lg font-mono text-[11px] overflow-x-auto whitespace-pre-wrap select-all leading-relaxed border border-slate-800">
+                        {testResult.details.diagnosticReport}
+                      </pre>
+                    </div>
                   )}
                 </div>
               )}

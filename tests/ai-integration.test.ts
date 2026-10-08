@@ -11,10 +11,10 @@ describe("AIService Unit Tests", () => {
     }
   });
 
-  it("deve carregar configuração padrão para Groq quando nada foi configurado", () => {
+  it("deve carregar configuração padrão para Gemini quando nada foi configurado", () => {
     const config = AIService.getConfig();
-    expect(config.provider).toBe("GROQ");
-    expect(config.model).toBe("llama-3.3-70b-versatile");
+    expect(config.provider).toBe("GEMINI");
+    expect(config.model).toBe("gemini-1.5-flash");
     expect(config.enabled).toBe(true);
     expect(config.apiKey).toBe("");
   });

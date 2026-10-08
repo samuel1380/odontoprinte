@@ -4,9 +4,9 @@ import { OdontoPrintService } from "./odontoprint-service";
 const STORAGE_KEY = "odontoprint_ai_config";
 
 export const DEFAULT_AI_CONFIG: AIConfig = {
-  provider: "GROQ",
+  provider: "GEMINI",
   apiKey: "",
-  model: "llama-3.3-70b-versatile",
+  model: "gemini-1.5-flash",
   enabled: true,
 };
 
@@ -66,7 +66,20 @@ export class AIService {
     };
   }
 
-  static async testConnection(config: AIConfig): Promise<{ success: boolean; message: string }> {
+  static async testConnection(config: AIConfig): Promise<{
+    success: boolean;
+    message: string;
+    latency?: number;
+    details?: {
+      provider?: string;
+      model?: string;
+      source?: string;
+      note?: string;
+      rawError?: string;
+      diagnosticReport?: string;
+    };
+  }> {
+    const startTime = Date.now();
     try {
       const res = await fetch("/api/ai/chat", {
         method: "POST",
@@ -82,17 +95,75 @@ export class AIService {
       });
 
       const data = await res.json();
+      const latency = Date.now() - startTime;
+
       if (!res.ok || data.error) {
-        return { success: false, message: data.error || `Erro HTTP ${res.status}` };
+        const errorDetail = data.details || data.error || `Erro HTTP ${res.status}`;
+        const diagnosticReport = [
+          `[DIAGNÓSTICO ODONTOIA]`,
+          `Status: FALHA DE CONEXÃO`,
+          `Provedor: ${config.provider}`,
+          `Modelo: ${config.model}`,
+          `Origem da Chave: ${config.apiKey ? "Informada Manualmente" : "Variáveis de Ambiente do Render"}`,
+          `Código HTTP: ${res.status}`,
+          `Detalhes:`,
+          errorDetail,
+        ].join("\n");
+
+        return {
+          success: false,
+          message: data.error || `Falha na conexão (HTTP ${res.status})`,
+          latency,
+          details: {
+            provider: config.provider,
+            model: config.model,
+            rawError: errorDetail,
+            diagnosticReport,
+          },
+        };
       }
 
-      const sourceInfo = data.source === "render" ? " [Chave do Render]" : "";
+      const sourceLabel = data.source === "render" ? "Render Environment Variables" : "Chave Local";
+      const diagnosticReport = [
+        `[DIAGNÓSTICO ODONTOIA]`,
+        `Status: CONEXÃO COM SUCESSO ✅`,
+        `Provedor Ativo: ${data.provider || config.provider}`,
+        `Modelo Ativo: ${data.model || config.model}`,
+        `Origem da Chave: ${sourceLabel}`,
+        `Latência: ${latency}ms`,
+        data.note ? `Observação: ${data.note}` : "",
+      ].filter(Boolean).join("\n");
+
       return {
         success: true,
-        message: `Conectado com sucesso ao ${data.provider || config.provider}${sourceInfo} (${data.model || config.model})!`,
+        message: `Conectado com sucesso ao ${data.provider || config.provider} (${data.model || config.model})!`,
+        latency,
+        details: {
+          provider: data.provider || config.provider,
+          model: data.model || config.model,
+          source: data.source,
+          note: data.note,
+          diagnosticReport,
+        },
       };
     } catch (err: any) {
-      return { success: false, message: err?.message || "Falha na comunicação de rede com o servidor." };
+      const diagnosticReport = [
+        `[DIAGNÓSTICO ODONTOIA]`,
+        `Status: ERRO DE REDE/FETCH`,
+        `Provedor: ${config.provider}`,
+        `Erro: ${err?.message || "Falha na comunicação de rede com o servidor."}`,
+      ].join("\n");
+
+      return {
+        success: false,
+        message: err?.message || "Falha na comunicação de rede com o servidor.",
+        details: {
+          provider: config.provider,
+          model: config.model,
+          rawError: String(err),
+          diagnosticReport,
+        },
+      };
     }
   }
 
@@ -139,7 +210,8 @@ export class AIService {
 
     const data = await res.json();
     if (!res.ok) {
-      throw new Error(data.error || "Erro ao consultar a OdontoIA.");
+      const errMsg = data.details || data.error || "Erro ao consultar a OdontoIA.";
+      throw new Error(errMsg);
     }
 
     return data.reply;

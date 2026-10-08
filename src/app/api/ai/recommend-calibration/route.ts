@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
       resin_brand,
       resin_type,
       layer_height = 0.05,
-      provider = "GROQ",
+      provider = "GEMINI",
       model,
       customEndpoint,
     } = body;
@@ -50,55 +50,80 @@ Determine os parâmetros ideais de calibração inicial recomendados para que o 
   "tips": string[] // 3 a 4 dicas cruciais de manuseio e segurança para não descolar da mesa
 }`;
 
-    const callGroq = async (key: string, selectedModel?: string) => {
-      const groqModel = selectedModel || "llama-3.3-70b-versatile";
-      const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${key}`,
-        },
-        body: JSON.stringify({
-          model: groqModel,
-          messages: [{ role: "user", content: prompt }],
-          response_format: { type: "json_object" },
-          temperature: 0.2,
-        }),
-      });
+    const callGemini = async (key: string, selectedModel?: string) => {
+      const primaryModel = selectedModel?.startsWith("gemini") ? selectedModel : "gemini-1.5-flash";
+      const candidateModels = primaryModel === "gemini-1.5-flash" ? ["gemini-1.5-flash"] : [primaryModel, "gemini-1.5-flash"];
 
-      if (groqRes.ok) {
-        const data = await groqRes.json();
-        const parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}");
-        return { ...parsed, aiProvider: "GROQ" };
+      for (const m of candidateModels) {
+        try {
+          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${key}`;
+          const geminiRes = await fetch(geminiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ role: "user", parts: [{ text: prompt }] }],
+              generationConfig: {
+                temperature: 0.2,
+                responseMimeType: "application/json",
+              },
+            }),
+          });
+
+          if (geminiRes.ok) {
+            const data = await geminiRes.json();
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+            const cleanText = text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
+            const parsed = JSON.parse(cleanText);
+            return { ...parsed, aiProvider: "GEMINI", model: m };
+          }
+        } catch {
+          // tentar proximo modelo
+        }
       }
       return null;
     };
 
-    const callGemini = async (key: string, selectedModel?: string) => {
-      const geminiModel = selectedModel?.startsWith("gemini") ? selectedModel : "gemini-1.5-flash";
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${key}`;
-      const geminiRes = await fetch(geminiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.2,
-            responseMimeType: "application/json",
+    const callGroq = async (key: string, selectedModel?: string) => {
+      try {
+        const groqModel = selectedModel && !selectedModel.startsWith("gemini") ? selectedModel : "llama-3.3-70b-versatile";
+        const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${key}`,
           },
-        }),
-      });
+          body: JSON.stringify({
+            model: groqModel,
+            messages: [{ role: "user", content: prompt }],
+            response_format: { type: "json_object" },
+            temperature: 0.2,
+          }),
+        });
 
-      if (geminiRes.ok) {
-        const data = await geminiRes.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-        const parsed = JSON.parse(text);
-        return { ...parsed, aiProvider: "GEMINI" };
+        if (groqRes.ok) {
+          const data = await groqRes.json();
+          const parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}");
+          return { ...parsed, aiProvider: "GROQ", model: groqModel };
+        }
+      } catch {
+        return null;
       }
       return null;
     };
 
     if (apiKey || (activeProvider === "OPENAI_COMPATIBLE" && customEndpoint)) {
+      if (activeProvider === "GEMINI") {
+        const res = await callGemini(apiKey, model);
+        if (res) return NextResponse.json(res);
+
+        // Fallback automático para Groq se disponível no Render
+        const groqBackup = getEnvKey("GROQ");
+        if (groqBackup) {
+          const groqRes = await callGroq(groqBackup);
+          if (groqRes) return NextResponse.json(groqRes);
+        }
+      }
+
       if (activeProvider === "GROQ") {
         const res = await callGroq(apiKey, model);
         if (res) return NextResponse.json(res);
@@ -108,18 +133,6 @@ Determine os parâmetros ideais de calibração inicial recomendados para que o 
         if (geminiBackup) {
           const geminiRes = await callGemini(geminiBackup);
           if (geminiRes) return NextResponse.json(geminiRes);
-        }
-      }
-
-      if (activeProvider === "GEMINI") {
-        const res = await callGemini(apiKey, model);
-        if (res) return NextResponse.json(res);
-
-        // Fallback para Groq se disponível no Render
-        const groqBackup = getEnvKey("GROQ");
-        if (groqBackup) {
-          const groqRes = await callGroq(groqBackup);
-          if (groqRes) return NextResponse.json(groqRes);
         }
       }
 

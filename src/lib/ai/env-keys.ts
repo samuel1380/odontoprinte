@@ -104,7 +104,8 @@ export interface ResolvedAIConfig {
  */
 export function resolveAIKey(requestedProvider?: AIProvider, clientKey?: string): ResolvedAIConfig {
   const cleanClientKey = cleanVal(clientKey);
-  const initialProvider: AIProvider = requestedProvider || "GROQ";
+  // GEMINI É O PROVEDOR PRINCIPAL PRIORIZADO
+  const initialProvider: AIProvider = requestedProvider || "GEMINI";
 
   // Se o cliente passou chave explícita no body
   if (cleanClientKey) {
@@ -125,22 +126,22 @@ export function resolveAIKey(requestedProvider?: AIProvider, clientKey?: string)
     };
   }
 
-  // Fallback entre Groq e Gemini no Render
-  if (initialProvider === "GROQ") {
-    const geminiEnv = getEnvKey("GEMINI");
-    if (geminiEnv) {
-      return {
-        apiKey: geminiEnv,
-        activeProvider: "GEMINI",
-        source: "render",
-      };
-    }
-  } else if (initialProvider === "GEMINI") {
+  // Fallback prioritário: se pediu Groq e não achou, ou se pediu Gemini e não achou
+  if (initialProvider === "GEMINI") {
     const groqEnv = getEnvKey("GROQ");
     if (groqEnv) {
       return {
         apiKey: groqEnv,
         activeProvider: "GROQ",
+        source: "render",
+      };
+    }
+  } else if (initialProvider === "GROQ") {
+    const geminiEnv = getEnvKey("GEMINI");
+    if (geminiEnv) {
+      return {
+        apiKey: geminiEnv,
+        activeProvider: "GEMINI",
         source: "render",
       };
     }
@@ -179,8 +180,9 @@ export function getAIEnvStatus() {
   const mistralKey = getEnvKey("MISTRAL");
 
   let preferredProvider: AIProvider | null = null;
-  if (groqKey) preferredProvider = "GROQ";
-  else if (geminiKey) preferredProvider = "GEMINI";
+  // GEMINI É A PRIORIDADE MÁXIMA
+  if (geminiKey) preferredProvider = "GEMINI";
+  else if (groqKey) preferredProvider = "GROQ";
   else if (openaiKey) preferredProvider = "OPENAI";
   else if (mistralKey) preferredProvider = "MISTRAL";
 

@@ -17,9 +17,11 @@ import {
   ListOrdered,
   FlaskConical,
   Zap,
+  Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 
 export function AICopilotDrawer() {
   const [isOpen, setIsOpen] = useState(false);
@@ -34,7 +36,7 @@ export function AICopilotDrawer() {
   ]);
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [aiProvider, setAiProvider] = useState<string>("GROQ");
+  const [aiProvider, setAiProvider] = useState<string>("GEMINI");
   const [isRenderKey, setIsRenderKey] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -97,12 +99,11 @@ export function AICopilotDrawer() {
       };
       setMessages((prev) => [...prev, assistantMsg]);
     } catch (err: any) {
+      const errDetails = err?.message || "Tente novamente mais tarde.";
       const errorMsg: AIChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: `⚠️ Desculpe, ocorreu um erro ao consultar a OdontoIA: ${
-          err?.message || "Tente novamente mais tarde."
-        }`,
+        content: `⚠️ Ocorreu uma instabilidade na consulta da OdontoIA:\n\n${errDetails}\n\n💡 Dica: Verifique se sua chave do Google Gemini está configurada em [Configurações](/admin/configuracoes) ou no Render (variável GEMINI_API_KEY).`,
         timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errorMsg]);
@@ -243,13 +244,29 @@ export function AICopilotDrawer() {
                     )}
 
                     <div
-                      className={`max-w-[85%] rounded-2xl p-3 leading-relaxed whitespace-pre-wrap ${
+                      className={`group relative max-w-[85%] rounded-2xl p-3 leading-relaxed whitespace-pre-wrap ${
                         isAssistant
                           ? "bg-white text-slate-800 border border-slate-200/80 shadow-2xs"
                           : "bg-brand-600 text-white font-medium shadow-xs"
                       }`}
                     >
                       {m.content}
+                      {isAssistant && m.id !== "welcome" && (
+                        <div className="mt-2 pt-1 border-t border-slate-100 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(m.content);
+                              toast.success("Mensagem copiada para a área de transferência!");
+                            }}
+                            className="text-[10px] text-slate-400 hover:text-slate-700 font-medium inline-flex items-center gap-1 transition"
+                            title="Copiar mensagem ou diagnóstico"
+                          >
+                            <Copy className="w-3 h-3" />
+                            <span>Copiar texto</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {!isAssistant && (
