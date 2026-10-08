@@ -544,8 +544,7 @@ SELECT setval('print_run_retry_seq', 1, false);
 DO $$
 BEGIN
     UPDATE auth.users
-    SET email_confirmed_at = COALESCE(email_confirmed_at, now()),
-        confirmed_at = COALESCE(confirmed_at, now())
+    SET email_confirmed_at = now()
     WHERE email_confirmed_at IS NULL;
 EXCEPTION WHEN OTHERS THEN
     null;
