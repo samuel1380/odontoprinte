@@ -28,12 +28,10 @@ export function Topbar({ onOpenMobileMenu }: TopbarProps) {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
 
-  const roleColors: Record<UserRole, string> = {
+  const roleColors: Record<string, string> = {
     ADMIN: "bg-slate-900 text-white border-slate-800",
     CADISTA: "bg-blue-50 text-blue-700 border-blue-200",
-    OPERADOR_RESINA: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    OPERADOR_IMPRESSAO: "bg-amber-50 text-amber-700 border-amber-200",
-    PROTETICO_ACABAMENTO: "bg-purple-50 text-purple-700 border-purple-200",
+    OPERADOR_IMPRESSAO: "bg-emerald-50 text-emerald-700 border-emerald-200",
   };
 
   return (
@@ -86,7 +84,7 @@ export function Topbar({ onOpenMobileMenu }: TopbarProps) {
                 {user?.full_name || "Usuário"}
               </span>
               <span className="text-[10px] text-slate-400 font-medium">
-                {activeRole ? USER_ROLES[activeRole] : "Acesso Restrito"}
+                {activeRole ? ((USER_ROLES as Record<string, string>)[activeRole] || activeRole) : "Acesso Restrito"}
               </span>
             </div>
 
@@ -109,7 +107,7 @@ export function Topbar({ onOpenMobileMenu }: TopbarProps) {
                   <div className="text-[11px] text-slate-500 truncate mt-0.5">{user?.email || ""}</div>
                   <div className="mt-2 flex items-center gap-1.5">
                     <Badge className={activeRole ? roleColors[activeRole] : "bg-slate-900 text-white border-slate-800"}>
-                      {activeRole ? USER_ROLES[activeRole] : "Acesso Restrito"}
+                      {activeRole ? ((USER_ROLES as Record<string, string>)[activeRole] || activeRole) : "Acesso Restrito"}
                     </Badge>
                   </div>
                 </div>
@@ -150,7 +148,7 @@ export function Topbar({ onOpenMobileMenu }: TopbarProps) {
 
                     {showRoleSwitcher && (
                       <div className="pl-6 pr-2 py-1 space-y-1 bg-slate-50/70 rounded-lg my-1">
-                        {(Object.keys(USER_ROLES) as UserRole[]).map((roleKey) => (
+                        {(Object.keys(USER_ROLES) as (keyof typeof USER_ROLES)[]).map((roleKey) => (
                           <button
                             key={roleKey}
                             type="button"

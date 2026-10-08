@@ -1,14 +1,12 @@
 export const DENTAL_FILE_TYPES = [
-  { id: "MODELO_COM_FUROS", label: "Modelo de Trabalho (com furos para dentes)", description: "Base do modelo com alvéolos/furos para assentamento dos troqueis e dentes", category: "IMPRESSAO" },
+  { id: "MODELO_COM_FUROS", label: "Modelo de Trabalho (com furos para dentes)", description: "Base do modelo 3D com alvéolos/furos para assentamento de troqueis e dentes", category: "IMPRESSAO" },
   { id: "MODELO_DE_TRABALHO", label: "Modelo de Trabalho Sólido", description: "Modelo anatômico base de estudo ou alinhadores", category: "IMPRESSAO" },
   { id: "ANTAGONISTA", label: "Modelo Antagonista", description: "Arco oponente para conferência e ajuste oclusal", category: "IMPRESSAO" },
-  { id: "TROQUEL", label: "Dentes / Troqueis (para encaixe)", description: "Dentes individualizados preparados para montagem nos furos do modelo", category: "MISTO" },
+  { id: "TROQUEL", label: "Dentes / Troqueis (para encaixe)", description: "Dentes individualizados preparados para montagem no modelo impresso", category: "IMPRESSAO" },
   { id: "GENGIVA_ARTIFICIAL", label: "Máscara Gengival / Gengiva Flex", description: "Gengiva destacável para assentamento estético e emergência protética", category: "IMPRESSAO" },
-  { id: "COROA_FRESADA", label: "Coroa / Estrutura para Fresagem (Zircônia/PMMA)", description: "Peça protética desenhada no CAD para usinagem na Fresadora CNC", category: "FRESAGEM" },
   { id: "PLACA_MIORRELAXANTE", label: "Placa Miorrelaxante", description: "Dispositivo interoclusal para bruxismo e DTM", category: "IMPRESSAO" },
-  { id: "ELEMENTO_PROVA", label: "Elemento para Prova Clínica", description: "Peça de prova estética e adaptação de margem", category: "MISTO" },
-  { id: "ELEMENTO_PROVISORIO", label: "Elemento Provisório", description: "Restauração transitória em resina ou PMMA", category: "MISTO" },
-  { id: "ELEMENTO_CARGA_CERAMICA", label: "Elemento Carga Cerâmica", description: "Infraestrutura para estratificação cerâmica", category: "FRESAGEM" },
+  { id: "ELEMENTO_PROVA", label: "Elemento para Prova Clínica", description: "Peça impressa de prova estética e adaptação de margem", category: "IMPRESSAO" },
+  { id: "ELEMENTO_PROVISORIO", label: "Elemento Provisório", description: "Restauração transitória em resina 3D biocompatível", category: "IMPRESSAO" },
 ] as const;
 
 export type DentalFileType = typeof DENTAL_FILE_TYPES[number]["id"];
@@ -19,16 +17,13 @@ export const FILE_TYPE_LABELS: Record<string, string> = {
   ANTAGONISTA: "Modelo Antagonista",
   TROQUEL: "Dentes / Troqueis (para encaixe)",
   GENGIVA_ARTIFICIAL: "Máscara Gengival",
-  COROA_FRESADA: "Coroa / Estrutura para Fresadora",
   PLACA_MIORRELAXANTE: "Placa Miorrelaxante",
   ELEMENTO_PROVA: "Elemento para Prova",
   ELEMENTO_PROVISORIO: "Elemento Provisório",
-  ELEMENTO_CARGA_CERAMICA: "Elemento Carga Cerâmica",
 };
 
 export const PROCESS_TYPES = {
   IMPRESSAO: "Impressão 3D (Resinas)",
-  FRESAGEM: "Fresagem CNC (Zircônia / PMMA / Cera)",
 } as const;
 
 export type ProcessType = keyof typeof PROCESS_TYPES;
@@ -37,37 +32,25 @@ export const USER_ROLES = {
   ADMIN: "Administrador / Gestor",
   CADISTA: "Cadista (Design / Modelagem)",
   OPERADOR_IMPRESSAO: "Operador de Impressão 3D & Resinas",
-  PROTETICO_ACABAMENTO: "Acabamento & Maquiagem",
-  OPERADOR_RESINA: "Operador de Impressão 3D & Resinas", // Compatibilidade
 } as const;
 
-export type UserRole = keyof typeof USER_ROLES;
+export type UserRole = keyof typeof USER_ROLES | "OPERADOR_RESINA" | "PROTETICO_ACABAMENTO";
 
-export const ROLE_PERMISSIONS: Record<UserRole, { label: string; description: string; paths: string[] }> = {
+export const ROLE_PERMISSIONS: Record<string, { label: string; description: string; paths: string[] }> = {
   ADMIN: {
     label: "Administrador / Gestor",
     description: "Acesso irrestrito a todos os setores do laboratório, configurações e auditoria.",
-    paths: ["/dashboard", "/cadista/status", "/fila", "/fatiador", "/impressoes", "/fresagem", "/acabamento", "/resinas", "/calibracoes", "/impressoras", "/historico", "/admin/usuarios", "/admin/configuracoes"],
+    paths: ["/dashboard", "/cadista/status", "/fila", "/fatiador", "/impressoes", "/resinas", "/calibracoes", "/impressoras", "/historico", "/admin/usuarios", "/admin/configuracoes"],
   },
   CADISTA: {
     label: "Cadista (Design / Modelagem)",
-    description: "Criação de novos trabalhos, modelagem 3D com furos/troqueis e direcionamento para impressão ou fresagem.",
-    paths: ["/dashboard", "/cadista/status", "/fila", "/fresagem", "/acabamento", "/historico"],
+    description: "Criação de novos trabalhos e encaminhamento para a fila de impressão 3D.",
+    paths: ["/dashboard", "/cadista/status", "/fila", "/historico"],
   },
   OPERADOR_IMPRESSAO: {
     label: "Operador de Impressão 3D & Resinas",
-    description: "Responsável único pelo setor de impressão 3D: parque de máquinas, resinas, calibração, fatiamento e envio para impressão.",
-    paths: ["/dashboard", "/fila", "/fatiador", "/impressoes", "/impressoras", "/resinas", "/calibracoes", "/acabamento", "/historico"],
-  },
-  OPERADOR_RESINA: {
-    label: "Operador de Impressão 3D & Resinas",
-    description: "Responsável único pelo setor de impressão 3D: parque de máquinas, resinas, calibração, fatiamento e envio para impressão.",
-    paths: ["/dashboard", "/fila", "/fatiador", "/impressoes", "/impressoras", "/resinas", "/calibracoes", "/acabamento", "/historico"],
-  },
-  PROTETICO_ACABAMENTO: {
-    label: "Acabamento & Maquiagem",
-    description: "Bancada técnica: montagem e encaixe dos dentes/troqueis nos furos dos modelos impressos, caracterização estética e controle de qualidade.",
-    paths: ["/dashboard", "/acabamento", "/fila", "/impressoes", "/fresagem", "/historico"],
+    description: "Gestão completa da esteira 3D: fila de impressão, fatiamento, impressoras, resinas e calibrações.",
+    paths: ["/dashboard", "/fila", "/fatiador", "/impressoes", "/impressoras", "/resinas", "/calibracoes", "/historico"],
   },
 };
 

@@ -354,15 +354,42 @@ export default function LoginPage() {
             </Button>
           </form>
 
+          {/* Card de Credenciais do Administrador */}
+          {!isRegisterMode && (
+            <div className="mt-5 p-3.5 rounded-xl border border-brand-200 bg-brand-50/60 text-xs">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="font-bold text-brand-900 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-brand-600" />
+                  Credenciais de Administrador:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail("admin@odontoprint.com.br");
+                    setPassword("admin123");
+                    toast.success("Credenciais preenchidas! Clique em 'Entrar no Sistema'.");
+                  }}
+                  className="text-[11px] font-bold text-brand-700 hover:text-brand-900 bg-brand-100 hover:bg-brand-200 px-2 py-0.5 rounded-md transition"
+                >
+                  Preencher
+                </button>
+              </div>
+              <div className="font-mono text-[11px] text-slate-700 space-y-0.5 mt-2 bg-white/80 p-2 rounded-lg border border-brand-100">
+                <div>E-mail: <strong className="text-slate-900">admin@odontoprint.com.br</strong></div>
+                <div>Senha: <strong className="text-slate-900">admin123</strong></div>
+              </div>
+            </div>
+          )}
+
           {/* Dica de Acesso */}
-          <div className="mt-8 rounded-xl border border-slate-200/90 bg-slate-50/60 p-3.5 text-xs text-slate-500">
+          <div className="mt-4 rounded-xl border border-slate-200/90 bg-slate-50/60 p-3 text-xs text-slate-500">
             <span className="font-semibold text-slate-700">
               {isRegisterMode ? "Observação de Criação:" : "Acesso Seguro:"}
             </span>
             <p className="mt-0.5 text-[11px] text-slate-500 leading-relaxed">
               {isRegisterMode
                 ? "Este formulário cria o usuário no sistema com permissões de ADMIN. Em seguida, acesse normalmente com as credenciais cadastradas."
-                : "Utilize suas credenciais cadastradas. Caso esteja iniciando a implantação, clique em 'Primeiro Acesso' acima para criar a conta de administrador."}
+                : "Utilize suas credenciais cadastradas ou o acesso de Administrador acima para entrar."}
             </p>
           </div>
 

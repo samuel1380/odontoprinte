@@ -47,8 +47,8 @@ export default function AdminUsuariosPage() {
     {
       id: "u4",
       full_name: "Eng. Rafael Costa",
-      email: "rafael.resinas@odontoprint.com.br",
-      role: "OPERADOR_RESINA",
+      email: "rafael.print@odontoprint.com.br",
+      role: "OPERADOR_IMPRESSAO",
       active: true,
     },
   ]);
@@ -62,7 +62,8 @@ export default function AdminUsuariosPage() {
     setUsersList((prev) =>
       prev.map((u) => (u.id === userId ? { ...u, role: newRoleValue } : u))
     );
-    toast.success(`Papel do usuário atualizado para ${USER_ROLES[newRoleValue]}`);
+    const roleLabel = (USER_ROLES as Record<string, string>)[newRoleValue] || newRoleValue;
+    toast.success(`Papel do usuário atualizado para ${roleLabel}`);
   };
 
   const handleCreateUser = (e: React.FormEvent) => {
@@ -81,7 +82,8 @@ export default function AdminUsuariosPage() {
     };
 
     setUsersList((prev) => [...prev, newUser]);
-    toast.success(`Usuário ${newUser.full_name} criado com papel ${USER_ROLES[newRole]}!`);
+    const roleLabel = (USER_ROLES as Record<string, string>)[newRole] || newRole;
+    toast.success(`Usuário ${newUser.full_name} criado com papel ${roleLabel}!`);
     setModalOpen(false);
     setNewFullName("");
     setNewEmail("");
@@ -166,7 +168,7 @@ export default function AdminUsuariosPage() {
                       onChange={(e) => handleRoleChange(u.id, e.target.value as UserRole)}
                       className="px-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-slate-50 font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500"
                     >
-                      {(Object.keys(USER_ROLES) as UserRole[]).map((r) => (
+                      {(Object.keys(USER_ROLES) as (keyof typeof USER_ROLES)[]).map((r) => (
                         <option key={r} value={r}>
                           {USER_ROLES[r]}
                         </option>
@@ -228,7 +230,7 @@ export default function AdminUsuariosPage() {
                 onChange={(e) => setNewRole(e.target.value as UserRole)}
                 className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500 font-semibold"
               >
-                {(Object.keys(USER_ROLES) as UserRole[]).map((r) => (
+                {(Object.keys(USER_ROLES) as (keyof typeof USER_ROLES)[]).map((r) => (
                   <option key={r} value={r}>
                     {USER_ROLES[r]}
                   </option>

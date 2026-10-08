@@ -70,7 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             setUser(profile);
             const savedRole = localStorage.getItem("odontoprint_active_role") as UserRole;
-            setActiveRoleState(savedRole && USER_ROLES[savedRole] ? savedRole : profile.role);
+            setActiveRoleState(savedRole && (USER_ROLES as Record<string, string>)[savedRole] ? savedRole : profile.role);
           } else if (isMounted) {
             // Sem sessão ativa: usuário DEVE iniciar deslogado
             setUser(null);
@@ -135,7 +135,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               if (parsed?.id && parsed?.email) {
                 setUser(parsed);
                 const savedRole = localStorage.getItem("odontoprint_active_role") as UserRole;
-                setActiveRoleState(savedRole && USER_ROLES[savedRole] ? savedRole : parsed.role || "ADMIN");
+                setActiveRoleState(savedRole && (USER_ROLES as Record<string, string>)[savedRole] ? savedRole : parsed.role || "ADMIN");
               }
             } catch {
               localStorage.removeItem("odontoprint_user");
@@ -184,16 +184,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!password || password.trim().length === 0) {
         return { success: false, error: "Por favor, digite sua senha de acesso." };
       }
+      const cleanPassword = password.trim();
 
       const { client, isConfigured } = createClient();
 
       if (isConfigured && client) {
         const { data, error } = await client.auth.signInWithPassword({
           email: cleanEmail,
-          password: password.trim(),
+          password: cleanPassword,
         });
 
         if (error) {
+          // Se for a credencial padrão de administrador e ainda não existir no banco, cria e loga automaticamente
+          if (cleanEmail === "admin@odontoprint.com.br" && cleanPassword === "admin123") {
+            try {
+              const signUpRes = await client.auth.signUp({
+                email: cleanEmail,
+                password: cleanPassword,
+                options: {
+                  data: {
+                    full_name: "Administrador do Laboratório",
+                    role: "ADMIN",
+                  },
+                },
+              });
+
+              if (signUpRes.data?.user) {
+                const profile: UserProfile = {
+                  id: signUpRes.data.user.id,
+                  email: cleanEmail,
+                  full_name: "Administrador do Laboratório",
+                  role: "ADMIN",
+                };
+                try {
+                  await client.from("profiles").upsert({
+                    id: signUpRes.data.user.id,
+                    full_name: "Administrador do Laboratório",
+                    role: "ADMIN",
+                    active: true,
+                  });
+                } catch {
+                  // ignore
+                }
+                setUser(profile);
+                setActiveRoleState("ADMIN");
+                localStorage.setItem("odontoprint_user", JSON.stringify(profile));
+                localStorage.setItem("odontoprint_active_role", "ADMIN");
+                return { success: true };
+              }
+            } catch {
+              // segue para o erro padrão
+            }
+          }
+
           let errorMsg = error.message;
           if (errorMsg.includes("Invalid login credentials")) {
             errorMsg = "E-mail ou senha incorretos. Verifique suas credenciais.";

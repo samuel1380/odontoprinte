@@ -90,18 +90,17 @@ export default function CadistaStatusPage() {
       }
 
       toast.success(
-        `Trabalho ${patientCode.toUpperCase()} criado! ${selectedFiles.length} itens cadastrados na esteira de produção.`,
+        `Trabalho ${patientCode.toUpperCase()} criado! ${selectedFiles.length} modelos cadastrados na esteira 3D.`,
         {
-          description: "Os itens foram encaminhados para a Fila correspondente (Impressão 3D ou Fresagem).",
+          description: "Os modelos foram encaminhados para a Fila de Impressão FIFO.",
           action: {
-            label: processType === "FRESAGEM" ? "Ver Fresagem" : "Ver Fila 3D",
-            onClick: () => router.push(processType === "FRESAGEM" ? "/fresagem" : "/fila"),
+            label: "Ver Fila 3D",
+            onClick: () => router.push("/fila"),
           },
         }
       );
 
-      // Redireciona para o setor correspondente
-      router.push(processType === "FRESAGEM" ? "/fresagem" : "/fila");
+      router.push("/fila");
     } catch (err: any) {
       toast.error(err.message || "Erro inesperado ao salvar trabalho.");
     } finally {
@@ -198,89 +197,13 @@ export default function CadistaStatusPage() {
             </CardContent>
           </Card>
 
-          {/* Card 2: Seleção do Processo (Duas opções grandes do fluxograma) */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Cog className="w-4 h-4 text-brand-500" />
-                2. Direcionamento do Fluxo Técnico
-              </CardTitle>
-              <CardDescription>
-                Selecione se o caso seguirá para fresadora CNC ou impressora 3D de resina.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Botão FRESAGEM */}
-                <button
-                  type="button"
-                  onClick={() => setProcessType("FRESAGEM")}
-                  className={`flex items-center justify-between p-5 rounded-xl border-2 text-left transition-all ${
-                    processType === "FRESAGEM"
-                      ? "border-brand-500 bg-brand-50/50 shadow-sm"
-                      : "border-slate-200 bg-white hover:border-slate-300 opacity-70"
-                  }`}
-                >
-                  <div className="flex items-center gap-3.5">
-                    <div
-                      className={`h-11 w-11 rounded-xl flex items-center justify-center ${
-                        processType === "FRESAGEM"
-                          ? "bg-brand-500 text-white"
-                          : "bg-slate-100 text-slate-500"
-                      }`}
-                    >
-                      <Cog className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <div className="font-bold text-slate-900 text-base">FRESAGEM</div>
-                      <div className="text-xs text-slate-500 mt-0.5">Usinagem CNC de zircônia, PMMA ou cera</div>
-                    </div>
-                  </div>
-                  {processType === "FRESAGEM" && (
-                    <CheckCircle2 className="w-6 h-6 text-brand-500" />
-                  )}
-                </button>
-
-                {/* Botão IMPRESSÃO */}
-                <button
-                  type="button"
-                  onClick={() => setProcessType("IMPRESSAO")}
-                  className={`flex items-center justify-between p-5 rounded-xl border-2 text-left transition-all ${
-                    processType === "IMPRESSAO"
-                      ? "border-brand-500 bg-brand-50/50 shadow-sm"
-                      : "border-slate-200 bg-white hover:border-slate-300 opacity-70"
-                  }`}
-                >
-                  <div className="flex items-center gap-3.5">
-                    <div
-                      className={`h-11 w-11 rounded-xl flex items-center justify-center ${
-                        processType === "IMPRESSAO"
-                          ? "bg-brand-500 text-white"
-                          : "bg-slate-100 text-slate-500"
-                      }`}
-                    >
-                      <Printer className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <div className="font-bold text-slate-900 text-base">IMPRESSÃO 3D</div>
-                      <div className="text-xs text-slate-500 mt-0.5">Manufatura aditiva em resina fotopolimerizável</div>
-                    </div>
-                  </div>
-                  {processType === "IMPRESSAO" && (
-                    <CheckCircle2 className="w-6 h-6 text-brand-500" />
-                  )}
-                </button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Card 3: ARQUIVOS A SEREM IMPRESSOS (Lista de 7 modelos) */}
+          {/* Card 2: ARQUIVOS A SEREM IMPRESSOS */}
           <Card className={validationError ? "border-rose-300 ring-2 ring-rose-100" : ""}>
             <CardHeader className="pb-3 flex flex-row items-center justify-between gap-2">
               <div className="min-w-0">
                 <CardTitle className="text-base flex items-center gap-2">
                   <Layers className="w-4 h-4 text-brand-500 shrink-0" />
-                  <span>3. Arquivos a Serem Impressos</span>
+                  <span>2. Modelos 3D para Impressão</span>
                 </CardTitle>
                 <CardDescription className="text-xs">
                   Selecione exatamente quais modelos anatômicos compõem este trabalho.

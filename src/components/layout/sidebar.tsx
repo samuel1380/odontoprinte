@@ -53,23 +53,23 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       ],
     },
     {
-      group: "1. CAD & Modelagem",
+      group: "CAD & Modelagem",
       items: [
         {
           title: "Cadista: Novo Trabalho",
           href: "/cadista/status",
           icon: FileCheck2,
         },
-      ],
-    },
-    {
-      group: "2. Impressão 3D & Resinas",
-      items: [
         {
           title: "Fila de Impressão (FIFO)",
           href: "/fila",
           icon: ListOrdered,
         },
+      ],
+    },
+    {
+      group: "Impressão 3D & Resinas",
+      items: [
         {
           title: "Fatiador / Preparo",
           href: "/fatiador",
@@ -98,30 +98,10 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       ],
     },
     {
-      group: "3. Fresagem CNC",
+      group: "Administração & Auditoria",
       items: [
         {
-          title: "Fila de Fresagem",
-          href: "/fresagem",
-          icon: Cog,
-        },
-      ],
-    },
-    {
-      group: "4. Bancada de Acabamento",
-      items: [
-        {
-          title: "Montagem & Maquiagem",
-          href: "/acabamento",
-          icon: Sparkles,
-        },
-      ],
-    },
-    {
-      group: "5. Rastreabilidade & Gestão",
-      items: [
-        {
-          title: "Histórico Completo",
+          title: "Histórico Geral",
           href: "/historico",
           icon: History,
         },

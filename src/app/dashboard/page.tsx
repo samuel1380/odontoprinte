@@ -59,7 +59,7 @@ export default function DashboardPage() {
               Painel Geral de Manufatura
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              Visão consolidada da esteira: Modelagem CAD, Fila 3D, Fresagem CNC e Bancada de Acabamento/Maquiagem.
+              Visão consolidada da esteira: Modelagem CAD, Fila FIFO, Fatiamento e Parque de Impressão 3D.
             </p>
           </div>
 
@@ -73,19 +73,19 @@ export default function DashboardPage() {
             <Link href="/fila">
               <Button variant="outline" size="sm" className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-50 bg-white rounded-xl shadow-xs text-xs">
                 <ListOrdered className="w-3.5 h-3.5" />
-                2. Fila 3D
+                2. Fila FIFO
               </Button>
             </Link>
-            <Link href="/fresagem">
+            <Link href="/fatiador">
               <Button variant="outline" size="sm" className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-50 bg-white rounded-xl shadow-xs text-xs">
-                <Cog className="w-3.5 h-3.5 text-purple-600" />
-                3. Fresagem
+                <Scissors className="w-3.5 h-3.5 text-blue-600" />
+                3. Fatiador
               </Button>
             </Link>
-            <Link href="/acabamento">
+            <Link href="/impressoes">
               <Button variant="outline" size="sm" className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-50 bg-white rounded-xl shadow-xs text-xs">
-                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                4. Acabamento
+                <Printer className="w-3.5 h-3.5 text-emerald-600" />
+                4. Impressões
               </Button>
             </Link>
           </div>
