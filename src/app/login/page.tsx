@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { OdontoPrintService } from "@/services/odontoprint-service";
+import { UserRole } from "@/lib/constants";
 import { 
   Printer, 
   Lock, 
@@ -16,19 +18,21 @@ import {
   ArrowRight,
   UserPlus,
   LogIn,
-  CheckCircle2
+  CheckCircle2,
+  Briefcase
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, signUp, user, isLoading: authLoading } = useAuth();
+  const { login, user, isLoading: authLoading } = useAuth();
   
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [requestedRole, setRequestedRole] = useState<UserRole>("CADISTA");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -59,12 +63,19 @@ export default function LoginPage() {
           return;
         }
 
-        const res = await signUp(email, password, fullName, "ADMIN");
+        const res = await OdontoPrintService.requestUserAccess({
+          full_name: fullName.trim(),
+          email: email.trim().toLowerCase(),
+          password: password.trim(),
+          role: requestedRole,
+        });
+
         if (res.success) {
-          toast.success("Conta de Administrador criada com sucesso!");
-          router.replace("/dashboard");
+          toast.success("Solicitação enviada com sucesso! Aguarde a aprovação do Administrador para efetuar login.");
+          setIsRegisterMode(false);
+          setPassword("");
         } else {
-          toast.error(res.error || "Não foi possível criar a conta. Verifique os dados.");
+          toast.error(res.error || "Não foi possível enviar a solicitação. Verifique os dados.");
         }
       } else {
         const res = await login(email, password);
@@ -207,7 +218,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Abas Alternar entre Login e Cadastro Inicial */}
+          {/* Abas: Acessar Conta vs Solicitar Acesso */}
           <div className="flex p-1 bg-slate-100 rounded-xl mb-6">
             <button
               type="button"
@@ -237,12 +248,12 @@ export default function LoginPage() {
 
           <div className="mb-6">
             <h2 className="text-2xl font-bold tracking-tight text-slate-900">
-              {isRegisterMode ? "Cadastrar Administrador" : "Acesso à Plataforma"}
+              {isRegisterMode ? "Solicitar Acesso ao Laboratório" : "Acesso à Plataforma"}
             </h2>
-            <p className="text-xs text-slate-500 mt-1.5">
+            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
               {isRegisterMode
-                ? "Crie o perfil de Administrador do seu laboratório para iniciar."
-                : "Insira suas credenciais corporativas para entrar na central operacional."}
+                ? "Preencha seus dados corporativos para enviar a solicitação ao Administrador do laboratório."
+                : "Insira suas credenciais para entrar na central operacional do laboratório."}
             </p>
           </div>
 
@@ -259,7 +270,7 @@ export default function LoginPage() {
                     required
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Administrador do Laboratório"
+                    placeholder="Ex: Dra. Camila Soares"
                     className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-slate-50/50 hover:bg-white transition"
                   />
                 </div>
@@ -278,7 +289,7 @@ export default function LoginPage() {
                   autoFocus={!isRegisterMode}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@odontoprint.com.br"
+                  placeholder="seu.nome@odontoprint.com.br"
                   className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-slate-50/50 hover:bg-white transition"
                 />
               </div>
@@ -287,12 +298,12 @@ export default function LoginPage() {
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-xs font-semibold text-slate-700">
-                  Senha
+                  Senha {isRegisterMode && "de Acesso"}
                 </label>
                 {!isRegisterMode && (
                   <button
                     type="button"
-                    onClick={() => toast.info("Para redefinir sua senha, solicite ao Administrador do laboratório ou consulte o console do Supabase.")}
+                    onClick={() => toast.info("Para redefinir sua senha, solicite ao Administrador do laboratório.")}
                     className="text-xs font-medium text-brand-600 hover:text-brand-700 transition"
                   >
                     Esqueceu a senha?
@@ -321,6 +332,26 @@ export default function LoginPage() {
               </div>
             </div>
 
+            {isRegisterMode && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                  <Briefcase className="w-3.5 h-3.5 text-slate-500" />
+                  Função / Setor Solicitado
+                </label>
+                <select
+                  value={requestedRole}
+                  onChange={(e) => setRequestedRole(e.target.value as UserRole)}
+                  className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-slate-50/50 hover:bg-white transition font-medium text-slate-800"
+                >
+                  <option value="CADISTA">Cadista (Design / Modelagem CAD)</option>
+                  <option value="OPERADOR_IMPRESSAO">Operador de Impressão 3D & Resinas</option>
+                </select>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Selecione sua função técnica. O Administrador avaliará seu acesso.
+                </p>
+              </div>
+            )}
+
             {!isRegisterMode && (
               <div className="flex items-center justify-between pt-1">
                 <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -343,53 +374,26 @@ export default function LoginPage() {
               {isSubmitting ? (
                 <>
                   <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                  <span>{isRegisterMode ? "Criando conta..." : "Verificando credenciais..."}</span>
+                  <span>{isRegisterMode ? "Enviando solicitação..." : "Verificando credenciais..."}</span>
                 </>
               ) : (
                 <>
-                  <span>{isRegisterMode ? "Registrar Administrador" : "Entrar no Sistema"}</span>
+                  <span>{isRegisterMode ? "Enviar Solicitação de Acesso" : "Entrar no Sistema"}</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
             </Button>
           </form>
 
-          {/* Card de Credenciais do Administrador */}
-          {!isRegisterMode && (
-            <div className="mt-5 p-3.5 rounded-xl border border-brand-200 bg-brand-50/60 text-xs">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="font-bold text-brand-900 flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-brand-600" />
-                  Credenciais de Administrador:
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail("admin@odontoprint.com.br");
-                    setPassword("admin123");
-                    toast.success("Credenciais preenchidas! Clique em 'Entrar no Sistema'.");
-                  }}
-                  className="text-[11px] font-bold text-brand-700 hover:text-brand-900 bg-brand-100 hover:bg-brand-200 px-2 py-0.5 rounded-md transition"
-                >
-                  Preencher
-                </button>
-              </div>
-              <div className="font-mono text-[11px] text-slate-700 space-y-0.5 mt-2 bg-white/80 p-2 rounded-lg border border-brand-100">
-                <div>E-mail: <strong className="text-slate-900">admin@odontoprint.com.br</strong></div>
-                <div>Senha: <strong className="text-slate-900">admin123</strong></div>
-              </div>
-            </div>
-          )}
-
           {/* Dica de Acesso */}
-          <div className="mt-4 rounded-xl border border-slate-200/90 bg-slate-50/60 p-3 text-xs text-slate-500">
+          <div className="mt-6 rounded-xl border border-slate-200/90 bg-slate-50/60 p-3 text-xs text-slate-500">
             <span className="font-semibold text-slate-700">
-              {isRegisterMode ? "Observação de Criação:" : "Acesso Seguro:"}
+              {isRegisterMode ? "Fluxo de Liberação:" : "Acesso Seguro:"}
             </span>
             <p className="mt-0.5 text-[11px] text-slate-500 leading-relaxed">
               {isRegisterMode
-                ? "Este formulário cria o usuário no sistema com permissões de ADMIN. Em seguida, acesse normalmente com as credenciais cadastradas."
-                : "Utilize suas credenciais cadastradas ou o acesso de Administrador acima para entrar."}
+                ? "Após o envio, a solicitação ficará pendente no painel do Administrador até ser aprovada."
+                : "Acesso restrito à equipe técnica autorizada do laboratório OdontoPrint."}
             </p>
           </div>
 

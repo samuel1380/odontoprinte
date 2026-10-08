@@ -13,6 +13,8 @@ import {
   SystemSettings,
   DentalFileType,
   ProcessType,
+  Profile,
+  UserRole,
 } from "@/types/database.types";
 import {
   QueueItem,
@@ -1185,5 +1187,197 @@ export class OdontoPrintService {
     });
 
     return { success: true };
+  }
+
+  // --- GESTÃO DE USUÁRIOS E SOLICITAÇÕES DE ACESSO ---
+  static async getUsers(): Promise<(Profile & { email?: string })[]> {
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        const { data, error } = await client
+          .from("profiles")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (!error && data && data.length > 0) {
+          return data as (Profile & { email?: string })[];
+        }
+      } catch {
+        // fallback para local
+      }
+    }
+
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("odontoprint_all_users");
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    const defaultUsers = [
+      {
+        id: "u1",
+        full_name: "Administrador do Laboratório",
+        email: "admin@odontoprint.com.br",
+        role: "ADMIN" as UserRole,
+        active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: "u2",
+        full_name: "Dra. Juliana Ribeiro",
+        email: "juliana.cad@odontoprint.com.br",
+        role: "CADISTA" as UserRole,
+        active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: "u3",
+        full_name: "Lucas Mendes",
+        email: "lucas.print@odontoprint.com.br",
+        role: "OPERADOR_IMPRESSAO" as UserRole,
+        active: true,
+        created_at: new Date().toISOString(),
+      },
+    ];
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem("odontoprint_all_users", JSON.stringify(defaultUsers));
+    }
+
+    return defaultUsers;
+  }
+
+  static async requestUserAccess(params: {
+    full_name: string;
+    email: string;
+    password?: string;
+    role: UserRole;
+  }): Promise<{ success: boolean; error?: string }> {
+    const { client, isConfigured } = this.getSupabase();
+    const cleanEmail = params.email.trim().toLowerCase();
+    const cleanName = params.full_name.trim();
+
+    if (isConfigured && client && params.password) {
+      try {
+        const { data, error } = await client.auth.signUp({
+          email: cleanEmail,
+          password: params.password,
+          options: {
+            data: {
+              full_name: cleanName,
+              role: params.role,
+            },
+          },
+        });
+
+        if (error) {
+          return { success: false, error: error.message };
+        }
+
+        if (data.user) {
+          await client.from("profiles").upsert({
+            id: data.user.id,
+            full_name: cleanName,
+            role: params.role,
+            active: false, // PENDENTE DE APROVAÇÃO PELO ADMIN
+          });
+        }
+      } catch (err: any) {
+        return { success: false, error: err?.message || "Erro ao conectar com Supabase" };
+      }
+    }
+
+    if (typeof window !== "undefined") {
+      const current = await this.getUsers();
+      const existing = current.find((u) => u.email === cleanEmail);
+      if (existing) {
+        return { success: false, error: "Este e-mail já possui uma solicitação ou cadastro no sistema." };
+      }
+
+      const newUser = {
+        id: crypto.randomUUID(),
+        full_name: cleanName,
+        email: cleanEmail,
+        password: params.password,
+        role: params.role,
+        active: false, // PENDENTE
+        created_at: new Date().toISOString(),
+      };
+      const updated = [newUser, ...current];
+      localStorage.setItem("odontoprint_all_users", JSON.stringify(updated));
+    }
+
+    return { success: true };
+  }
+
+  static async approveUser(userId: string): Promise<boolean> {
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        await client.from("profiles").update({ active: true }).eq("id", userId);
+      } catch {
+        // ignore
+      }
+    }
+
+    if (typeof window !== "undefined") {
+      const current = await this.getUsers();
+      const updated = current.map((u) => {
+        if (u.id === userId) {
+          return { ...u, active: true };
+        }
+        return u;
+      });
+      localStorage.setItem("odontoprint_all_users", JSON.stringify(updated));
+    }
+
+    return true;
+  }
+
+  static async rejectUser(userId: string): Promise<boolean> {
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        await client.from("profiles").delete().eq("id", userId);
+      } catch {
+        // ignore
+      }
+    }
+
+    if (typeof window !== "undefined") {
+      const current = await this.getUsers();
+      const updated = current.filter((u) => u.id !== userId);
+      localStorage.setItem("odontoprint_all_users", JSON.stringify(updated));
+    }
+
+    return true;
+  }
+
+  static async updateUserRole(userId: string, role: UserRole): Promise<boolean> {
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        await client.from("profiles").update({ role }).eq("id", userId);
+      } catch {
+        // ignore
+      }
+    }
+
+    if (typeof window !== "undefined") {
+      const current = await this.getUsers();
+      const updated = current.map((u) => {
+        if (u.id === userId) {
+          return { ...u, role };
+        }
+        return u;
+      });
+      localStorage.setItem("odontoprint_all_users", JSON.stringify(updated));
+    }
+
+    return true;
   }
 }
