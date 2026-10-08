@@ -36,6 +36,30 @@ describe("AIService Unit Tests", () => {
     expect(loaded.enabled).toBe(true);
   });
 
+  it("deve salvar e carregar configurações para Google Gemini e OpenAI Compatível com customEndpoint", () => {
+    const geminiConfig: AIConfig = {
+      provider: "GEMINI",
+      apiKey: "AIzaSy_fake_test_key",
+      model: "gemini-2.0-flash",
+      enabled: true,
+    };
+    AIService.saveConfig(geminiConfig);
+    expect(AIService.getConfig().provider).toBe("GEMINI");
+    expect(AIService.getConfig().model).toBe("gemini-2.0-flash");
+
+    const ollamaConfig: AIConfig = {
+      provider: "OPENAI_COMPATIBLE",
+      apiKey: "",
+      model: "llama3",
+      customEndpoint: "http://localhost:11434/v1",
+      enabled: true,
+    };
+    AIService.saveConfig(ollamaConfig);
+    const loadedOllama = AIService.getConfig();
+    expect(loadedOllama.provider).toBe("OPENAI_COMPATIBLE");
+    expect(loadedOllama.customEndpoint).toBe("http://localhost:11434/v1");
+  });
+
   it("deve validar resposta de recomendação de calibração", async () => {
     // Mock global de fetch para /api/ai/recommend-calibration
     const mockResponse = {

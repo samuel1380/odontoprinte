@@ -37,7 +37,7 @@ export function Topbar({ onOpenMobileMenu }: TopbarProps) {
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-200/80 bg-white/95 px-4 sm:px-6 lg:px-8 backdrop-blur-md">
+    <header className="sticky top-0 z-30 flex h-16 lg:h-20 w-full items-center justify-between border-b border-slate-200/80 bg-white/95 px-4 sm:px-6 lg:px-8 backdrop-blur-md">
       {/* Left: Mobile Toggle & Breadcrumbs */}
       <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         <button

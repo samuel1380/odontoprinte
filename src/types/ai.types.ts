@@ -1,4 +1,4 @@
-export type AIProvider = "GROQ" | "MISTRAL" | "OPENAI_COMPATIBLE";
+export type AIProvider = "GROQ" | "GEMINI" | "OPENAI" | "MISTRAL" | "OPENAI_COMPATIBLE";
 
 export interface AIConfig {
   provider: AIProvider;

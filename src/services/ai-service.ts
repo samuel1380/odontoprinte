@@ -48,6 +48,7 @@ export class AIService {
           provider: config.provider,
           apiKey: config.apiKey,
           model: config.model,
+          customEndpoint: config.customEndpoint,
           context: {},
         }),
       });
@@ -103,6 +104,7 @@ export class AIService {
         provider: config.provider,
         apiKey: config.apiKey,
         model: config.model,
+        customEndpoint: config.customEndpoint,
       }),
     });
 
@@ -146,6 +148,7 @@ export class AIService {
         provider: config.provider,
         apiKey: config.apiKey,
         model: config.model,
+        customEndpoint: config.customEndpoint,
       }),
     });
 

@@ -54,7 +54,7 @@ USING (public.get_my_role() = 'ADMIN');
 DROP POLICY IF EXISTS "System settings are readable by authenticated users" ON public.system_settings;
 CREATE POLICY "System settings are readable by authenticated users"
 ON public.system_settings FOR SELECT
-TO authenticated
+TO authenticated, anon
 USING (true);
 
 DROP POLICY IF EXISTS "System settings can be updated by admin" ON public.system_settings;

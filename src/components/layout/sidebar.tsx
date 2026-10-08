@@ -159,18 +159,18 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         )}
       >
         {/* Brand Header com a nova Logo OdontoPrint */}
-        <div className="flex h-16 items-center justify-between border-b border-slate-200/80 px-4 sm:px-6">
-          <Link href="/dashboard" onClick={onClose} className="flex items-center gap-2.5 group">
+        <div className="flex h-16 lg:h-20 items-center justify-between border-b border-slate-200/80 px-4 sm:px-5">
+          <Link href="/dashboard" onClick={onClose} className="flex items-center gap-3 group">
             <img
               src="/logo.jpg"
               alt="Logo OdontoPrint"
-              className="h-9 w-9 rounded-xl object-contain shadow-xs border border-slate-200/80 p-0.5 bg-white group-hover:scale-105 transition-transform shrink-0"
+              className="h-9 w-9 lg:h-14 lg:w-14 rounded-xl lg:rounded-2xl object-contain shadow-xs lg:shadow-md border border-slate-200/80 p-0.5 lg:p-1 bg-white group-hover:scale-105 transition-all shrink-0"
             />
             <div>
-              <div className="text-base font-black tracking-wider text-slate-900 flex items-center">
+              <div className="text-base lg:text-lg font-black tracking-wider text-slate-900 flex items-center">
                 ODONTO<span className="text-brand-600">PRINT</span>
               </div>
-              <p className="text-[9px] font-bold tracking-tight text-slate-400 uppercase">
+              <p className="text-[9px] lg:text-[10px] font-bold tracking-tight text-slate-400 uppercase">
                 Dental 3D Laboratory
               </p>
             </div>

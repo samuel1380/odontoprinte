@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { AIProvider } from "@/types/ai.types";
 
 interface CalibrationRecommendationPayload {
   printer_name: string;
@@ -6,9 +7,10 @@ interface CalibrationRecommendationPayload {
   resin_brand: string;
   resin_type: string;
   layer_height?: number;
-  provider?: "GROQ" | "MISTRAL" | "OPENAI_COMPATIBLE";
+  provider?: AIProvider;
   apiKey?: string;
   model?: string;
+  customEndpoint?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -22,15 +24,18 @@ export async function POST(req: NextRequest) {
       layer_height = 0.05,
       provider = "GROQ",
       model,
+      customEndpoint,
     } = body;
 
     const apiKey =
       body.apiKey?.trim() ||
       (provider === "GROQ"
         ? process.env.GROQ_API_KEY
+        : provider === "GEMINI"
+        ? (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)
         : provider === "MISTRAL"
         ? process.env.MISTRAL_API_KEY
-        : process.env.OPENAI_API_KEY);
+        : (process.env.OPENAI_API_KEY || process.env.AI_API_KEY));
 
     const prompt = `Você é um engenheiro químico e técnico especialista em fotopolimerização 405nm de resinas odontológicas e calibração de impressoras 3D LCD/MSLA/DLP.
 Analise a seguinte combinação técnica:
@@ -50,7 +55,7 @@ Determine os parâmetros ideais de calibração inicial recomendados para que o 
   "tips": string[] // 3 a 4 dicas cruciais de manuseio e segurança para não descolar da mesa
 }`;
 
-    if (apiKey) {
+    if (apiKey || (provider === "OPENAI_COMPATIBLE" && customEndpoint)) {
       if (provider === "GROQ") {
         const groqModel = model || "llama-3.3-70b-versatile";
         const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -74,6 +79,52 @@ Determine os parâmetros ideais de calibração inicial recomendados para que o 
         }
       }
 
+      if (provider === "GEMINI") {
+        const geminiModel = model || "gemini-2.0-flash";
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
+        const geminiRes = await fetch(geminiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.2,
+              responseMimeType: "application/json",
+            },
+          }),
+        });
+
+        if (geminiRes.ok) {
+          const data = await geminiRes.json();
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+          const parsed = JSON.parse(text);
+          return NextResponse.json(parsed);
+        }
+      }
+
+      if (provider === "OPENAI") {
+        const openaiModel = model || "gpt-4o-mini";
+        const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: openaiModel,
+            messages: [{ role: "user", content: prompt }],
+            response_format: { type: "json_object" },
+            temperature: 0.2,
+          }),
+        });
+
+        if (openaiRes.ok) {
+          const data = await openaiRes.json();
+          const parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}");
+          return NextResponse.json(parsed);
+        }
+      }
+
       if (provider === "MISTRAL") {
         const mistralModel = model || "mistral-large-latest";
         const mistralRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
@@ -92,6 +143,36 @@ Determine os parâmetros ideais de calibração inicial recomendados para que o 
 
         if (mistralRes.ok) {
           const data = await mistralRes.json();
+          const parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}");
+          return NextResponse.json(parsed);
+        }
+      }
+
+      if (provider === "OPENAI_COMPATIBLE") {
+        const targetUrl = customEndpoint?.trim() || "http://localhost:11434/v1/chat/completions";
+        const compatUrl = targetUrl.includes("/chat/completions")
+          ? targetUrl
+          : targetUrl.replace(/\/+$/, "") + "/chat/completions";
+        const compatModel = model || "llama3";
+
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (apiKey) {
+          headers["Authorization"] = `Bearer ${apiKey}`;
+        }
+
+        const compatRes = await fetch(compatUrl, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            model: compatModel,
+            messages: [{ role: "user", content: prompt }],
+            response_format: { type: "json_object" },
+            temperature: 0.2,
+          }),
+        });
+
+        if (compatRes.ok) {
+          const data = await compatRes.json();
           const parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}");
           return NextResponse.json(parsed);
         }

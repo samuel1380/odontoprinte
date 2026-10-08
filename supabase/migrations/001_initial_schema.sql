@@ -7,9 +7,10 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- 2. ENUMS
 DO $$ BEGIN
-    CREATE TYPE user_role AS ENUM ('ADMIN', 'CADISTA', 'OPERADOR_RESINA', 'OPERADOR_IMPRESSAO');
+    CREATE TYPE user_role AS ENUM ('ADMIN', 'CADISTA', 'OPERADOR_RESINA', 'OPERADOR_IMPRESSAO', 'PROTETICO_ACABAMENTO');
 EXCEPTION
-    WHEN duplicate_object THEN null;
+    WHEN duplicate_object THEN
+        ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'PROTETICO_ACABAMENTO';
 END $$;
 
 DO $$ BEGIN
@@ -20,16 +21,22 @@ END $$;
 
 DO $$ BEGIN
     CREATE TYPE dental_file_type AS ENUM (
+        'MODELO_COM_FUROS',
         'MODELO_DE_TRABALHO',
         'ANTAGONISTA',
         'TROQUEL',
+        'GENGIVA_ARTIFICIAL',
+        'COROA_FRESADA',
         'PLACA_MIORRELAXANTE',
         'ELEMENTO_PROVA',
         'ELEMENTO_PROVISORIO',
         'ELEMENTO_CARGA_CERAMICA'
     );
 EXCEPTION
-    WHEN duplicate_object THEN null;
+    WHEN duplicate_object THEN
+        ALTER TYPE dental_file_type ADD VALUE IF NOT EXISTS 'MODELO_COM_FUROS';
+        ALTER TYPE dental_file_type ADD VALUE IF NOT EXISTS 'GENGIVA_ARTIFICIAL';
+        ALTER TYPE dental_file_type ADD VALUE IF NOT EXISTS 'COROA_FRESADA';
 END $$;
 
 DO $$ BEGIN
@@ -43,11 +50,13 @@ DO $$ BEGIN
         'AGUARDANDO_FILA',
         'EM_PREPARO',
         'EM_IMPRESSAO',
+        'PRONTO_ACABAMENTO',
         'CONCLUIDO',
         'FALHOU_REIMPRESSAO'
     );
 EXCEPTION
-    WHEN duplicate_object THEN null;
+    WHEN duplicate_object THEN
+        ALTER TYPE print_item_status ADD VALUE IF NOT EXISTS 'PRONTO_ACABAMENTO';
 END $$;
 
 DO $$ BEGIN

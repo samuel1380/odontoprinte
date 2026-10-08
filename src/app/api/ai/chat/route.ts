@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { AIProvider } from "@/types/ai.types";
 
 interface ChatRequestPayload {
   message: string;
@@ -11,23 +12,26 @@ interface ChatRequestPayload {
     printers?: any[];
     resins?: any[];
   };
-  provider?: "GROQ" | "MISTRAL" | "OPENAI_COMPATIBLE";
+  provider?: AIProvider;
   apiKey?: string;
   model?: string;
+  customEndpoint?: string;
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as ChatRequestPayload;
-    const { message, history = [], context = {}, provider = "GROQ", model } = body;
+    const { message, history = [], context = {}, provider = "GROQ", model, customEndpoint } = body;
 
     const apiKey =
       body.apiKey?.trim() ||
       (provider === "GROQ"
         ? process.env.GROQ_API_KEY
+        : provider === "GEMINI"
+        ? (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)
         : provider === "MISTRAL"
         ? process.env.MISTRAL_API_KEY
-        : process.env.OPENAI_API_KEY);
+        : (process.env.OPENAI_API_KEY || process.env.AI_API_KEY));
 
     // Contexto condensado do laboratório para alimentar o System Prompt
     const labContextSummary = `
@@ -94,8 +98,8 @@ Suas responsabilidades:
 3. Auxiliar no diagnóstico de falhas de impressão (descolamento de mesa, delaminação, quebra de suportes).
 4. Fornecer respostas diretas, úteis e concisas, ideais para leitura rápida na bancada do laboratório.`;
 
-    // Se temos uma chave de API configurada, chamamos Groq ou Mistral diretamente
-    if (apiKey) {
+    // Processamento com Provedor de IA Externo se chave fornecida (ou se compatível local sem chave)
+    if (apiKey || (provider === "OPENAI_COMPATIBLE" && customEndpoint)) {
       if (provider === "GROQ") {
         const groqModel = model || "llama-3.3-70b-versatile";
         const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -126,6 +130,72 @@ Suas responsabilidades:
         return NextResponse.json({ reply, provider: "GROQ", model: groqModel });
       }
 
+      if (provider === "GEMINI") {
+        const geminiModel = model || "gemini-2.0-flash";
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
+        const contents = [
+          ...history.slice(-6).map((h) => ({
+            role: h.role === "assistant" ? "model" : "user",
+            parts: [{ text: h.content }],
+          })),
+          { role: "user", parts: [{ text: message }] },
+        ];
+
+        const geminiRes = await fetch(geminiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            system_instruction: {
+              parts: [{ text: systemPrompt + "\n" + labContextSummary }],
+            },
+            contents,
+            generationConfig: {
+              temperature: 0.4,
+              maxOutputTokens: 800,
+            },
+          }),
+        });
+
+        if (!geminiRes.ok) {
+          const errData = await geminiRes.json().catch(() => ({}));
+          throw new Error(errData?.error?.message || `Erro na API Google Gemini (Status ${geminiRes.status})`);
+        }
+
+        const data = await geminiRes.json();
+        const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Desculpe, não consegui gerar uma resposta.";
+        return NextResponse.json({ reply, provider: "GEMINI", model: geminiModel });
+      }
+
+      if (provider === "OPENAI") {
+        const openaiModel = model || "gpt-4o-mini";
+        const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: openaiModel,
+            messages: [
+              { role: "system", content: systemPrompt + "\n" + labContextSummary },
+              ...history.slice(-6),
+              { role: "user", content: message },
+            ],
+            temperature: 0.4,
+            max_tokens: 800,
+          }),
+        });
+
+        if (!openaiRes.ok) {
+          const errData = await openaiRes.json().catch(() => ({}));
+          throw new Error(errData?.error?.message || `Erro na API OpenAI (Status ${openaiRes.status})`);
+        }
+
+        const data = await openaiRes.json();
+        const reply = data.choices?.[0]?.message?.content || "Desculpe, não consegui gerar uma resposta.";
+        return NextResponse.json({ reply, provider: "OPENAI", model: openaiModel });
+      }
+
       if (provider === "MISTRAL") {
         const mistralModel = model || "mistral-large-latest";
         const mistralRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
@@ -154,6 +224,43 @@ Suas responsabilidades:
         const data = await mistralRes.json();
         const reply = data.choices?.[0]?.message?.content || "Desculpe, não consegui gerar uma resposta.";
         return NextResponse.json({ reply, provider: "MISTRAL", model: mistralModel });
+      }
+
+      if (provider === "OPENAI_COMPATIBLE") {
+        const targetUrl = customEndpoint?.trim() || "http://localhost:11434/v1/chat/completions";
+        const compatUrl = targetUrl.includes("/chat/completions")
+          ? targetUrl
+          : targetUrl.replace(/\/+$/, "") + "/chat/completions";
+        const compatModel = model || "llama3";
+
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (apiKey) {
+          headers["Authorization"] = `Bearer ${apiKey}`;
+        }
+
+        const compatRes = await fetch(compatUrl, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            model: compatModel,
+            messages: [
+              { role: "system", content: systemPrompt + "\n" + labContextSummary },
+              ...history.slice(-6),
+              { role: "user", content: message },
+            ],
+            temperature: 0.4,
+            max_tokens: 800,
+          }),
+        });
+
+        if (!compatRes.ok) {
+          const errData = await compatRes.json().catch(() => ({}));
+          throw new Error(errData?.error?.message || `Erro no servidor compatível OpenAI (Status ${compatRes.status})`);
+        }
+
+        const data = await compatRes.json();
+        const reply = data.choices?.[0]?.message?.content || "Desculpe, não consegui gerar uma resposta.";
+        return NextResponse.json({ reply, provider: "OPENAI_COMPATIBLE", model: compatModel });
       }
     }
 

@@ -134,7 +134,7 @@ export function AICopilotDrawer() {
                   <img
                     src="/logo.jpg"
                     alt="OdontoPrint Logo"
-                    className="h-10 w-10 rounded-xl object-contain bg-white p-0.5 border border-white/20 shadow-xs"
+                    className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl object-contain bg-white p-1 border border-white/20 shadow-xs shrink-0"
                   />
                   <span className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-slate-900">
                     <span className="h-1.5 w-1.5 rounded-full bg-white"></span>

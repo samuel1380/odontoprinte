@@ -61,17 +61,17 @@ export default function LoginPage() {
 
         {/* Topo da Coluna Esquerda com a nova Logo */}
         <div className="relative z-10">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <img
               src="/logo.jpg"
               alt="Logo OdontoPrint"
-              className="h-12 w-12 rounded-2xl object-contain shadow-lg shadow-brand-500/20 p-1 bg-white"
+              className="h-16 w-16 lg:h-20 lg:w-20 rounded-2xl lg:rounded-3xl object-contain shadow-xl shadow-brand-500/25 p-1.5 lg:p-2 bg-white shrink-0"
             />
             <div>
-              <span className="text-xl font-black tracking-tight text-white">
+              <span className="text-2xl lg:text-3xl font-black tracking-tight text-white">
                 ODONTO<span className="text-brand-400">PRINT</span>
               </span>
-              <span className="block text-[10px] uppercase tracking-widest text-slate-400 font-semibold">
+              <span className="block text-[11px] lg:text-xs uppercase tracking-widest text-slate-400 font-semibold">
                 Dental 3D Laboratory
               </span>
             </div>
