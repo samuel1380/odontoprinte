@@ -296,20 +296,9 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-semibold text-slate-700">
-                  Senha {isRegisterMode && "de Acesso"}
-                </label>
-                {!isRegisterMode && (
-                  <button
-                    type="button"
-                    onClick={() => toast.info("Para redefinir sua senha, solicite ao Administrador do laboratório.")}
-                    className="text-xs font-medium text-brand-600 hover:text-brand-700 transition"
-                  >
-                    Esqueceu a senha?
-                  </button>
-                )}
-              </div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                Senha {isRegisterMode && "de Acesso"}
+              </label>
 
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />

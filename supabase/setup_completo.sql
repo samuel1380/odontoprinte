@@ -540,5 +540,17 @@ WHERE NOT EXISTS (SELECT 1 FROM public.system_settings);
 SELECT setval('print_run_normal_seq', 1, false);
 SELECT setval('print_run_retry_seq', 1, false);
 
+-- 10. CONFIRMAÇÃO AUTOMÁTICA DE E-MAILS (REMOVE QUALQUER BLOQUEIO "Email not confirmed")
+DO $$
+BEGIN
+    UPDATE auth.users
+    SET email_confirmed_at = COALESCE(email_confirmed_at, now()),
+        confirmed_at = COALESCE(confirmed_at, now())
+    WHERE email_confirmed_at IS NULL;
+EXCEPTION WHEN OTHERS THEN
+    null;
+END $$;
+
 -- FIM DO SCRIPT COMPLETO
+
 

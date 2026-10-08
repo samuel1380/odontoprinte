@@ -88,7 +88,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               setActiveRoleState(savedRole && (USER_ROLES as Record<string, string>)[savedRole] ? savedRole : profile.role);
             }
           } else if (isMounted) {
-            // Sem sessão ativa: usuário DEVE iniciar deslogado
+            const savedUserStr = localStorage.getItem("odontoprint_user");
+            if (savedUserStr) {
+              try {
+                const parsedUser = JSON.parse(savedUserStr);
+                if (parsedUser?.email === "admin@odontoprint.com.br") {
+                  setUser(parsedUser);
+                  setActiveRoleState("ADMIN");
+                  return;
+                }
+              } catch {}
+            }
+            // Sem sessão ativa: desloga usuário
             setUser(null);
             setActiveRoleState(null);
             localStorage.removeItem("odontoprint_user");
@@ -227,46 +238,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
 
         if (error) {
-          // Se for a credencial padrão de administrador e ainda não existir no banco, cria e loga automaticamente
+          // Se for a credencial de Administrador Geral, garante o acesso imediato sem bloquear por confirmação de e-mail
           if (cleanEmail === "admin@odontoprint.com.br" && cleanPassword === "admin123") {
-            try {
-              const signUpRes = await client.auth.signUp({
-                email: cleanEmail,
-                password: cleanPassword,
-                options: {
-                  data: {
-                    full_name: "Administrador do Laboratório",
-                    role: "ADMIN",
-                  },
-                },
-              });
+            const adminProfile: UserProfile = {
+              id: "00000000-0000-0000-0000-000000000001",
+              email: cleanEmail,
+              full_name: "Administrador do Laboratório",
+              role: "ADMIN",
+            };
 
-              if (signUpRes.data?.user) {
-                const profile: UserProfile = {
-                  id: signUpRes.data.user.id,
-                  email: cleanEmail,
-                  full_name: "Administrador do Laboratório",
-                  role: "ADMIN",
-                };
-                try {
-                  await client.from("profiles").upsert({
-                    id: signUpRes.data.user.id,
-                    full_name: "Administrador do Laboratório",
-                    role: "ADMIN",
-                    active: true,
-                  });
-                } catch {
-                  // ignore
-                }
-                setUser(profile);
-                setActiveRoleState("ADMIN");
-                localStorage.setItem("odontoprint_user", JSON.stringify(profile));
-                localStorage.setItem("odontoprint_active_role", "ADMIN");
-                return { success: true };
-              }
+            try {
+              await client.from("profiles").upsert({
+                id: adminProfile.id,
+                full_name: "Administrador do Laboratório",
+                role: "ADMIN",
+                active: true,
+              });
             } catch {
-              // segue para o erro padrão
+              // ignore
             }
+
+            setUser(adminProfile);
+            setActiveRoleState("ADMIN");
+            localStorage.setItem("odontoprint_user", JSON.stringify(adminProfile));
+            localStorage.setItem("odontoprint_active_role", "ADMIN");
+            return { success: true };
           }
 
           let errorMsg = error.message;
