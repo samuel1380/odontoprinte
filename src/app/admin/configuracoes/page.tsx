@@ -42,11 +42,11 @@ export default function AdminConfiguracoesPage() {
   const [normalPrefix, setNormalPrefix] = useState("A");
   const [retryPrefix, setRetryPrefix] = useState("00A");
 
-  // Form State - Inteligência Artificial (Google Gemini como Prioridade #1)
+  // Form State - Inteligência Artificial (Google Gemini 3.8 como Prioridade #1)
   const [aiProvider, setAiProvider] = useState<AIProvider>("GEMINI");
   const [aiApiKey, setAiApiKey] = useState("");
   const [aiCustomEndpoint, setAiCustomEndpoint] = useState("");
-  const [aiModel, setAiModel] = useState("gemini-1.5-flash");
+  const [aiModel, setAiModel] = useState("gemini-3.8-flash");
   const [aiEnabled, setAiEnabled] = useState(true);
   const [showApiKey, setShowApiKey] = useState(false);
   const [isTestingAi, setIsTestingAi] = useState(false);
@@ -96,17 +96,17 @@ export default function AdminConfiguracoesPage() {
         if (!aiCfg.apiKey && envStatus.preferredProvider) {
           setAiProvider(envStatus.preferredProvider);
           if (envStatus.preferredProvider === "GEMINI") {
-            setAiModel("gemini-1.5-flash");
+            setAiModel("gemini-3.8-flash");
           } else {
-            setAiModel("llama-3.3-70b-versatile");
+            setAiModel("openai/gpt-oss-120b");
           }
         } else {
           setAiProvider(aiCfg.provider || "GEMINI");
           setAiModel(
             aiCfg.model ||
               (aiCfg.provider === "GROQ"
-                ? "llama-3.3-70b-versatile"
-                : "gemini-1.5-flash")
+                ? "openai/gpt-oss-120b"
+                : "gemini-3.8-flash")
           );
         }
         setAiApiKey(aiCfg.apiKey || "");
@@ -123,9 +123,9 @@ export default function AdminConfiguracoesPage() {
     setAiProvider(newProvider);
     setTestResult(null);
     if (newProvider === "GEMINI") {
-      setAiModel("gemini-1.5-flash");
+      setAiModel("gemini-3.8-flash");
     } else if (newProvider === "GROQ") {
-      setAiModel("llama-3.3-70b-versatile");
+      setAiModel("openai/gpt-oss-120b");
     } else if (newProvider === "OPENAI") {
       setAiModel("gpt-4o-mini");
     } else if (newProvider === "MISTRAL") {
@@ -507,7 +507,7 @@ export default function AdminConfiguracoesPage() {
                       )}
                     </div>
                     <p className="text-[11px] text-slate-600 leading-relaxed">
-                      Motor principal, cota gratuita e precisão clínica com <strong>Gemini 1.5 Flash</strong>.
+                      Motor principal, alta velocidade e raciocínio com <strong>Gemini 3.8 Flash</strong>.
                     </p>
                   </div>
 
@@ -532,7 +532,7 @@ export default function AdminConfiguracoesPage() {
                       )}
                     </div>
                     <p className="text-[11px] text-slate-600 leading-relaxed">
-                      Respostas ultra-rápidas (&lt; 0.5s) e fallback resiliente com <strong>Llama 3.3 70B</strong>.
+                      Aceleração ultra-rápida (&lt; 0.5s) com <strong>OpenAI GPT-OSS 120B</strong> e <strong>Qwen 3.8</strong>.
                     </p>
                   </div>
 
@@ -745,34 +745,48 @@ export default function AdminConfiguracoesPage() {
                     <>
                       <button
                         type="button"
+                        onClick={() => setAiModel("openai/gpt-oss-120b")}
+                        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors font-medium"
+                      >
+                        openai/gpt-oss-120b (Recomendado ⭐)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAiModel("qwen/qwen3.8-27b")}
+                        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors font-medium"
+                      >
+                        qwen/qwen3.8-27b (Alibaba Qwen 3.8)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAiModel("openai/gpt-oss-20b")}
+                        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors font-medium"
+                      >
+                        openai/gpt-oss-20b (Ultra Rápido)
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setAiModel("llama-3.3-70b-versatile")}
                         className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors"
                       >
-                        llama-3.3-70b-versatile (Recomendado)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAiModel("llama-3.1-8b-instant")}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors"
-                      >
-                        llama-3.1-8b-instant (Ultra Leve)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAiModel("mixtral-8x7b-32768")}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors"
-                      >
-                        mixtral-8x7b-32768
+                        llama-3.3-70b-versatile
                       </button>
                     </>
                   ) : aiProvider === "GEMINI" ? (
                     <>
                       <button
                         type="button"
+                        onClick={() => setAiModel("gemini-3.8-flash")}
+                        className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 hover:bg-blue-100 hover:text-blue-800 text-blue-700 font-mono font-semibold transition-colors"
+                      >
+                        gemini-3.8-flash (Recomendado ⭐ - Gemini 3.8)
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setAiModel("gemini-2.0-flash")}
                         className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors"
                       >
-                        gemini-2.0-flash (Recomendado)
+                        gemini-2.0-flash (Nova Geração)
                       </button>
                       <button
                         type="button"
@@ -786,7 +800,7 @@ export default function AdminConfiguracoesPage() {
                         onClick={() => setAiModel("gemini-1.5-pro")}
                         className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors"
                       >
-                        gemini-1.5-pro (Raciocínio Profundo)
+                        gemini-1.5-pro
                       </button>
                     </>
                   ) : aiProvider === "OPENAI" ? (

@@ -121,141 +121,181 @@ Suas funções:
 3. Auxiliar no diagnóstico de falhas de impressão (descolamento de mesa, delaminação, quebra de suportes).
 4. Fornecer respostas diretas, úteis e concisas.`;
 
-    // 1. Processamento GEMINI (PRIORIDADE #1)
+    // 1. Processamento GEMINI (PRIORIDADE #1 - Gemini 3.8 Flash)
     const executeGemini = async (key: string, selectedModel?: string) => {
-      const geminiModel = selectedModel?.startsWith("gemini")
-        ? selectedModel
-        : "gemini-1.5-flash";
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${key}`;
-
-      const contents = formatGeminiContents(history, message);
-
-      let geminiRes = await fetch(geminiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          system_instruction: {
-            parts: [{ text: systemPrompt + "\n" + labContextSummary }],
-          },
-          contents,
-          generationConfig: {
-            temperature: 0.4,
-            maxOutputTokens: 800,
-          },
-        }),
-      });
-
-      // Se falhar e não estava usando gemini-1.5-flash, tenta formato universal com gemini-1.5-flash
-      if (!geminiRes.ok && geminiModel !== "gemini-1.5-flash") {
-        const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
-        geminiRes = await fetch(fallbackUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts: [
-                  {
-                    text: `[INSTRUÇÕES DO SISTEMA]\n${systemPrompt}\n${labContextSummary}\n[FIM INSTRUÇÕES]\n\n${message}`,
-                  },
-                ],
-              },
-            ],
-            generationConfig: {
-              temperature: 0.4,
-              maxOutputTokens: 800,
-            },
-          }),
-        });
+      let geminiModel = (selectedModel || "").trim();
+      if (
+        !geminiModel ||
+        geminiModel === "gemini-1.5-flash" ||
+        geminiModel === "gemini-2.0-flash" ||
+        geminiModel.toLowerCase().includes("3.8")
+      ) {
+        geminiModel = "gemini-3.8-flash";
       }
 
-      if (!geminiRes.ok) {
-        const errData = await geminiRes.json().catch(() => ({}));
-        const rawMsg = errData?.error?.message || `HTTP ${geminiRes.status}`;
-        const code = errData?.error?.code || geminiRes.status;
-        const status = errData?.error?.status || "";
-
-        let explanation = "";
-        if (
-          rawMsg.includes("API key not valid") ||
-          rawMsg.includes("API_KEY_INVALID")
-        ) {
-          explanation =
-            "Chave de API do Google Gemini inválida ou não autorizada. Verifique no console https://aistudio.google.com/app/apikey.";
-        } else if (
-          code === 429 ||
-          rawMsg.includes("RESOURCE_EXHAUSTED") ||
-          rawMsg.includes("quota")
-        ) {
-          explanation =
-            "Cota de requisições temporariamente esgotada (Rate Limit) no Google Gemini. Aguarde 1 minuto.";
-        } else if (code === 404 || rawMsg.includes("not found")) {
-          explanation = `Modelo Gemini "${geminiModel}" não encontrado na versão v1beta.`;
-        } else {
-          explanation = `Erro retornado pelo Google Gemini (${status || code}): ${rawMsg}`;
-        }
-
-        throw new Error(explanation);
-      }
-
-      const data = await geminiRes.json();
-      const reply =
-        data.candidates?.[0]?.content?.parts?.[0]?.text ||
-        "Desculpe, não consegui gerar uma resposta.";
-      return {
-        reply,
-        provider: "GEMINI",
-        model: geminiModel,
-        source,
-        latency: Date.now() - startTime,
-      };
-    };
-
-    // 2. Processamento GROQ
-    const executeGroq = async (key: string, selectedModel?: string) => {
-      const groqModel = selectedModel || "llama-3.3-70b-versatile";
-      const groqRes = await fetch(
-        "https://api.groq.com/openai/v1/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${key}`,
-          },
-          body: JSON.stringify({
-            model: groqModel,
-            messages: [
-              {
-                role: "system",
-                content: systemPrompt + "\n" + labContextSummary,
-              },
-              ...history.slice(-6),
-              { role: "user", content: message },
-            ],
-            temperature: 0.4,
-            max_tokens: 800,
-          }),
-        }
+      // Cadeia de modelos em ordem de prioridade
+      const candidateGeminiModels = Array.from(
+        new Set([geminiModel, "gemini-3.8-flash", "gemini-2.0-flash", "gemini-1.5-flash"])
       );
 
-      if (!groqRes.ok) {
-        const errData = await groqRes.json().catch(() => ({}));
-        const rawMsg = errData?.error?.message || `HTTP ${groqRes.status}`;
-        throw new Error(`Erro na API Groq (${groqRes.status}): ${rawMsg}`);
+      const contents = formatGeminiContents(history, message);
+      let lastError = "";
+
+      for (const modelToTry of candidateGeminiModels) {
+        try {
+          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${key}`;
+
+          let geminiRes = await fetch(geminiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              system_instruction: {
+                parts: [{ text: systemPrompt + "\n" + labContextSummary }],
+              },
+              contents,
+              generationConfig: {
+                temperature: 0.4,
+                maxOutputTokens: 800,
+              },
+            }),
+          });
+
+          // Se falhar formato com system_instruction, tenta formato universal
+          if (!geminiRes.ok) {
+            const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${key}`;
+            geminiRes = await fetch(fallbackUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [
+                  {
+                    role: "user",
+                    parts: [
+                      {
+                        text: `[INSTRUÇÕES DO SISTEMA]\n${systemPrompt}\n${labContextSummary}\n[FIM INSTRUÇÕES]\n\n${message}`,
+                      },
+                    ],
+                  },
+                ],
+                generationConfig: {
+                  temperature: 0.4,
+                  maxOutputTokens: 800,
+                },
+              }),
+            });
+          }
+
+          if (geminiRes.ok) {
+            const data = await geminiRes.json();
+            const reply =
+              data.candidates?.[0]?.content?.parts?.[0]?.text ||
+              "Desculpe, não consegui gerar uma resposta.";
+            return {
+              reply,
+              provider: "GEMINI",
+              model: modelToTry,
+              source,
+              latency: Date.now() - startTime,
+            };
+          } else {
+            const errData = await geminiRes.json().catch(() => ({}));
+            const rawMsg = errData?.error?.message || `HTTP ${geminiRes.status}`;
+            lastError = `[${modelToTry}] ${rawMsg}`;
+          }
+        } catch (e: any) {
+          lastError = `[${modelToTry}] ${e?.message || String(e)}`;
+        }
       }
 
-      const data = await groqRes.json();
-      const reply =
-        data.choices?.[0]?.message?.content ||
-        "Desculpe, não consegui gerar uma resposta.";
-      return {
-        reply,
-        provider: "GROQ",
-        model: groqModel,
-        source,
-        latency: Date.now() - startTime,
-      };
+      // Se todos os modelos falharem, detalha com clareza
+      let explanation = "";
+      if (
+        lastError.includes("API key not valid") ||
+        lastError.includes("API_KEY_INVALID")
+      ) {
+        explanation =
+          "Chave de API do Google Gemini inválida ou não autorizada. Verifique no console https://aistudio.google.com/app/apikey.";
+      } else if (
+        lastError.includes("429") ||
+        lastError.includes("RESOURCE_EXHAUSTED") ||
+        lastError.includes("quota")
+      ) {
+        explanation =
+          "Cota de requisições temporariamente esgotada (Rate Limit) no Google Gemini. Aguarde 1 minuto.";
+      } else {
+        explanation = `Erro retornado pelo Google Gemini: ${lastError}`;
+      }
+
+      throw new Error(explanation);
+    };
+
+    // 2. Processamento GROQ (Modelos Atuais: openai/gpt-oss-120b, qwen/qwen3.8-27b, openai/gpt-oss-20b)
+    const executeGroq = async (key: string, selectedModel?: string) => {
+      let groqModel = (selectedModel || "").trim();
+      if (!groqModel || groqModel.startsWith("gemini")) {
+        groqModel = "openai/gpt-oss-120b";
+      }
+
+      const candidateGroqModels = Array.from(
+        new Set([
+          groqModel,
+          "openai/gpt-oss-120b",
+          "qwen/qwen3.8-27b",
+          "openai/gpt-oss-20b",
+          "llama-3.3-70b-versatile",
+        ])
+      );
+
+      let lastGroqError = "";
+
+      for (const m of candidateGroqModels) {
+        try {
+          const groqRes = await fetch(
+            "https://api.groq.com/openai/v1/chat/completions",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${key}`,
+              },
+              body: JSON.stringify({
+                model: m,
+                messages: [
+                  {
+                    role: "system",
+                    content: systemPrompt + "\n" + labContextSummary,
+                  },
+                  ...history.slice(-6),
+                  { role: "user", content: message },
+                ],
+                temperature: 0.4,
+                max_tokens: 800,
+              }),
+            }
+          );
+
+          if (groqRes.ok) {
+            const data = await groqRes.json();
+            const reply =
+              data.choices?.[0]?.message?.content ||
+              "Desculpe, não consegui gerar uma resposta.";
+            return {
+              reply,
+              provider: "GROQ",
+              model: m,
+              source,
+              latency: Date.now() - startTime,
+            };
+          } else {
+            const errData = await groqRes.json().catch(() => ({}));
+            lastGroqError = `[${m}] ${errData?.error?.message || `HTTP ${groqRes.status}`}`;
+          }
+        } catch (e: any) {
+          lastGroqError = `[${m}] ${e?.message || String(e)}`;
+        }
+      }
+
+      throw new Error(`Erro na API Groq: ${lastGroqError}`);
     };
 
     // 3. EXECUÇÃO COM PRIORIDADE GEMINI E FALLBACK RESILIENTE

@@ -51,8 +51,13 @@ Determine os parâmetros ideais de calibração inicial recomendados para que o 
 }`;
 
     const callGemini = async (key: string, selectedModel?: string) => {
-      const primaryModel = selectedModel?.startsWith("gemini") ? selectedModel : "gemini-1.5-flash";
-      const candidateModels = primaryModel === "gemini-1.5-flash" ? ["gemini-1.5-flash"] : [primaryModel, "gemini-1.5-flash"];
+      let primaryModel = (selectedModel || "").trim();
+      if (!primaryModel || primaryModel.toLowerCase().includes("3.8") || !primaryModel.startsWith("gemini")) {
+        primaryModel = "gemini-3.8-flash";
+      }
+      const candidateModels = Array.from(
+        new Set([primaryModel, "gemini-3.8-flash", "gemini-2.0-flash", "gemini-1.5-flash"])
+      );
 
       for (const m of candidateModels) {
         try {
@@ -84,29 +89,44 @@ Determine os parâmetros ideais de calibração inicial recomendados para que o 
     };
 
     const callGroq = async (key: string, selectedModel?: string) => {
-      try {
-        const groqModel = selectedModel && !selectedModel.startsWith("gemini") ? selectedModel : "llama-3.3-70b-versatile";
-        const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${key}`,
-          },
-          body: JSON.stringify({
-            model: groqModel,
-            messages: [{ role: "user", content: prompt }],
-            response_format: { type: "json_object" },
-            temperature: 0.2,
-          }),
-        });
+      let groqModel = (selectedModel || "").trim();
+      if (!groqModel || groqModel.startsWith("gemini")) {
+        groqModel = "openai/gpt-oss-120b";
+      }
+      const candidateGroqModels = Array.from(
+        new Set([
+          groqModel,
+          "openai/gpt-oss-120b",
+          "qwen/qwen3.8-27b",
+          "openai/gpt-oss-20b",
+          "llama-3.3-70b-versatile",
+        ])
+      );
 
-        if (groqRes.ok) {
-          const data = await groqRes.json();
-          const parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}");
-          return { ...parsed, aiProvider: "GROQ", model: groqModel };
+      for (const m of candidateGroqModels) {
+        try {
+          const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${key}`,
+            },
+            body: JSON.stringify({
+              model: m,
+              messages: [{ role: "user", content: prompt }],
+              response_format: { type: "json_object" },
+              temperature: 0.2,
+            }),
+          });
+
+          if (groqRes.ok) {
+            const data = await groqRes.json();
+            const parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}");
+            return { ...parsed, aiProvider: "GROQ", model: m };
+          }
+        } catch {
+          // tentar proximo modelo
         }
-      } catch {
-        return null;
       }
       return null;
     };

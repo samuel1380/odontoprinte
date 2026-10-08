@@ -6,7 +6,7 @@ const STORAGE_KEY = "odontoprint_ai_config";
 export const DEFAULT_AI_CONFIG: AIConfig = {
   provider: "GEMINI",
   apiKey: "",
-  model: "gemini-1.5-flash",
+  model: "gemini-3.8-flash",
   enabled: true,
 };
 
