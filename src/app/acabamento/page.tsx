@@ -66,7 +66,7 @@ export default function AcabamentoPage() {
       await OdontoPrintService.updateFinishingChecklist({
         id: item.id,
         [field]: newVal,
-        technician_name: user.full_name,
+        technician_name: user?.full_name || "Técnico",
       });
 
       setItems((prev) =>
@@ -76,7 +76,7 @@ export default function AcabamentoPage() {
                 ...i,
                 [field]: newVal,
                 status: i.status === "APROVADO_CQ" ? "APROVADO_CQ" : "EM_MAQUIAGEM",
-                assigned_technician: user.full_name,
+                assigned_technician: user?.full_name || "Técnico",
               }
             : i
         )
@@ -96,7 +96,7 @@ export default function AcabamentoPage() {
 
   const handleApproveCase = async (id: string, patientCode: string) => {
     try {
-      await OdontoPrintService.approveFinishingCase(id, "Aprovado no controle de qualidade de bancada", user.id);
+      await OdontoPrintService.approveFinishingCase(id, "Aprovado no controle de qualidade de bancada", user?.id || "");
       toast.success(`Caso ${patientCode} aprovado no Controle de Qualidade! Pronto para expedição.`);
       loadData();
     } catch {
@@ -145,7 +145,7 @@ export default function AcabamentoPage() {
           </div>
 
           <div className="text-xs text-slate-500">
-            Técnico Responsável: <span className="font-semibold text-slate-800">{user.full_name}</span>
+            Técnico Responsável: <span className="font-semibold text-slate-800">{user?.full_name || "Técnico"}</span>
           </div>
         </div>
 

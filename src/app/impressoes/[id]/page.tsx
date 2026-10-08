@@ -72,7 +72,7 @@ export default function ImpressaoDetalhePage() {
       const res = await OdontoPrintService.finalizePrintRun({
         run_id: runId,
         failed_items: [],
-        user_id: user.id,
+        user_id: user?.id || "",
       });
 
       if (!res.success) {
@@ -114,7 +114,7 @@ export default function ImpressaoDetalhePage() {
       const res = await OdontoPrintService.finalizePrintRun({
         run_id: runId,
         failed_items: payload,
-        user_id: user.id,
+        user_id: user?.id || "",
       });
 
       if (!res.success) {

@@ -174,7 +174,7 @@ function FatiadorContent() {
         item_ids: selectedItemIds,
         supports_confirmed: true,
         resin_manipulated: true,
-        user_id: user.id,
+        user_id: user?.id || "",
       });
 
       if (!res.success) {
@@ -217,7 +217,7 @@ function FatiadorContent() {
         </div>
 
         <div className="text-xs text-slate-500">
-          Operador: <span className="font-semibold text-slate-800">{user.full_name}</span>
+          Operador: <span className="font-semibold text-slate-800">{user?.full_name || "Operador"}</span>
         </div>
       </div>
 

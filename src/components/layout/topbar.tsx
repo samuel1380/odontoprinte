@@ -78,15 +78,15 @@ export function Topbar({ onOpenMobileMenu }: TopbarProps) {
             className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 bg-white p-1.5 sm:px-3 sm:py-1.5 text-xs text-slate-700 shadow-xs hover:bg-slate-50 hover:border-slate-300 transition"
           >
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-600 text-white font-semibold text-xs shadow-xs">
-              {user.full_name?.charAt(0) || "U"}
+              {user?.full_name?.charAt(0) || "U"}
             </div>
             
             <div className="hidden md:block text-left leading-tight">
               <span className="block font-semibold text-slate-800 text-xs">
-                {user.full_name || "Usuário"}
+                {user?.full_name || "Usuário"}
               </span>
               <span className="text-[10px] text-slate-400 font-medium">
-                {USER_ROLES[activeRole]}
+                {activeRole ? USER_ROLES[activeRole] : "Acesso Restrito"}
               </span>
             </div>
 
@@ -105,10 +105,12 @@ export function Topbar({ onOpenMobileMenu }: TopbarProps) {
               <div className="absolute right-0 top-full mt-2 z-50 w-72 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl animate-in fade-in zoom-in-95">
                 {/* Header do Menu */}
                 <div className="p-3 border-b border-slate-100">
-                  <div className="font-semibold text-xs text-slate-900">{user.full_name}</div>
-                  <div className="text-[11px] text-slate-500 truncate mt-0.5">{user.email}</div>
+                  <div className="font-semibold text-xs text-slate-900">{user?.full_name || "Usuário"}</div>
+                  <div className="text-[11px] text-slate-500 truncate mt-0.5">{user?.email || ""}</div>
                   <div className="mt-2 flex items-center gap-1.5">
-                    <Badge className={roleColors[activeRole]}>{USER_ROLES[activeRole]}</Badge>
+                    <Badge className={activeRole ? roleColors[activeRole] : "bg-slate-900 text-white border-slate-800"}>
+                      {activeRole ? USER_ROLES[activeRole] : "Acesso Restrito"}
+                    </Badge>
                   </div>
                 </div>
 

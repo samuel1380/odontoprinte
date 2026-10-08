@@ -65,7 +65,7 @@ export default function FresagemPage() {
 
     setIsStarting(true);
     try {
-      await OdontoPrintService.startMilling(selectedItem.id, blockLot.trim().toUpperCase(), user.id);
+      await OdontoPrintService.startMilling(selectedItem.id, blockLot.trim().toUpperCase(), user?.id || "");
       toast.success(`Usinagem iniciada para ${selectedItem.patient_code} (Bloco: ${blockLot.toUpperCase()})`);
       setSelectedItem(null);
       setBlockLot("");
@@ -79,7 +79,7 @@ export default function FresagemPage() {
 
   const handleFinalizeMilling = async (id: string, patientCode: string) => {
     try {
-      await OdontoPrintService.finalizeMilling(id, true, undefined, user.id);
+      await OdontoPrintService.finalizeMilling(id, true, undefined, user?.id || "");
       toast.success(`Fresagem de ${patientCode} concluída com sucesso! Peça enviada para a Bancada de Acabamento & Maquiagem.`);
       loadData();
     } catch {
@@ -123,7 +123,7 @@ export default function FresagemPage() {
           </div>
 
           <div className="text-xs text-slate-500">
-            Operador: <span className="font-semibold text-slate-800">{user.full_name}</span>
+            Operador: <span className="font-semibold text-slate-800">{user?.full_name || "Operador"}</span>
           </div>
         </div>
 

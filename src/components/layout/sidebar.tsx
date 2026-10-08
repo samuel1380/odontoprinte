@@ -193,7 +193,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
             const visibleItems = section.items.filter((item) => {
               if (activeRole === "ADMIN") return true;
               if (!item.roles) return true;
-              return item.roles.includes(activeRole);
+              return Boolean(activeRole && item.roles.includes(activeRole));
             });
 
             if (visibleItems.length === 0) return null;

@@ -98,7 +98,7 @@ export default function PrinterManutencaoPage() {
           protective_film_ok: protectiveFilmOk === true,
         },
         notes,
-        performed_by: user.id,
+        performed_by: user?.id || "",
       });
 
       if (res.approved) {
@@ -152,7 +152,7 @@ export default function PrinterManutencaoPage() {
           </div>
 
           <div className="text-xs text-slate-500">
-            Técnico: <span className="font-semibold text-slate-800">{user.full_name}</span>
+            Técnico: <span className="font-semibold text-slate-800">{user?.full_name || "Técnico"}</span>
           </div>
         </div>
 

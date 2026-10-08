@@ -169,7 +169,7 @@ function NovaCalibracaoContent() {
         details_visible: detailsVisible === true,
         wash_time: Number(washTime),
         cure_time: Number(cureTime),
-        created_by: user.id,
+        created_by: user?.id || "",
       });
 
       if (res.approved) {
@@ -202,7 +202,7 @@ function NovaCalibracaoContent() {
         details_visible: detailsVisible === true,
         wash_time: Number(washTime),
         cure_time: Number(cureTime),
-        created_by: user.id,
+        created_by: user?.id || "",
       });
 
       toast.warning(`Tentativa #${calibrationNumber} reprovada e registrada no histórico.`, {

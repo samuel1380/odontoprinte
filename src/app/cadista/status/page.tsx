@@ -80,7 +80,7 @@ export default function CadistaStatusPage() {
         notes,
         process_type: processType,
         selected_files: selectedFiles,
-        user_id: user.id,
+        user_id: user?.id || "",
       });
 
       if (!res.success) {
@@ -128,7 +128,7 @@ export default function CadistaStatusPage() {
           </div>
 
           <div className="text-xs text-slate-400">
-            Responsável: <span className="font-semibold text-slate-700">{user.full_name}</span>
+            Responsável: <span className="font-semibold text-slate-700">{user?.full_name || "Responsável"}</span>
           </div>
         </div>
 

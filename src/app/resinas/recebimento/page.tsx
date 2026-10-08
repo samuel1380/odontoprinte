@@ -46,7 +46,7 @@ export default function RecebimentoResinaPage() {
         volume: Number(volume),
         volume_unit: volumeUnit,
         notes,
-        created_by: user.id,
+        created_by: user?.id || "",
       });
 
       toast.success(`Lote de resina ${lot.toUpperCase()} registrado com sucesso!`, {
@@ -91,7 +91,7 @@ export default function RecebimentoResinaPage() {
           </div>
 
           <div className="text-xs text-slate-500">
-            Responsável: <span className="font-semibold text-slate-800">{user.full_name}</span>
+            Responsável: <span className="font-semibold text-slate-800">{user?.full_name || "Operador"}</span>
           </div>
         </div>
 

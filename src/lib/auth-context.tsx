@@ -12,70 +12,162 @@ export interface UserProfile {
 }
 
 interface AuthContextType {
-  user: UserProfile;
-  activeRole: UserRole;
+  user: UserProfile | null;
+  activeRole: UserRole | null;
   setActiveRole: (role: UserRole) => void;
   isLoading: boolean;
   login: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
+  signUp: (email: string, password: string, fullName: string, role?: UserRole) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   isSupabaseConnected: boolean;
 }
 
-const DEFAULT_USER: UserProfile = {
-  id: "u0000001-0000-0000-0000-000000000001",
-  email: "admin@odontoprint.com.br",
-  full_name: "Administrador do Laboratório",
-  role: "ADMIN",
-};
-
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<UserProfile>(DEFAULT_USER);
-  const [activeRole, setActiveRoleState] = useState<UserRole>("ADMIN");
-  const [isLoading, setIsLoading] = useState(false);
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [activeRole, setActiveRoleState] = useState<UserRole | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSupabaseConnected, setIsSupabaseConnected] = useState(false);
 
   useEffect(() => {
-    // Carrega preferências salvas localmente
-    const savedRole = localStorage.getItem("odontoprint_active_role") as UserRole;
-    if (savedRole && USER_ROLES[savedRole]) {
-      setActiveRoleState(savedRole);
-    }
+    let isMounted = true;
+    const { client, isConfigured } = createClient();
 
-    const savedUser = localStorage.getItem("odontoprint_user");
-    if (savedUser) {
+    async function initAuth() {
       try {
-        const parsed = JSON.parse(savedUser);
-        if (parsed.email) setUser(parsed);
-      } catch {
-        // ignore
+        if (isConfigured && client) {
+          setIsSupabaseConnected(true);
+
+          // 1. Verifica sessão ativa no Supabase
+          const { data: { session } } = await client.auth.getSession();
+          if (session?.user && isMounted) {
+            const authUser = session.user;
+            let role: UserRole = (authUser.user_metadata?.role as UserRole) || "ADMIN";
+            let fullName = authUser.user_metadata?.full_name || authUser.email?.split("@")[0] || "Operador";
+
+            try {
+              const { data: profileData } = await client
+                .from("profiles")
+                .select("role, full_name")
+                .eq("id", authUser.id)
+                .maybeSingle();
+
+              if (profileData) {
+                if (profileData.role) role = profileData.role as UserRole;
+                if (profileData.full_name) fullName = profileData.full_name;
+              }
+            } catch {
+              // fallback to metadata
+            }
+
+            const profile: UserProfile = {
+              id: authUser.id,
+              email: authUser.email || "usuario@odontoprint.com.br",
+              full_name: fullName,
+              role,
+            };
+
+            setUser(profile);
+            const savedRole = localStorage.getItem("odontoprint_active_role") as UserRole;
+            setActiveRoleState(savedRole && USER_ROLES[savedRole] ? savedRole : profile.role);
+          } else if (isMounted) {
+            // Sem sessão ativa: usuário DEVE iniciar deslogado
+            setUser(null);
+            setActiveRoleState(null);
+            localStorage.removeItem("odontoprint_user");
+            localStorage.removeItem("odontoprint_active_role");
+          }
+
+          // 2. Escuta mudanças de sessão em tempo real
+          const { data: { subscription } } = client.auth.onAuthStateChange(async (event, newSession) => {
+            if (!isMounted) return;
+
+            if (newSession?.user) {
+              const authUser = newSession.user;
+              let role: UserRole = (authUser.user_metadata?.role as UserRole) || "ADMIN";
+              let fullName = authUser.user_metadata?.full_name || authUser.email?.split("@")[0] || "Operador";
+
+              try {
+                const { data: profileData } = await client
+                  .from("profiles")
+                  .select("role, full_name")
+                  .eq("id", authUser.id)
+                  .maybeSingle();
+
+                if (profileData) {
+                  if (profileData.role) role = profileData.role as UserRole;
+                  if (profileData.full_name) fullName = profileData.full_name;
+                }
+              } catch {
+                // fallback
+              }
+
+              const profile: UserProfile = {
+                id: authUser.id,
+                email: authUser.email || "usuario@odontoprint.com.br",
+                full_name: fullName,
+                role,
+              };
+
+              setUser(profile);
+              setActiveRoleState(profile.role);
+              localStorage.setItem("odontoprint_user", JSON.stringify(profile));
+              localStorage.setItem("odontoprint_active_role", profile.role);
+            } else if (event === "SIGNED_OUT") {
+              setUser(null);
+              setActiveRoleState(null);
+              localStorage.removeItem("odontoprint_user");
+              localStorage.removeItem("odontoprint_active_role");
+            }
+          });
+
+          return () => {
+            subscription.unsubscribe();
+          };
+        } else {
+          // Supabase não configurado (modo local):
+          setIsSupabaseConnected(false);
+          const savedUser = localStorage.getItem("odontoprint_user");
+          if (savedUser && isMounted) {
+            try {
+              const parsed = JSON.parse(savedUser);
+              if (parsed?.id && parsed?.email) {
+                setUser(parsed);
+                const savedRole = localStorage.getItem("odontoprint_active_role") as UserRole;
+                setActiveRoleState(savedRole && USER_ROLES[savedRole] ? savedRole : parsed.role || "ADMIN");
+              }
+            } catch {
+              localStorage.removeItem("odontoprint_user");
+              setUser(null);
+              setActiveRoleState(null);
+            }
+          } else if (isMounted) {
+            setUser(null);
+            setActiveRoleState(null);
+          }
+        }
+      } catch (err) {
+        console.error("Erro ao verificar sessão inicial:", err);
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     }
 
-    // Tenta obter usuário real do Supabase se configurado
-    const { client, isConfigured } = createClient();
-    if (isConfigured && client) {
-      setIsSupabaseConnected(true);
-      client.auth.getUser().then(({ data: { user: authUser } }) => {
-        if (authUser) {
-          const profile: UserProfile = {
-            id: authUser.id,
-            email: authUser.email || "usuario@odontoprint.com.br",
-            full_name: authUser.user_metadata?.full_name || authUser.email?.split("@")[0] || "Operador",
-            role: (authUser.user_metadata?.role as UserRole) || "ADMIN",
-          };
-          setUser(profile);
-          setActiveRoleState(profile.role);
-        }
-      });
-    }
+    initAuth();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const setActiveRole = (role: UserRole) => {
     setActiveRoleState(role);
     localStorage.setItem("odontoprint_active_role", role);
     setUser((prev) => {
+      if (!prev) return null;
       const updated = { ...prev, role };
       localStorage.setItem("odontoprint_user", JSON.stringify(updated));
       return updated;
@@ -85,24 +177,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password?: string): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true);
     try {
+      const cleanEmail = email.trim().toLowerCase();
+      if (!cleanEmail) {
+        return { success: false, error: "Por favor, digite seu e-mail corporativo." };
+      }
+      if (!password || password.trim().length === 0) {
+        return { success: false, error: "Por favor, digite sua senha de acesso." };
+      }
+
       const { client, isConfigured } = createClient();
-      if (isConfigured && client && password) {
+
+      if (isConfigured && client) {
         const { data, error } = await client.auth.signInWithPassword({
-          email,
-          password,
+          email: cleanEmail,
+          password: password.trim(),
         });
 
         if (error) {
-          return { success: false, error: error.message };
+          let errorMsg = error.message;
+          if (errorMsg.includes("Invalid login credentials")) {
+            errorMsg = "E-mail ou senha incorretos. Verifique suas credenciais.";
+          } else if (errorMsg.includes("Email not confirmed")) {
+            errorMsg = "E-mail cadastrado, mas ainda não confirmado no Supabase.";
+          }
+          return { success: false, error: errorMsg };
         }
 
         if (data.user) {
+          let role: UserRole = (data.user.user_metadata?.role as UserRole) || "ADMIN";
+          let fullName = data.user.user_metadata?.full_name || cleanEmail.split("@")[0];
+
+          try {
+            const { data: profileData } = await client
+              .from("profiles")
+              .select("role, full_name")
+              .eq("id", data.user.id)
+              .maybeSingle();
+
+            if (profileData) {
+              if (profileData.role) role = profileData.role as UserRole;
+              if (profileData.full_name) fullName = profileData.full_name;
+            } else {
+              // Cria o perfil na tabela profiles se ainda não existir
+              await client.from("profiles").upsert({
+                id: data.user.id,
+                full_name: fullName,
+                role: role,
+                active: true,
+              });
+            }
+          } catch {
+            // prossegue com os dados de metadata
+          }
+
           const profile: UserProfile = {
             id: data.user.id,
-            email: data.user.email || email,
-            full_name: data.user.user_metadata?.full_name || email.split("@")[0],
-            role: (data.user.user_metadata?.role as UserRole) || "ADMIN",
+            email: data.user.email || cleanEmail,
+            full_name: fullName,
+            role,
           };
+
           setUser(profile);
           setActiveRoleState(profile.role);
           localStorage.setItem("odontoprint_user", JSON.stringify(profile));
@@ -111,23 +245,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // Autenticação local (modo operacional direto)
-      const cleanName = email.split("@")[0]
+      // Autenticação local quando Supabase não estiver configurado
+      let detectedRole: UserRole = "CADISTA";
+      if (cleanEmail.includes("admin")) detectedRole = "ADMIN";
+      else if (cleanEmail.includes("resina")) detectedRole = "OPERADOR_RESINA";
+      else if (cleanEmail.includes("impress")) detectedRole = "OPERADOR_IMPRESSAO";
+      else if (cleanEmail.includes("acabamento") || cleanEmail.includes("protetico")) detectedRole = "PROTETICO_ACABAMENTO";
+
+      const cleanName = cleanEmail
+        .split("@")[0]
         .split(".")
         .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
         .join(" ");
 
       const profile: UserProfile = {
         id: crypto.randomUUID(),
-        email: email.trim().toLowerCase(),
-        full_name: cleanName || "Administrador",
-        role: "ADMIN",
+        email: cleanEmail,
+        full_name: cleanName || "Operador OdontoPrint",
+        role: detectedRole,
       };
 
       setUser(profile);
-      setActiveRoleState("ADMIN");
+      setActiveRoleState(detectedRole);
       localStorage.setItem("odontoprint_user", JSON.stringify(profile));
-      localStorage.setItem("odontoprint_active_role", "ADMIN");
+      localStorage.setItem("odontoprint_active_role", detectedRole);
 
       return { success: true };
     } catch (err: any) {
@@ -137,13 +278,99 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const logout = async () => {
-    const { client, isConfigured } = createClient();
-    if (isConfigured && client) {
-      await client.auth.signOut();
+  const signUp = async (
+    email: string,
+    password: string,
+    fullName: string,
+    role: UserRole = "ADMIN"
+  ): Promise<{ success: boolean; error?: string }> => {
+    setIsLoading(true);
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+      const { client, isConfigured } = createClient();
+
+      if (isConfigured && client) {
+        const { data, error } = await client.auth.signUp({
+          email: cleanEmail,
+          password: password.trim(),
+          options: {
+            data: {
+              full_name: fullName.trim(),
+              role,
+            },
+          },
+        });
+
+        if (error) {
+          return { success: false, error: error.message };
+        }
+
+        if (data.user) {
+          // Registra no profiles
+          try {
+            await client.from("profiles").upsert({
+              id: data.user.id,
+              full_name: fullName.trim(),
+              role,
+              active: true,
+            });
+          } catch {
+            // ignora se falhar
+          }
+
+          // Se auto-confirmado ou sessão retornada
+          if (data.session) {
+            const profile: UserProfile = {
+              id: data.user.id,
+              email: cleanEmail,
+              full_name: fullName.trim(),
+              role,
+            };
+            setUser(profile);
+            setActiveRoleState(role);
+            localStorage.setItem("odontoprint_user", JSON.stringify(profile));
+            localStorage.setItem("odontoprint_active_role", role);
+          }
+
+          return { success: true };
+        }
+      }
+
+      // Modo local
+      const profile: UserProfile = {
+        id: crypto.randomUUID(),
+        email: cleanEmail,
+        full_name: fullName.trim(),
+        role,
+      };
+      setUser(profile);
+      setActiveRoleState(role);
+      localStorage.setItem("odontoprint_user", JSON.stringify(profile));
+      localStorage.setItem("odontoprint_active_role", role);
+
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || "Erro ao registrar usuário." };
+    } finally {
+      setIsLoading(false);
     }
-    localStorage.removeItem("odontoprint_user");
-    window.location.href = "/login";
+  };
+
+  const logout = async () => {
+    try {
+      const { client, isConfigured } = createClient();
+      if (isConfigured && client) {
+        await client.auth.signOut();
+      }
+    } catch (err) {
+      console.error("Erro ao encerrar sessão:", err);
+    } finally {
+      setUser(null);
+      setActiveRoleState(null);
+      localStorage.removeItem("odontoprint_user");
+      localStorage.removeItem("odontoprint_active_role");
+      window.location.href = "/login";
+    }
   };
 
   return (
@@ -154,6 +381,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setActiveRole,
         isLoading,
         login,
+        signUp,
         logout,
         isSupabaseConnected,
       }}
