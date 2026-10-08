@@ -49,6 +49,15 @@ export default function AdminConfiguracoesPage() {
   const [aiEnabled, setAiEnabled] = useState(true);
   const [showApiKey, setShowApiKey] = useState(false);
   const [isTestingAi, setIsTestingAi] = useState(false);
+  const [renderAiStatus, setRenderAiStatus] = useState<{
+    groq: boolean;
+    gemini: boolean;
+    openai: boolean;
+    mistral: boolean;
+    groqMasked?: string;
+    geminiMasked?: string;
+    preferredProvider?: AIProvider | null;
+  } | null>(null);
   const [testResult, setTestResult] = useState<{
     success: boolean;
     message: string;
@@ -59,7 +68,10 @@ export default function AdminConfiguracoesPage() {
     async function load() {
       setIsLoading(true);
       try {
-        const s = await OdontoPrintService.getSettings();
+        const [s, envStatus] = await Promise.all([
+          OdontoPrintService.getSettings(),
+          AIService.getEnvStatus(),
+        ]);
         setSettings(s);
         setMaintenanceDays(s.maintenance_interval_days);
         setHexagonMin(s.calibration_hexagon_min);
@@ -67,9 +79,16 @@ export default function AdminConfiguracoesPage() {
         setNormalPrefix(s.normal_print_prefix);
         setRetryPrefix(s.retry_print_prefix);
 
+        setRenderAiStatus(envStatus);
+
         // Carrega configurações de IA salvas
         const aiCfg = AIService.getConfig();
-        setAiProvider(aiCfg.provider);
+        // Se não houver provedor salvo ou chave local, mas o Render tiver Groq/Gemini, prioriza
+        if (!aiCfg.apiKey && envStatus.preferredProvider) {
+          setAiProvider(envStatus.preferredProvider);
+        } else {
+          setAiProvider(aiCfg.provider);
+        }
         setAiApiKey(aiCfg.apiKey || "");
         setAiCustomEndpoint(aiCfg.customEndpoint || "");
         setAiModel(aiCfg.model || "llama-3.3-70b-versatile");
@@ -87,7 +106,7 @@ export default function AdminConfiguracoesPage() {
     if (newProvider === "GROQ") {
       setAiModel("llama-3.3-70b-versatile");
     } else if (newProvider === "GEMINI") {
-      setAiModel("gemini-2.0-flash");
+      setAiModel("gemini-1.5-flash");
     } else if (newProvider === "OPENAI") {
       setAiModel("gpt-4o-mini");
     } else if (newProvider === "MISTRAL") {
@@ -97,9 +116,15 @@ export default function AdminConfiguracoesPage() {
     }
   };
 
+  const hasKeyFromRender =
+    (aiProvider === "GROQ" && Boolean(renderAiStatus?.groq)) ||
+    (aiProvider === "GEMINI" && Boolean(renderAiStatus?.gemini)) ||
+    (aiProvider === "OPENAI" && Boolean(renderAiStatus?.openai)) ||
+    (aiProvider === "MISTRAL" && Boolean(renderAiStatus?.mistral));
+
   const handleTestAi = async () => {
-    if (!aiApiKey.trim() && aiProvider !== "OPENAI_COMPATIBLE") {
-      toast.warning("Por favor, digite ou cole uma Chave de API antes de testar.");
+    if (!aiApiKey.trim() && !hasKeyFromRender && aiProvider !== "OPENAI_COMPATIBLE") {
+      toast.warning("Por favor, digite uma Chave de API ou configure no Render antes de testar.");
       return;
     }
 
@@ -374,6 +399,56 @@ export default function AdminConfiguracoesPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5 pt-4">
+              {/* Banner de Status das Chaves do Render */}
+              <div className="p-3.5 rounded-xl border border-indigo-200/90 bg-indigo-50/60 text-xs">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-bold text-indigo-950 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-indigo-600" />
+                    Chaves de IA no Servidor (Render / Variáveis de Ambiente):
+                  </span>
+                  <Badge variant="outline" className="text-[10px] bg-white border-indigo-200 text-indigo-700">
+                    Sincronizado com Render
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div className="flex items-center justify-between p-2 rounded-lg bg-white border border-indigo-100">
+                    <span className="font-semibold text-slate-700">Groq (GROQ_API_KEY):</span>
+                    {renderAiStatus?.groq ? (
+                      <Badge className="bg-emerald-600 text-white text-[10px]">
+                        Ativa ({renderAiStatus.groqMasked})
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-slate-400 text-[10px]">
+                        Não detectada
+                      </Badge>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between p-2 rounded-lg bg-white border border-indigo-100">
+                    <span className="font-semibold text-slate-700">Google Gemini (GEMINI_API_KEY):</span>
+                    {renderAiStatus?.gemini ? (
+                      <Badge className="bg-emerald-600 text-white text-[10px]">
+                        Ativa ({renderAiStatus.geminiMasked})
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-slate-400 text-[10px]">
+                        Não detectada
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                {(renderAiStatus?.groq || renderAiStatus?.gemini) ? (
+                  <p className="mt-2 text-[11px] text-emerald-700 font-medium flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    As chaves configuradas no Render estão ativas! Você pode usar a IA e testar sem precisar digitar nada no navegador.
+                  </p>
+                ) : (
+                  <p className="mt-2 text-[11px] text-slate-500">
+                    Dica: No dashboard do Render, defina <code className="text-indigo-600 font-mono">GROQ_API_KEY</code> e/ou <code className="text-indigo-600 font-mono">GEMINI_API_KEY</code> em Environment Variables.
+                  </p>
+                )}
+              </div>
+
               {/* Seletor de Provedor */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-2">
@@ -568,10 +643,14 @@ export default function AdminConfiguracoesPage() {
                     value={aiApiKey}
                     onChange={(e) => setAiApiKey(e.target.value)}
                     placeholder={
-                      aiProvider === "GROQ"
-                        ? "gsk_..."
+                      aiProvider === "GROQ" && renderAiStatus?.groq
+                        ? `Chave ativa via Render (${renderAiStatus.groqMasked})`
+                        : aiProvider === "GEMINI" && renderAiStatus?.gemini
+                        ? `Chave ativa via Render (${renderAiStatus.geminiMasked})`
+                        : aiProvider === "GROQ"
+                        ? "gsk_... (ou deixe em branco para usar do Render)"
                         : aiProvider === "GEMINI"
-                        ? "AIzaSy..."
+                        ? "AIzaSy... (ou deixe em branco para usar do Render)"
                         : aiProvider === "OPENAI"
                         ? "sk-..."
                         : aiProvider === "MISTRAL"
@@ -593,7 +672,7 @@ export default function AdminConfiguracoesPage() {
                       type="button"
                       size="sm"
                       variant="secondary"
-                      disabled={isTestingAi || (!aiApiKey.trim() && aiProvider !== "OPENAI_COMPATIBLE")}
+                      disabled={isTestingAi || (!aiApiKey.trim() && !hasKeyFromRender && aiProvider !== "OPENAI_COMPATIBLE")}
                       onClick={handleTestAi}
                       className="h-7 text-[11px] px-2.5 font-semibold gap-1"
                     >
@@ -611,8 +690,10 @@ export default function AdminConfiguracoesPage() {
                     </Button>
                   </div>
                 </div>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Sua chave é armazenada com segurança localmente e utilizada exclusivamente nas requisições do sistema.
+                <p className="text-[11px] text-slate-500 mt-1">
+                  {hasKeyFromRender && !aiApiKey.trim()
+                    ? "✅ A chave está ativa nas Variáveis de Ambiente do Render! Não é necessário digitar nada aqui."
+                    : "Sua chave é armazenada com segurança e utilizada exclusivamente nas requisições do sistema."}
                 </p>
               </div>
 

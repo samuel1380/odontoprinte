@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AIProvider } from "@/types/ai.types";
+import { resolveAIKey, getEnvKey } from "@/lib/ai/env-keys";
+
+export const dynamic = "force-dynamic";
 
 interface CalibrationRecommendationPayload {
   printer_name: string;
@@ -27,15 +30,7 @@ export async function POST(req: NextRequest) {
       customEndpoint,
     } = body;
 
-    const apiKey =
-      body.apiKey?.trim() ||
-      (provider === "GROQ"
-        ? process.env.GROQ_API_KEY
-        : provider === "GEMINI"
-        ? (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)
-        : provider === "MISTRAL"
-        ? process.env.MISTRAL_API_KEY
-        : (process.env.OPENAI_API_KEY || process.env.AI_API_KEY));
+    const { apiKey, activeProvider } = resolveAIKey(provider, body.apiKey);
 
     const prompt = `Você é um engenheiro químico e técnico especialista em fotopolimerização 405nm de resinas odontológicas e calibração de impressoras 3D LCD/MSLA/DLP.
 Analise a seguinte combinação técnica:
@@ -55,54 +50,80 @@ Determine os parâmetros ideais de calibração inicial recomendados para que o 
   "tips": string[] // 3 a 4 dicas cruciais de manuseio e segurança para não descolar da mesa
 }`;
 
-    if (apiKey || (provider === "OPENAI_COMPATIBLE" && customEndpoint)) {
-      if (provider === "GROQ") {
-        const groqModel = model || "llama-3.3-70b-versatile";
-        const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model: groqModel,
-            messages: [{ role: "user", content: prompt }],
-            response_format: { type: "json_object" },
+    const callGroq = async (key: string, selectedModel?: string) => {
+      const groqModel = selectedModel || "llama-3.3-70b-versatile";
+      const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify({
+          model: groqModel,
+          messages: [{ role: "user", content: prompt }],
+          response_format: { type: "json_object" },
+          temperature: 0.2,
+        }),
+      });
+
+      if (groqRes.ok) {
+        const data = await groqRes.json();
+        const parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}");
+        return { ...parsed, aiProvider: "GROQ" };
+      }
+      return null;
+    };
+
+    const callGemini = async (key: string, selectedModel?: string) => {
+      const geminiModel = selectedModel?.startsWith("gemini") ? selectedModel : "gemini-1.5-flash";
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${key}`;
+      const geminiRes = await fetch(geminiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: {
             temperature: 0.2,
-          }),
-        });
+            responseMimeType: "application/json",
+          },
+        }),
+      });
 
-        if (groqRes.ok) {
-          const data = await groqRes.json();
-          const parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}");
-          return NextResponse.json(parsed);
+      if (geminiRes.ok) {
+        const data = await geminiRes.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+        const parsed = JSON.parse(text);
+        return { ...parsed, aiProvider: "GEMINI" };
+      }
+      return null;
+    };
+
+    if (apiKey || (activeProvider === "OPENAI_COMPATIBLE" && customEndpoint)) {
+      if (activeProvider === "GROQ") {
+        const res = await callGroq(apiKey, model);
+        if (res) return NextResponse.json(res);
+
+        // Fallback para Gemini se disponível no Render
+        const geminiBackup = getEnvKey("GEMINI");
+        if (geminiBackup) {
+          const geminiRes = await callGemini(geminiBackup);
+          if (geminiRes) return NextResponse.json(geminiRes);
         }
       }
 
-      if (provider === "GEMINI") {
-        const geminiModel = model || "gemini-2.0-flash";
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
-        const geminiRes = await fetch(geminiUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.2,
-              responseMimeType: "application/json",
-            },
-          }),
-        });
+      if (activeProvider === "GEMINI") {
+        const res = await callGemini(apiKey, model);
+        if (res) return NextResponse.json(res);
 
-        if (geminiRes.ok) {
-          const data = await geminiRes.json();
-          const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-          const parsed = JSON.parse(text);
-          return NextResponse.json(parsed);
+        // Fallback para Groq se disponível no Render
+        const groqBackup = getEnvKey("GROQ");
+        if (groqBackup) {
+          const groqRes = await callGroq(groqBackup);
+          if (groqRes) return NextResponse.json(groqRes);
         }
       }
 
-      if (provider === "OPENAI") {
+      if (activeProvider === "OPENAI") {
         const openaiModel = model || "gpt-4o-mini";
         const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
           method: "POST",
@@ -121,11 +142,11 @@ Determine os parâmetros ideais de calibração inicial recomendados para que o 
         if (openaiRes.ok) {
           const data = await openaiRes.json();
           const parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}");
-          return NextResponse.json(parsed);
+          return NextResponse.json({ ...parsed, aiProvider: "OPENAI" });
         }
       }
 
-      if (provider === "MISTRAL") {
+      if (activeProvider === "MISTRAL") {
         const mistralModel = model || "mistral-large-latest";
         const mistralRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
           method: "POST",
@@ -144,11 +165,11 @@ Determine os parâmetros ideais de calibração inicial recomendados para que o 
         if (mistralRes.ok) {
           const data = await mistralRes.json();
           const parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}");
-          return NextResponse.json(parsed);
+          return NextResponse.json({ ...parsed, aiProvider: "MISTRAL" });
         }
       }
 
-      if (provider === "OPENAI_COMPATIBLE") {
+      if (activeProvider === "OPENAI_COMPATIBLE") {
         const targetUrl = customEndpoint?.trim() || "http://localhost:11434/v1/chat/completions";
         const compatUrl = targetUrl.includes("/chat/completions")
           ? targetUrl
@@ -174,15 +195,13 @@ Determine os parâmetros ideais de calibração inicial recomendados para que o 
         if (compatRes.ok) {
           const data = await compatRes.json();
           const parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}");
-          return NextResponse.json(parsed);
+          return NextResponse.json({ ...parsed, aiProvider: "OPENAI_COMPATIBLE" });
         }
       }
     }
 
-    // BASE DE DADOS TÉCNICA LOCAL DE FALLBACK (Garante funcionamento perfeito mesmo sem chave externa configurada)
-    // Valores calculados com base em especificações técnicas de laboratório para matrizes mono 8K-14K e resinas odontológicas
+    // BASE DE DADOS TÉCNICA LOCAL DE FALLBACK (Garante funcionamento mesmo sem conexão externa)
     const isBioProv = resin_brand.toLowerCase().includes("prov") || resin_type.toLowerCase().includes("prov");
-    const isModel = resin_brand.toLowerCase().includes("model") || resin_type.toLowerCase().includes("model");
 
     const fallbackResponse = {
       initial_exposure_time: isBioProv ? 28.0 : 25.0,
@@ -191,13 +210,14 @@ Determine os parâmetros ideais de calibração inicial recomendados para que o 
       layer_height: layer_height || 0.05,
       wash_time: isBioProv ? 6.0 : 5.0,
       cure_time: isBioProv ? 12.0 : 10.0,
-      rationale: `Sugestão calibrada para ${resin_brand} na impressora ${printer_name}. Para matriz monocromática moderna, o tempo de 2.2s a 2.4s preserva detalhes cervicais finos e os alvéolos dos furos sem sofrer expansão térmica.`,
+      rationale: `Sugestão fotopolimerizável para ${resin_brand} na ${printer_name}. Parâmetros ajustados para alcançar o hexágono de calibração entre 9.99mm e 10.01mm.`,
       tips: [
-        "Homogeneizar o lote por 5 a 10 minutos antes de despejar na cuba para evitar sedimentação de pigmentos.",
-        "Garantir temperatura da resina entre 23°C e 26°C na bancada de impressão.",
-        "Lavar em cuba ultrassônica com álcool isopropílico 99% virgem e secar totalmente antes da câmara UV.",
-        "Para modelos com alvéolos/furos para dentes, confira o hexágono de teste no paquímetro digital (9.99 a 10.01 mm).",
+        "Homogeneizar o frasco de resina por 5 minutos antes do uso.",
+        "Manter a temperatura da resina na cuba entre 23°C e 26°C.",
+        "Lavar em álcool isopropílico virgem e secar completamente antes da pós-cura UV.",
+        "Conferir medidas com paquímetro digital aferido.",
       ],
+      aiProvider: "LOCAL_FALLBACK",
     };
 
     return NextResponse.json(fallbackResponse);

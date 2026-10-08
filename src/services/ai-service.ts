@@ -38,6 +38,34 @@ export class AIService {
     }
   }
 
+  static async getEnvStatus(): Promise<{
+    groq: boolean;
+    gemini: boolean;
+    openai: boolean;
+    mistral: boolean;
+    groqMasked?: string;
+    geminiMasked?: string;
+    openaiMasked?: string;
+    mistralMasked?: string;
+    preferredProvider?: import("@/types/ai.types").AIProvider | null;
+  }> {
+    try {
+      const res = await fetch("/api/ai/status");
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {
+      // ignore
+    }
+    return {
+      groq: false,
+      gemini: false,
+      openai: false,
+      mistral: false,
+      preferredProvider: null,
+    };
+  }
+
   static async testConnection(config: AIConfig): Promise<{ success: boolean; message: string }> {
     try {
       const res = await fetch("/api/ai/chat", {
@@ -58,9 +86,10 @@ export class AIService {
         return { success: false, message: data.error || `Erro HTTP ${res.status}` };
       }
 
+      const sourceInfo = data.source === "render" ? " [Chave do Render]" : "";
       return {
         success: true,
-        message: `Conectado com sucesso ao ${config.provider} (${data.model || config.model})!`,
+        message: `Conectado com sucesso ao ${data.provider || config.provider}${sourceInfo} (${data.model || config.model})!`,
       };
     } catch (err: any) {
       return { success: false, message: err?.message || "Falha na comunicação de rede com o servidor." };

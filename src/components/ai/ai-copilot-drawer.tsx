@@ -35,12 +35,35 @@ export function AICopilotDrawer() {
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [aiProvider, setAiProvider] = useState<string>("GROQ");
+  const [isRenderKey, setIsRenderKey] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const config = AIService.getConfig();
-    setAiProvider(config.provider);
+    async function checkStatus() {
+      const config = AIService.getConfig();
+      try {
+        const envStatus = await AIService.getEnvStatus();
+        if (!config.apiKey && envStatus.preferredProvider) {
+          setAiProvider(envStatus.preferredProvider);
+          setIsRenderKey(true);
+        } else if (
+          (config.provider === "GROQ" && envStatus.groq) ||
+          (config.provider === "GEMINI" && envStatus.gemini)
+        ) {
+          setAiProvider(config.provider);
+          setIsRenderKey(true);
+        } else {
+          setAiProvider(config.provider);
+          setIsRenderKey(false);
+        }
+      } catch {
+        setAiProvider(config.provider);
+      }
+    }
+    if (isOpen) {
+      checkStatus();
+    }
   }, [isOpen]);
 
   useEffect(() => {
@@ -143,8 +166,13 @@ export function AICopilotDrawer() {
                 <div>
                   <div className="flex items-center gap-1.5">
                     <span className="font-bold text-sm tracking-tight">OdontoIA Copilot</span>
-                    <Badge variant="secondary" className="bg-brand-500/20 text-brand-300 border-brand-400/30 text-[9px] py-0 px-1">
-                      {aiProvider}
+                    <Badge variant="secondary" className="bg-brand-500/20 text-brand-300 border-brand-400/30 text-[9px] py-0 px-1.5 flex items-center gap-1">
+                      <span>{aiProvider}</span>
+                      {isRenderKey && (
+                        <span className="text-[8px] bg-emerald-500/30 text-emerald-300 px-1 py-0.2 rounded font-semibold">
+                          Render
+                        </span>
+                      )}
                     </Badge>
                   </div>
                   <p className="text-[11px] text-slate-400">Inteligência Operacional de Bancada</p>
