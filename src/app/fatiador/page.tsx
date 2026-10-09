@@ -196,23 +196,19 @@ function FatiadorContent() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 mb-1">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => router.push("/fila")}
-              className="text-slate-500 hover:text-slate-900 gap-1 pl-0"
+              className="text-slate-500 hover:text-slate-900 gap-1 pl-0 h-auto py-1 text-xs"
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft className="w-3.5 h-3.5" />
               Voltar à Fila
             </Button>
-            <span className="text-xs text-slate-300">|</span>
-            <Badge variant="secondary" className="text-brand-700 bg-brand-50 border-brand-200">
-              Estação de Preparo
-            </Badge>
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight mt-1 flex items-center gap-2">
-            Fatiador: Preparar Ordem de Impressão
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+            Fatiador &bull; Preparar Impressão
           </h1>
         </div>
 
@@ -496,7 +492,7 @@ function FatiadorContent() {
             </Card>
 
             {/* Nomenclatura & Start Button Card */}
-            <Card className="border-2 border-brand-200 bg-gradient-to-b from-brand-50/40 to-white">
+            <Card className="border border-brand-200/90 bg-white shadow-2xs">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <Barcode className="w-4 h-4 text-brand-500" />
@@ -508,7 +504,7 @@ function FatiadorContent() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {generatedCode ? (
-                  <div className="text-center p-4 rounded-xl bg-white border-2 border-brand-500 shadow-card animate-in zoom-in-95">
+                  <div className="text-center p-4 rounded-xl bg-brand-50/40 border border-brand-300 shadow-2xs animate-in zoom-in-95">
                     <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block">
                       Código Gerado para Impressão
                     </span>

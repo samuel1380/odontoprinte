@@ -35,22 +35,17 @@ export function Topbar({ onOpenMobileMenu }: TopbarProps) {
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 lg:h-20 w-full items-center justify-between border-b border-slate-200/80 bg-white/95 px-4 sm:px-6 lg:px-8 backdrop-blur-md">
+    <header className="sticky top-0 z-30 flex h-14 sm:h-16 lg:h-18 w-full items-center justify-between border-b border-slate-200/80 bg-white/95 px-3.5 sm:px-6 lg:px-8 backdrop-blur-md">
       {/* Left: Mobile Toggle & Breadcrumbs */}
       <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         <button
           type="button"
           onClick={onOpenMobileMenu}
-          className="lg:hidden -ml-1 p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition focus:outline-hidden shrink-0"
+          className="lg:hidden p-2 -ml-1 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition focus:outline-hidden shrink-0"
           aria-label="Abrir menu de navegação"
         >
           <Menu className="w-5 h-5" />
         </button>
-        <img
-          src="/logo.jpg"
-          alt="OdontoPrint"
-          className="h-7 w-7 rounded-lg object-contain lg:hidden shrink-0 border border-slate-200/80 p-0.5 bg-white shadow-2xs"
-        />
         <div className="min-w-0 overflow-hidden">
           <Breadcrumbs />
         </div>

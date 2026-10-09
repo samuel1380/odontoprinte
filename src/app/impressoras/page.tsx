@@ -111,38 +111,36 @@ export default function ImpressorasPage() {
     <AppShell>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200/80 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
           <div>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="text-brand-700 bg-brand-50 border-brand-200">
-                Operador de Resinas & Equipamentos
-              </Badge>
-              <span className="text-xs text-slate-400">&bull;</span>
-              <span className="text-xs text-slate-500">Regra Estrita de 7 Dias</span>
-            </div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight mt-1 flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
               Parque de Impressoras 3D
             </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Equipamentos com manutenção vencida (&gt;7 dias) são automaticamente bloqueados para novas impressões.
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+              Gestão de equipamentos de bancada e controle preventivo de ciclo semanal.
             </p>
           </div>
 
-          <Button onClick={() => setModalOpen(true)} variant="default" size="sm" className="gap-1.5 font-bold">
+          <Button
+            onClick={() => setModalOpen(true)}
+            variant="default"
+            size="sm"
+            className="gap-1.5 font-semibold h-9 w-full sm:w-auto justify-center"
+          >
             <Plus className="w-4 h-4" />
-            Cadastrar Nova Impressora
+            Cadastrar Impressora
           </Button>
         </div>
 
         {/* Fleet Cards */}
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
             {[1, 2, 3].map((i) => (
               <Skeleton key={i} className="h-56 w-full rounded-2xl" />
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
             {printers.map((p) => {
               const statusCfg = PRINTER_STATUS[p.calculated_status] || PRINTER_STATUS.INATIVA;
               const isAvailable = p.calculated_status === "DISPONIVEL";
@@ -150,28 +148,22 @@ export default function ImpressorasPage() {
               return (
                 <Card
                   key={p.id}
-                  className={`flex flex-col justify-between overflow-hidden border-2 transition-all hover:shadow-card ${
-                    isAvailable
-                      ? "border-emerald-200 bg-white"
-                      : p.calculated_status === "MANUTENCAO_VENCIDA"
-                      ? "border-amber-200 bg-amber-50/20"
-                      : "border-rose-200 bg-rose-50/20"
-                  }`}
+                  className="flex flex-col justify-between overflow-hidden border border-slate-200/90 bg-white rounded-xl sm:rounded-2xl transition-all hover:border-slate-300 hover:shadow-xs"
                 >
-                  <CardHeader className="pb-3">
+                  <CardHeader className="p-4 sm:p-5 pb-3">
                     <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <CardTitle className="text-base text-slate-900">{p.name}</CardTitle>
-                        <CardDescription>
+                      <div className="min-w-0">
+                        <CardTitle className="text-base text-slate-900 font-bold truncate">{p.name}</CardTitle>
+                        <CardDescription className="text-xs text-slate-500 mt-0.5 truncate">
                           {p.brand} &bull; {p.model}
                         </CardDescription>
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 shrink-0">
                         <Badge className={statusCfg.color}>{statusCfg.label}</Badge>
                         <button
                           type="button"
                           onClick={() => setPrinterToDelete(p)}
-                          className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
                           title="Excluir impressora"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -180,22 +172,22 @@ export default function ImpressorasPage() {
                     </div>
                   </CardHeader>
 
-                  <CardContent className="space-y-3 text-xs">
-                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
-                      <div className="flex justify-between">
+                  <CardContent className="p-4 sm:p-5 pt-0 space-y-3 text-xs">
+                    <div className="divide-y divide-slate-100 rounded-xl bg-slate-50/70 p-3 border border-slate-100 space-y-1.5">
+                      <div className="flex justify-between items-center">
                         <span className="text-slate-400">Nº de Série:</span>
-                        <span className="font-mono font-bold text-slate-700">{p.serial_number}</span>
+                        <span className="font-mono font-medium text-slate-800">{p.serial_number}</span>
                       </div>
-                      <div className="flex justify-between">
+                      <div className="flex justify-between items-center pt-1.5">
                         <span className="text-slate-400">Última Manutenção:</span>
-                        <span className="font-medium text-slate-700">
+                        <span className="font-medium text-slate-800">
                           {p.latest_maintenance ? formatDate(p.latest_maintenance.performed_at) : "Nenhuma"}
                         </span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-400">Tempo desde manutenção:</span>
+                      <div className="flex justify-between items-center pt-1.5">
+                        <span className="text-slate-400">Ciclo Operacional:</span>
                         <span
-                          className={`font-bold ${
+                          className={`font-semibold ${
                             (p.days_since_maintenance || 0) > 7
                               ? "text-rose-600"
                               : "text-emerald-700"
@@ -209,35 +201,35 @@ export default function ImpressorasPage() {
                     </div>
 
                     {!isAvailable && (
-                      <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-800 flex items-start gap-2">
-                        <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
-                        <div>
+                      <div className="p-2.5 rounded-lg bg-amber-50/70 border border-amber-200/80 text-[11px] text-amber-900 flex items-start gap-2">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-600 mt-0.5" />
+                        <div className="leading-tight">
                           {p.calculated_status === "MANUTENCAO_VENCIDA"
-                            ? `Bloqueada para novas impressões porque a manutenção venceu há ${p.days_since_maintenance} dias (limite: 7 dias).`
+                            ? `Bloqueada para novas impressões (manutenção venceu há ${p.days_since_maintenance} dias).`
                             : p.calculated_status === "REPROVADA"
-                            ? "Bloqueada porque foi reprovada no último checklist técnico de bancada."
+                            ? "Bloqueada por reprovação no último checklist."
                             : "Equipamento desativado."}
                         </div>
                       </div>
                     )}
                   </CardContent>
 
-                  <div className="p-4 pt-0 flex gap-2">
+                  <div className="p-4 sm:p-5 pt-0 flex gap-2">
                     <Link href={`/impressoras/${p.id}/manutencao`} className="flex-1">
                       <Button
                         variant={isAvailable ? "outline" : "default"}
                         size="sm"
-                        className={`w-full text-xs font-bold gap-1.5 ${
+                        className={`w-full text-xs font-semibold gap-1.5 h-8.5 ${
                           !isAvailable ? "bg-amber-600 hover:bg-amber-700 text-white" : ""
                         }`}
                       >
                         <Wrench className="w-3.5 h-3.5" />
-                        Realizar Manutenção
+                        Manutenção
                       </Button>
                     </Link>
 
                     <Link href={`/impressoras/${p.id}`}>
-                      <Button variant="ghost" size="sm" className="text-xs">
+                      <Button variant="ghost" size="sm" className="text-xs h-8.5 px-3 text-slate-600 hover:text-slate-900">
                         Histórico
                       </Button>
                     </Link>

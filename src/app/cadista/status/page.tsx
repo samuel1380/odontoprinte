@@ -112,22 +112,18 @@ export default function CadistaStatusPage() {
     <AppShell>
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 border-b border-slate-200/80 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
           <div>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="text-brand-700 bg-brand-50 border-brand-200">
-                Módulo Cadista
-              </Badge>
-              <span className="text-xs text-slate-400">&bull;</span>
-              <span className="text-xs text-slate-500">Digitalização de Fluxograma</span>
-            </div>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight mt-1">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
               Atualização de Status do Trabalho
             </h1>
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+              Cadastre a identificação do paciente e selecione os modelos 3D que compõem o caso.
+            </p>
           </div>
 
-          <div className="text-xs text-slate-400">
-            Responsável: <span className="font-semibold text-slate-700">{user?.full_name || "Responsável"}</span>
+          <div className="text-xs text-slate-500 font-medium bg-slate-100/80 px-3 py-1.5 rounded-full w-fit">
+            Cadista: <span className="font-semibold text-slate-800">{user?.full_name || "Operador"}</span>
           </div>
         </div>
 

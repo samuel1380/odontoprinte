@@ -79,17 +79,10 @@ export default function HistoricoPage() {
     <AppShell>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200/80 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
           <div>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="text-brand-700 bg-brand-50 border-brand-200">
-                Auditoria & Rastreabilidade
-              </Badge>
-              <span className="text-xs text-slate-400">&bull;</span>
-              <span className="text-xs text-slate-500">Histórico Imutável</span>
-            </div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight mt-1 flex items-center gap-2">
-              Rastreabilidade Completa de Trabalhos
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+              Rastreabilidade de Trabalhos
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
               Pesquise qualquer paciente, código de trabalho ou lote e visualize a linha do tempo ponta a ponta.
@@ -98,18 +91,18 @@ export default function HistoricoPage() {
         </div>
 
         {/* Search Bar */}
-        <form onSubmit={handleSearch} className="flex gap-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-subtle">
+        <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-2.5 bg-white p-3 rounded-xl border border-slate-200/90 shadow-2xs">
           <div className="relative flex-1">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Pesquisar por paciente (ex: PAC-100, PAC-002), nome ou observações..."
-              className="w-full pl-10 pr-4 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50/50"
+              placeholder="Pesquisar por paciente (ex: PAC-100), nome ou lote..."
+              className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-brand-500 bg-slate-50/50"
             />
           </div>
-          <Button type="submit" size="sm" className="font-bold px-5">
+          <Button type="submit" size="sm" className="font-bold px-4 w-full sm:w-auto justify-center">
             Pesquisar
           </Button>
         </form>

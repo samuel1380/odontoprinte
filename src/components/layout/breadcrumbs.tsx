@@ -14,7 +14,7 @@ const ROUTE_LABELS: Record<string, string> = {
   impressoes: "Impressões",
   impressoras: "Impressoras 3D",
   fresagem: "Fila de Fresagem CNC",
-  acabamento: "Bancada de Acabamento & Maquiagem",
+  acabamento: "Bancada de Acabamento",
   manutencao: "Checklist de Manutenção",
   resinas: "Lotes de Resina",
   recebimento: "Recebimento de Resina",

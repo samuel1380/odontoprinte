@@ -53,179 +53,104 @@ export default function DashboardPage() {
     <AppShell>
       <div className="space-y-8">
         {/* Header with Title & Quick Actions */}
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
               Painel Geral de Manufatura
             </h1>
-            <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              Visão consolidada da esteira: Modelagem CAD, Fila FIFO, Fatiamento e Parque de Impressão 3D.
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+              Controle central da esteira: Modelagem CAD, Fila FIFO e Parque de Impressão 3D.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 pt-1 sm:pt-0">
             <Link href="/cadista/status">
-              <Button variant="default" size="sm" className="gap-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl shadow-xs text-xs">
+              <Button size="sm" variant="default" className="text-xs font-semibold gap-1.5 h-8">
                 <FileCheck2 className="w-3.5 h-3.5" />
-                1. CAD / Cadista
+                Novo Trabalho
               </Button>
             </Link>
             <Link href="/fila">
-              <Button variant="outline" size="sm" className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-50 bg-white rounded-xl shadow-xs text-xs">
+              <Button size="sm" variant="outline" className="text-xs font-medium gap-1.5 h-8">
                 <ListOrdered className="w-3.5 h-3.5" />
-                2. Fila FIFO
+                Fila FIFO
               </Button>
             </Link>
             <Link href="/fatiador">
-              <Button variant="outline" size="sm" className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-50 bg-white rounded-xl shadow-xs text-xs">
-                <Scissors className="w-3.5 h-3.5 text-blue-600" />
-                3. Fatiador
+              <Button size="sm" variant="outline" className="text-xs font-medium gap-1.5 h-8">
+                <Scissors className="w-3.5 h-3.5" />
+                Fatiador
               </Button>
             </Link>
             <Link href="/impressoes">
-              <Button variant="outline" size="sm" className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-50 bg-white rounded-xl shadow-xs text-xs">
-                <Printer className="w-3.5 h-3.5 text-emerald-600" />
-                4. Impressões
+              <Button size="sm" variant="outline" className="text-xs font-medium gap-1.5 h-8">
+                <Printer className="w-3.5 h-3.5" />
+                Impressões
               </Button>
             </Link>
           </div>
         </div>
 
-        {/* STATUS DA OPERAÇÃO */}
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs">
-          <div className="flex items-center justify-between pb-4 mb-5 border-b border-slate-100">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white shadow-xs">
-                <Activity className="h-4 w-4" />
-              </div>
-              <div>
-                <h2 className="text-sm font-bold tracking-tight text-slate-900">
-                  Indicadores Críticos da Linha de Produção
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Monitoramento contínuo de disponibilidade, pendências e conformidade
-                </p>
-              </div>
+        {/* Metric Cards - 4 KPIs Essenciais, Limpos e Responsivos */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <Card className="p-4 sm:p-5 flex flex-col justify-between hover:border-slate-300 transition-all">
+            <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
+              <span>Impressoras 3D</span>
+              <Printer className="w-4 h-4 text-slate-400" />
             </div>
-            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200/60">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              Operação Regular
-            </span>
-          </div>
-
-          {isLoading ? (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {[1, 2, 3, 4].map((i) => (
-                <Skeleton key={i} className="h-20 w-full rounded-xl" />
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 transition-colors hover:bg-white hover:border-slate-300">
-                <span className="text-xs font-medium text-slate-500">Impressoras Disponíveis</span>
-                <div className="text-2xl font-bold text-slate-900 mt-1 flex items-baseline gap-2">
-                  {metrics?.printers_available}
-                  <span className="text-xs font-normal text-slate-400">
-                    de {(metrics?.printers_available || 0) + (metrics?.printers_blocked || 0)} ativas
-                  </span>
-                </div>
+            <div className="mt-3">
+              <div className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
+                {isLoading ? <Skeleton className="h-8 w-12" /> : metrics?.printers_available}
               </div>
-
-              <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 transition-colors hover:bg-white hover:border-slate-300">
-                <span className="text-xs font-medium text-slate-500">Fila Atual de Espera</span>
-                <div className="text-2xl font-bold text-brand-600 mt-1 flex items-baseline gap-2">
-                  {metrics?.items_in_queue}
-                  <span className="text-xs font-normal text-slate-400">modelos aguardando</span>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-rose-200/80 bg-rose-50/30 p-4 transition-colors hover:bg-rose-50/60">
-                <span className="text-xs font-medium text-rose-700 font-semibold">Reimpressões Pendentes</span>
-                <div className="text-2xl font-bold text-rose-600 mt-1 flex items-baseline gap-2">
-                  {metrics?.reprints_pending}
-                  <span className="text-xs font-normal text-rose-500">prioridade máxima</span>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 transition-colors hover:bg-white hover:border-slate-300">
-                <span className="text-xs font-medium text-slate-500">Lotes de Resina Aprovados</span>
-                <div className="text-2xl font-bold text-slate-900 mt-1 flex items-baseline gap-2">
-                  {metrics?.resins_calibrated}
-                  <span className="text-xs font-normal text-slate-400">combinações aptas</span>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* METRICS GRID */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          <Card className="hover:border-brand-300 transition">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs font-medium text-slate-500">
-                Trabalhos Aguardando
-              </CardTitle>
-              <Clock className="w-4 h-4 text-brand-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-slate-900">
-                {isLoading ? <Skeleton className="h-8 w-12" /> : metrics?.jobs_waiting}
-              </div>
-              <p className="text-xs text-slate-400 mt-1">
-                Pacientes com itens na fila
+              <p className="text-[11px] text-slate-400 mt-1">
+                {isLoading ? "Carregando..." : `${(metrics?.printers_available || 0) + (metrics?.printers_blocked || 0)} ativas no laboratório`}
               </p>
-            </CardContent>
+            </div>
           </Card>
 
-          <Card className="hover:border-brand-300 transition">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs font-medium text-slate-500">
-                Em Impressão Agora
-              </CardTitle>
-              <Printer className="w-4 h-4 text-blue-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-blue-600">
-                {isLoading ? <Skeleton className="h-8 w-12" /> : metrics?.items_printing}
+          <Card className="p-4 sm:p-5 flex flex-col justify-between hover:border-slate-300 transition-all">
+            <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
+              <span>Fila de Espera</span>
+              <ListOrdered className="w-4 h-4 text-brand-500" />
+            </div>
+            <div className="mt-3">
+              <div className="text-2xl sm:text-3xl font-bold tracking-tight text-brand-600">
+                {isLoading ? <Skeleton className="h-8 w-12" /> : metrics?.items_in_queue}
               </div>
-              <p className="text-xs text-slate-400 mt-1">
-                Modelos nas cubas no momento
+              <p className="text-[11px] text-slate-400 mt-1">
+                {isLoading ? "Carregando..." : (metrics?.reprints_pending || 0) > 0 ? `${metrics?.reprints_pending} prioridade máxima` : "Modelos na fila FIFO"}
               </p>
-            </CardContent>
+            </div>
           </Card>
 
-          <Card className="hover:border-brand-300 transition">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs font-medium text-slate-500">
-                Concluídos Hoje
-              </CardTitle>
+          <Card className="p-4 sm:p-5 flex flex-col justify-between hover:border-slate-300 transition-all">
+            <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
+              <span>Produção Hoje</span>
               <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-emerald-600">
+            </div>
+            <div className="mt-3">
+              <div className="text-2xl sm:text-3xl font-bold tracking-tight text-emerald-600">
                 {isLoading ? <Skeleton className="h-8 w-12" /> : metrics?.items_completed_today}
               </div>
-              <p className="text-xs text-slate-400 mt-1">
-                Modelos aprovados sem falhas
+              <p className="text-[11px] text-slate-400 mt-1">
+                {isLoading ? "Carregando..." : `${metrics?.items_printing || 0} em impressão agora`}
               </p>
-            </CardContent>
+            </div>
           </Card>
 
-          <Card className="hover:border-rose-300 transition">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs font-medium text-slate-500">
-                Impressoras Bloqueadas
-              </CardTitle>
-              <AlertTriangle className="w-4 h-4 text-amber-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-amber-600">
-                {isLoading ? <Skeleton className="h-8 w-12" /> : metrics?.printers_blocked}
+          <Card className="p-4 sm:p-5 flex flex-col justify-between hover:border-slate-300 transition-all">
+            <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
+              <span>Lotes de Resina</span>
+              <FlaskConical className="w-4 h-4 text-purple-500" />
+            </div>
+            <div className="mt-3">
+              <div className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
+                {isLoading ? <Skeleton className="h-8 w-12" /> : metrics?.resins_calibrated}
               </div>
-              <p className="text-xs text-slate-400 mt-1">
-                Vencidas (&gt;7 dias) ou Reprovadas
+              <p className="text-[11px] text-slate-400 mt-1">
+                Combinações calibradas
               </p>
-            </CardContent>
+            </div>
           </Card>
         </div>
 

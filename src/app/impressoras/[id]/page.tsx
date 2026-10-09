@@ -119,19 +119,19 @@ export default function ImpressoraDetalhesPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
             <Button
               variant="outline"
               size="sm"
               onClick={() => setDeleteDialogOpen(true)}
-              className="text-rose-600 border-rose-200 hover:bg-rose-50 gap-1.5 font-bold"
+              className="text-rose-600 border-rose-200 hover:bg-rose-50 gap-1.5 font-bold w-full sm:w-auto justify-center"
             >
               <Trash2 className="w-4 h-4" />
               Excluir Impressora
             </Button>
 
-            <Link href={`/impressoras/${p.id}/manutencao`}>
-              <Button variant="default" size="sm" className="gap-1.5 font-bold">
+            <Link href={`/impressoras/${p.id}/manutencao`} className="w-full sm:w-auto">
+              <Button variant="default" size="sm" className="gap-1.5 font-bold w-full sm:w-auto justify-center">
                 <Wrench className="w-4 h-4" />
                 Realizar Nova Manutenção
               </Button>

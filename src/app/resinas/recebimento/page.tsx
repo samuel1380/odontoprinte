@@ -96,12 +96,11 @@ export default function RecebimentoResinaPage() {
         </div>
 
         {/* Info Banner */}
-        <div className="p-4 rounded-xl bg-amber-50/80 border border-amber-200 text-xs text-amber-900 flex items-start gap-3">
-          <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-          <div>
-            <span className="font-bold block mb-0.5">Procedimento Padrão OdontoPrint:</span>
-            A cada recebimento de resina, um novo registro de lote deve ser criado. O status inicial será sempre &quot;Aguardando Calibração&quot;. A resina só poderá ser usada no Fatiador após calibração técnica aprovada na impressora correspondente.
-          </div>
+        <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 flex items-start gap-2.5">
+          <Info className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+          <p className="leading-relaxed">
+            O status inicial do lote será sempre <strong>Aguardando Calibração</strong>. A resina só poderá ser selecionada no Fatiador após calibração aprovada para a impressora.
+          </p>
         </div>
 
         {/* Form */}

@@ -43,25 +43,18 @@ export default function CalibracoesPage() {
     <AppShell>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200/80 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
           <div>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="text-brand-700 bg-brand-50 border-brand-200">
-                Operador de Resinas
-              </Badge>
-              <span className="text-xs text-slate-400">&bull;</span>
-              <span className="text-xs text-slate-500">Tolerância Micrométrica: 9.99 a 10.01 mm</span>
-            </div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight mt-1 flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
               Calibrações Técnicas de Resina
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              Relação estrita Resina/Lote + Impressora. A calibração em uma máquina não autoriza uso em outra.
+              Relação estrita Resina/Lote + Impressora (tolerância micrométrica de 9.99 a 10.01 mm).
             </p>
           </div>
 
-          <Link href="/calibracoes/nova">
-            <Button variant="default" size="sm" className="gap-1.5 font-bold">
+          <Link href="/calibracoes/nova" className="w-full sm:w-auto">
+            <Button variant="default" size="sm" className="gap-1.5 font-bold w-full sm:w-auto justify-center">
               <Plus className="w-4 h-4" />
               Nova Calibração Técnica
             </Button>

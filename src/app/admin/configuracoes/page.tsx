@@ -301,20 +301,13 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
     <AppShell>
       <div className="max-w-3xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200/80 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
           <div>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="text-brand-700 bg-brand-50 border-brand-200">
-                Administração
-              </Badge>
-              <span className="text-xs text-slate-400">&bull;</span>
-              <span className="text-xs text-slate-500">Parametrização sem Alteração de Código</span>
-            </div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight mt-1 flex items-center gap-2">
-              Configurações & Parâmetros do Sistema
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+              Configurações do Sistema
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              Ajuste limites de calibração, janelas de manutenção de impressoras e prefixos de nomenclatura.
+              Ajuste limites de calibração, janelas de manutenção de impressoras e parâmetros operacionais.
             </p>
           </div>
 
@@ -323,7 +316,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
             variant="outline"
             size="sm"
             onClick={handleResetDefaults}
-            className="gap-1 text-xs"
+            className="gap-1 text-xs w-full sm:w-auto justify-center"
           >
             <RefreshCcw className="w-3.5 h-3.5" />
             Restaurar Padrões
@@ -457,11 +450,11 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
           </Card>
 
           {/* Card 4: Status do Banco de Dados & Sincronização em Nuvem (Supabase) */}
-          <Card className="border-sky-200/80 bg-gradient-to-br from-white via-sky-50/20 to-brand-50/20 shadow-sm">
-            <CardHeader className="pb-3 border-b border-sky-100/60">
+          <Card className="border border-slate-200/90 bg-white shadow-2xs">
+            <CardHeader className="pb-3 border-b border-slate-100">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base flex items-center gap-2 text-slate-900">
-                  <div className="w-7 h-7 rounded-lg bg-sky-600 flex items-center justify-center text-white shadow-sm">
+                  <div className="w-7 h-7 rounded-lg bg-slate-900 flex items-center justify-center text-white shadow-2xs">
                     <Database className="w-4 h-4" />
                   </div>
                   4. Sincronização em Nuvem & Banco de Dados (Supabase)
@@ -567,11 +560,11 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
           </Card>
 
           {/* Card 5: Inteligência Artificial (Gemini / Groq) */}
-          <Card className="border-indigo-200/80 bg-gradient-to-br from-white via-indigo-50/20 to-brand-50/20 shadow-sm">
-            <CardHeader className="pb-3 border-b border-indigo-100/60">
+          <Card className="border border-slate-200/90 bg-white shadow-2xs">
+            <CardHeader className="pb-3 border-b border-slate-100">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base flex items-center gap-2 text-slate-900">
-                  <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-indigo-600 to-brand-600 flex items-center justify-center text-white shadow-sm">
+                  <div className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center text-white shadow-2xs">
                     <Sparkles className="w-4 h-4" />
                   </div>
                   5. Inteligência Artificial do Laboratório (Gemini & Groq)

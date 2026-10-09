@@ -134,23 +134,23 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-72 sm:w-64 flex-col border-r border-slate-200/80 bg-white transition-transform duration-300 ease-in-out lg:z-30 lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex w-[270px] max-w-[85vw] lg:w-64 flex-col border-r border-slate-200/80 bg-white transition-transform duration-300 ease-in-out lg:z-30 lg:translate-x-0",
           isOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full lg:translate-x-0"
         )}
       >
-        {/* Brand Header com a nova Logo OdontoPrint */}
-        <div className="flex h-16 lg:h-20 items-center justify-between border-b border-slate-200/80 px-4 sm:px-5">
+        {/* Brand Header */}
+        <div className="flex h-14 sm:h-16 lg:h-18 items-center justify-between border-b border-slate-200/80 px-4 sm:px-5">
           <Link href="/dashboard" onClick={onClose} className="flex items-center gap-3 group">
             <img
               src="/logo.jpg"
               alt="Logo OdontoPrint"
-              className="h-9 w-9 lg:h-14 lg:w-14 rounded-xl lg:rounded-2xl object-contain shadow-xs lg:shadow-md border border-slate-200/80 p-0.5 lg:p-1 bg-white group-hover:scale-105 transition-all shrink-0"
+              className="h-10 w-10 rounded-xl object-contain shadow-xs border border-slate-200/80 p-0.5 bg-white group-hover:scale-105 transition-all shrink-0"
             />
             <div>
-              <div className="text-base lg:text-lg font-black tracking-wider text-slate-900 flex items-center">
+              <div className="text-base font-black tracking-wider text-slate-900 flex items-center leading-none">
                 ODONTO<span className="text-brand-600">PRINT</span>
               </div>
-              <p className="text-[9px] lg:text-[10px] font-bold tracking-tight text-slate-400 uppercase">
+              <p className="text-[9px] font-bold tracking-tight text-slate-400 uppercase mt-1">
                 Dental 3D Laboratory
               </p>
             </div>

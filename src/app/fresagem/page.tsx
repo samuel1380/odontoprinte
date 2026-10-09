@@ -106,15 +106,7 @@ export default function FresagemPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
           <div>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="text-purple-700 bg-purple-50 border-purple-200 text-xs">
-                Setor de Fresagem CNC
-              </Badge>
-              <span className="text-xs text-slate-400">&bull;</span>
-              <span className="text-xs text-slate-500">Usinagem de Alta Precisão</span>
-            </div>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight mt-1 flex items-center gap-2">
-              <Cog className="w-5 h-5 text-purple-600" />
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
               Fila de Fresagem CNC
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -129,31 +121,31 @@ export default function FresagemPage() {
 
         {/* KPIs */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="p-3.5 rounded-xl border border-purple-200 bg-purple-50/50 flex items-center justify-between">
+          <div className="p-3.5 rounded-xl border border-slate-200/90 bg-white shadow-2xs flex items-center justify-between">
             <div>
-              <span className="text-xs font-semibold text-purple-800">Aguardando Fresagem</span>
-              <div className="text-2xl font-black text-purple-900 mt-0.5">{countPending}</div>
-              <span className="text-[11px] text-purple-600">Projetos CAD prontos</span>
+              <span className="text-xs font-semibold text-slate-600">Aguardando Fresagem</span>
+              <div className="text-2xl font-bold text-slate-900 mt-0.5">{countPending}</div>
+              <span className="text-[11px] text-slate-400">Projetos CAD prontos</span>
             </div>
-            <Disc className="w-8 h-8 text-purple-400" />
+            <Disc className="w-6 h-6 text-purple-400" />
           </div>
 
-          <div className="p-3.5 rounded-xl border border-blue-200 bg-blue-50/50 flex items-center justify-between">
+          <div className="p-3.5 rounded-xl border border-slate-200/90 bg-white shadow-2xs flex items-center justify-between">
             <div>
-              <span className="text-xs font-semibold text-blue-800">Em Usinagem CNC</span>
-              <div className="text-2xl font-black text-blue-900 mt-0.5">{countMilling}</div>
-              <span className="text-[11px] text-blue-600">Fresadoras em operação</span>
+              <span className="text-xs font-semibold text-slate-600">Em Usinagem CNC</span>
+              <div className="text-2xl font-bold text-slate-900 mt-0.5">{countMilling}</div>
+              <span className="text-[11px] text-slate-400">Fresadoras em operação</span>
             </div>
-            <Cog className="w-8 h-8 text-blue-400 animate-spin" />
+            <Cog className="w-6 h-6 text-blue-400 animate-spin" />
           </div>
 
-          <div className="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/50 flex items-center justify-between">
+          <div className="p-3.5 rounded-xl border border-slate-200/90 bg-white shadow-2xs flex items-center justify-between">
             <div>
-              <span className="text-xs font-semibold text-emerald-800">Fresados & Despachados</span>
-              <div className="text-2xl font-black text-emerald-900 mt-0.5">{countFinished}</div>
-              <span className="text-[11px] text-emerald-600">Enviados para Maquiagem</span>
+              <span className="text-xs font-semibold text-slate-600">Fresados & Despachados</span>
+              <div className="text-2xl font-bold text-slate-900 mt-0.5">{countFinished}</div>
+              <span className="text-[11px] text-slate-400">Enviados para Acabamento</span>
             </div>
-            <Sparkles className="w-8 h-8 text-emerald-400" />
+            <Sparkles className="w-6 h-6 text-emerald-400" />
           </div>
         </div>
 

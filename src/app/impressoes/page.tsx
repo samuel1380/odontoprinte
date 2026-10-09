@@ -48,22 +48,18 @@ export default function ImpressoesPage() {
     <AppShell>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200/80 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
           <div>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="text-brand-700 bg-brand-50 border-brand-200">
-                Operações de Impressão
-              </Badge>
-              <span className="text-xs text-slate-400">&bull;</span>
-              <span className="text-xs text-slate-500">Monitoramento de Bancada</span>
-            </div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight mt-1">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
               Ordens de Impressão 3D
             </h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Acompanhamento em tempo real das mesas de impressão e histórico de produção.
+            </p>
           </div>
 
-          <Link href="/fatiador">
-            <Button variant="default" size="sm" className="gap-1.5">
+          <Link href="/fatiador" className="w-full sm:w-auto">
+            <Button variant="default" size="sm" className="gap-1.5 w-full sm:w-auto justify-center font-bold">
               <Scissors className="w-4 h-4" />
               Novo Fatiamento
             </Button>
@@ -73,10 +69,10 @@ export default function ImpressoesPage() {
         {/* Active Runs Section */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
-              <span className="relative flex h-2.5 w-2.5">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
               </span>
               Em Execução nas Cubas ({activeRuns.length})
             </h2>
@@ -94,10 +90,10 @@ export default function ImpressoesPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {activeRuns.map((run) => (
-                <Card key={run.id} className="border-2 border-brand-300 bg-brand-50/20 hover:border-brand-400 transition">
+                <Card key={run.id} className="border border-brand-300/80 bg-white shadow-2xs hover:border-brand-400 transition">
                   <CardHeader className="pb-2 flex flex-row items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-xl font-black text-brand-600">
+                      <span className="font-mono text-xl font-bold text-brand-600">
                         {run.run_code}
                       </span>
                       <Badge variant="lime" className="text-[10px]">

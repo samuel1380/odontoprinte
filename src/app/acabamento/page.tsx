@@ -128,58 +128,50 @@ export default function AcabamentoPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
           <div>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="text-amber-700 bg-amber-50 border-amber-200 text-xs">
-                Bancada de Acabamento & Prótese
-              </Badge>
-              <span className="text-xs text-slate-400">&bull;</span>
-              <span className="text-xs text-slate-500">Pós-Produção & Estética</span>
-            </div>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight mt-1 flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-amber-500" />
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
               Bancada de Acabamento & Maquiagem
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              Encaixe dos dentes/troqueis nos furos dos modelos impressos, verificação de oclusão e caracterização estética.
+              Encaixe dos dentes nos furos dos modelos impressos, verificação de oclusão e aplicação de glaze.
             </p>
           </div>
 
           <div className="text-xs text-slate-500">
-            Técnico Responsável: <span className="font-semibold text-slate-800">{user?.full_name || "Técnico"}</span>
+            Técnico: <span className="font-semibold text-slate-800">{user?.full_name || "Técnico"}</span>
           </div>
         </div>
 
         {/* KPI Strip da Bancada */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="p-3.5 rounded-xl border border-amber-200 bg-amber-50/50 flex items-center justify-between">
+          <div className="p-3.5 rounded-xl border border-slate-200/90 bg-white shadow-2xs flex items-center justify-between">
             <div>
-              <span className="text-xs font-semibold text-amber-800">Aguardando Montagem</span>
-              <div className="text-2xl font-black text-amber-900 mt-0.5">{countPending}</div>
-              <span className="text-[11px] text-amber-600">Modelos com furos e dentes</span>
+              <span className="text-xs font-semibold text-slate-600">Aguardando Montagem</span>
+              <div className="text-2xl font-bold text-slate-900 mt-0.5">{countPending}</div>
+              <span className="text-[11px] text-slate-400">Modelos com furos e dentes</span>
             </div>
-            <div className="h-10 w-10 rounded-xl bg-amber-200/60 flex items-center justify-center text-amber-800 font-bold">
+            <div className="h-9 w-9 rounded-lg bg-amber-50 text-amber-700 border border-amber-200/80 flex items-center justify-center font-bold text-xs">
               1
             </div>
           </div>
 
-          <div className="p-3.5 rounded-xl border border-blue-200 bg-blue-50/50 flex items-center justify-between">
+          <div className="p-3.5 rounded-xl border border-slate-200/90 bg-white shadow-2xs flex items-center justify-between">
             <div>
-              <span className="text-xs font-semibold text-blue-800">Em Maquiagem & Glaze</span>
-              <div className="text-2xl font-black text-blue-900 mt-0.5">{countInMakeup}</div>
-              <span className="text-[11px] text-blue-600">Caracterização em andamento</span>
+              <span className="text-xs font-semibold text-slate-600">Em Maquiagem & Glaze</span>
+              <div className="text-2xl font-bold text-slate-900 mt-0.5">{countInMakeup}</div>
+              <span className="text-[11px] text-slate-400">Caracterização estética</span>
             </div>
-            <div className="h-10 w-10 rounded-xl bg-blue-200/60 flex items-center justify-center text-blue-800 font-bold">
+            <div className="h-9 w-9 rounded-lg bg-blue-50 text-blue-700 border border-blue-200/80 flex items-center justify-center font-bold text-xs">
               2
             </div>
           </div>
 
-          <div className="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/50 flex items-center justify-between">
+          <div className="p-3.5 rounded-xl border border-slate-200/90 bg-white shadow-2xs flex items-center justify-between">
             <div>
-              <span className="text-xs font-semibold text-emerald-800">Aprovados no CQ</span>
-              <div className="text-2xl font-black text-emerald-900 mt-0.5">{countApproved}</div>
-              <span className="text-[11px] text-emerald-600">Prontos para expedição</span>
+              <span className="text-xs font-semibold text-slate-600">Aprovados no CQ</span>
+              <div className="text-2xl font-bold text-slate-900 mt-0.5">{countApproved}</div>
+              <span className="text-[11px] text-slate-400">Prontos para expedição</span>
             </div>
-            <div className="h-10 w-10 rounded-xl bg-emerald-200/60 flex items-center justify-center text-emerald-800 font-bold">
+            <div className="h-9 w-9 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200/80 flex items-center justify-center font-bold text-xs">
               3
             </div>
           </div>

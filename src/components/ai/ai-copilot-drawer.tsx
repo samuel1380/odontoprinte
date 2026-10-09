@@ -138,9 +138,9 @@ export function AICopilotDrawer() {
   return (
     <>
       {/* Botão Flutuante Global */}
-      <div className="fixed bottom-5 right-5 z-40 flex items-center gap-2">
+      <div className="fixed bottom-4 right-4 sm:bottom-5 sm:right-5 z-40 flex items-center gap-2">
         {!isOpen && (
-          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/95 border border-brand-200 text-xs font-semibold text-brand-700 shadow-lg backdrop-blur-md animate-in fade-in slide-in-from-right-3">
+          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/95 border border-brand-200 text-xs font-semibold text-brand-700 shadow-md backdrop-blur-md animate-in fade-in slide-in-from-right-3">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-brand-500"></span>
@@ -152,11 +152,11 @@ export function AICopilotDrawer() {
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
-          className="flex h-13 w-13 items-center justify-center rounded-2xl bg-gradient-to-tr from-brand-600 via-brand-500 to-cyan-500 text-white shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all duration-200 border-2 border-white/60 focus:outline-hidden"
+          className="flex h-12 w-12 sm:h-13 sm:w-13 items-center justify-center rounded-2xl bg-gradient-to-tr from-brand-600 via-brand-500 to-cyan-500 text-white shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200 border-2 border-white/60 focus:outline-hidden"
           title="Abrir OdontoIA Copilot"
           aria-label="Abrir assistente virtual OdontoIA"
         >
-          {isOpen ? <X className="h-6 w-6" /> : <Sparkles className="h-6 w-6" />}
+          {isOpen ? <X className="h-5 w-5 sm:h-6 sm:w-6" /> : <Sparkles className="h-5 w-5 sm:h-6 sm:w-6" />}
         </button>
       </div>
 
@@ -169,7 +169,7 @@ export function AICopilotDrawer() {
             onClick={() => setIsOpen(false)}
           />
 
-          <div className="fixed bottom-20 right-4 sm:right-6 z-50 w-[calc(100vw-32px)] sm:w-[420px] h-[580px] max-h-[calc(100vh-100px)] rounded-3xl border border-slate-200/90 bg-white shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className="fixed bottom-18 sm:bottom-20 right-3 sm:right-6 z-50 w-[calc(100vw-24px)] sm:w-[420px] h-[min(560px,calc(100dvh-90px))] rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             {/* Header da IA */}
             <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-gradient-to-r from-slate-900 to-slate-800 text-white">
               <div className="flex items-center gap-3">
