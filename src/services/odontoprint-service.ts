@@ -292,19 +292,22 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        await client.from("cases").insert(newCase);
+        let { error: caseErr } = await client.from("cases").insert(newCase);
+        if (caseErr && (caseErr.message?.includes("foreign key") || (caseErr as any).code === "23503")) {
+          await client.from("cases").insert({ ...newCase, created_by: null });
+        }
         await client.from("case_status_events").insert({
           id: eventId,
           case_id: caseId,
           process_type: params.process_type,
           notes: params.notes || null,
-          created_by: params.user_id || null,
+          created_by: null,
           created_at: now,
         });
-        await client.from("print_jobs").insert(newJob);
+        await client.from("print_jobs").insert({ ...newJob, created_by: null });
         await client.from("print_job_items").insert(newItems);
       } catch (err) {
-        console.warn("Supabase insert error (fallback preserved):", err);
+        console.error("Supabase insert error (fallback preserved):", err);
       }
     }
 
@@ -544,9 +547,12 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        await client.from("printer_maintenances").insert(newMaint);
+        let { error: maintErr } = await client.from("printer_maintenances").insert(newMaint);
+        if (maintErr && (maintErr.message?.includes("foreign key") || (maintErr as any).code === "23503")) {
+          await client.from("printer_maintenances").insert({ ...newMaint, performed_by: null });
+        }
       } catch (err) {
-        console.warn("Supabase insert maintenance error:", err);
+        console.error("Supabase insert maintenance exception:", err);
       }
     }
 
@@ -644,12 +650,19 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        const { error } = await client.from("resin_batches").insert(newBatch);
+        let { error } = await client.from("resin_batches").insert(newBatch);
+        if (error && (error.message?.includes("foreign key") || (error as any).code === "23503")) {
+          const { error: retryErr } = await client.from("resin_batches").insert({
+            ...newBatch,
+            created_by: null,
+          });
+          error = retryErr;
+        }
         if (error) {
-          console.warn("Supabase insert resin_batch error:", error);
+          console.error("Supabase insert resin_batch error:", error);
         }
       } catch (err) {
-        console.warn("Supabase insert resin_batch exception:", err);
+        console.error("Supabase insert resin_batch exception:", err);
       }
     }
 
@@ -779,12 +792,15 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        await client.from("resin_calibrations").insert(newCal);
+        let { error: calErr } = await client.from("resin_calibrations").insert(newCal);
+        if (calErr && (calErr.message?.includes("foreign key") || (calErr as any).code === "23503")) {
+          await client.from("resin_calibrations").insert({ ...newCal, created_by: null });
+        }
         if (validation.approved) {
           await client.from("resin_batches").update({ status: "CALIBRADA" }).eq("id", params.resin_batch_id);
         }
       } catch (err) {
-        console.warn("Supabase insert calibration error:", err);
+        console.error("Supabase insert calibration exception:", err);
       }
     }
 
@@ -934,13 +950,16 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        await client.from("print_runs").insert(newRun);
+        let { error: runErr } = await client.from("print_runs").insert(newRun);
+        if (runErr && (runErr.message?.includes("foreign key") || (runErr as any).code === "23503")) {
+          await client.from("print_runs").insert({ ...newRun, created_by: null });
+        }
         await client.from("print_run_items").insert(runItemsToInsert);
         for (const itemId of params.item_ids) {
           await client.from("print_job_items").update({ status: "EM_IMPRESSAO", last_run_code: params.run_code }).eq("id", itemId);
         }
       } catch (err) {
-        console.warn("Supabase startPrintRun error:", err);
+        console.error("Supabase startPrintRun error:", err);
       }
     }
 
