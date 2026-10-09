@@ -17,6 +17,7 @@ import {
   Layers,
   ArrowRight,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,10 @@ import { toast } from "sonner";
 export default function ImpressorasPage() {
   const [printers, setPrinters] = useState<PrinterWithStatus[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Excluir Impressora State
+  const [printerToDelete, setPrinterToDelete] = useState<PrinterWithStatus | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // New Printer Modal State
   const [modalOpen, setModalOpen] = useState(false);
@@ -84,6 +89,21 @@ export default function ImpressorasPage() {
       toast.error("Erro ao cadastrar impressora.");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleDeletePrinter = async () => {
+    if (!printerToDelete) return;
+    setIsDeleting(true);
+    try {
+      await OdontoPrintService.deletePrinter(printerToDelete.id);
+      toast.success(`Impressora "${printerToDelete.name}" apagada com sucesso.`);
+      setPrinterToDelete(null);
+      await loadPrinters();
+    } catch {
+      toast.error("Erro ao apagar impressora.");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -146,7 +166,17 @@ export default function ImpressorasPage() {
                           {p.brand} &bull; {p.model}
                         </CardDescription>
                       </div>
-                      <Badge className={statusCfg.color}>{statusCfg.label}</Badge>
+                      <div className="flex items-center gap-1.5">
+                        <Badge className={statusCfg.color}>{statusCfg.label}</Badge>
+                        <button
+                          type="button"
+                          onClick={() => setPrinterToDelete(p)}
+                          className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                          title="Excluir impressora"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   </CardHeader>
 
@@ -311,6 +341,47 @@ export default function ImpressorasPage() {
               </Button>
             </div>
           </form>
+        </Dialog>
+
+        {/* Modal: Confirmar Exclusão de Impressora */}
+        <Dialog
+          open={Boolean(printerToDelete)}
+          onOpenChange={(open) => {
+            if (!open) setPrinterToDelete(null);
+          }}
+          title="Excluir Impressora"
+          description={`Tem certeza que deseja apagar a impressora "${printerToDelete?.name}"? Esta ação removerá o equipamento e seu histórico de manutenções.`}
+        >
+          <div className="space-y-4 pt-2">
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+              <div>
+                <span className="font-semibold block mb-0.5">Atenção: Ação Irreversível</span>
+                O equipamento <strong>{printerToDelete?.name}</strong> ({printerToDelete?.brand} - {printerToDelete?.model}, Série: {printerToDelete?.serial_number}) será permanentemente removido do parque de impressoras.
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPrinterToDelete(null)}
+                disabled={isDeleting}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleDeletePrinter}
+                disabled={isDeleting}
+                className="gap-1.5 font-bold"
+              >
+                <Trash2 className="w-4 h-4" />
+                {isDeleting ? "Excluindo..." : "Confirmar Exclusão"}
+              </Button>
+            </div>
+          </div>
         </Dialog>
       </div>
     </AppShell>

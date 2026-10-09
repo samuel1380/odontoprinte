@@ -23,6 +23,7 @@ import {
   AlertTriangle,
   ExternalLink,
   Copy,
+  Database,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -69,6 +70,16 @@ export default function AdminConfiguracoesPage() {
       diagnosticReport?: string;
     };
   } | null>(null);
+
+  // Form State - Banco de Dados Supabase (Sincronização em Nuvem)
+  const [dbStatus, setDbStatus] = useState<{
+    tested: boolean;
+    configured: boolean;
+    connected: boolean;
+    url?: string;
+    error?: string;
+  } | null>(null);
+  const [isTestingDb, setIsTestingDb] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -175,6 +186,61 @@ export default function AdminConfiguracoesPage() {
     } finally {
       setIsTestingAi(false);
     }
+  };
+
+  const handleTestDatabase = async () => {
+    setIsTestingDb(true);
+    try {
+      const res = await OdontoPrintService.testDatabaseConnection();
+      setDbStatus({
+        tested: true,
+        configured: res.configured,
+        connected: res.connected,
+        url: res.url,
+        error: res.error,
+      });
+      if (res.connected) {
+        toast.success("Banco de Dados Supabase conectado! Sincronização em tempo real ativa.");
+      } else {
+        toast.error(`Falha no Supabase: ${res.error || "Verifique o RLS."}`);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro desconhecido ao testar Supabase.";
+      setDbStatus({
+        tested: true,
+        configured: false,
+        connected: false,
+        error: msg,
+      });
+      toast.error("Erro ao testar comunicação com o banco.");
+    } finally {
+      setIsTestingDb(false);
+    }
+  };
+
+  const handleCopyUnlockSql = () => {
+    const sql = `-- SCRIPT DE LIBERAÇÃO TOTAL DO SUPABASE (ODONTOPRINT)
+ALTER TABLE IF EXISTS public.printers DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.printer_maintenances DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.resin_batches DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.resin_calibrations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.cases DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.case_status_events DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.print_jobs DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.print_job_items DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.print_runs DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.print_run_items DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.system_settings DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.audit_logs DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.profiles DISABLE ROW LEVEL SECURITY;
+
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;`;
+    navigator.clipboard.writeText(sql);
+    toast.success("Script SQL copiado com sucesso! Execute no SQL Editor do Supabase.");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -390,7 +456,117 @@ export default function AdminConfiguracoesPage() {
             </CardContent>
           </Card>
 
-          {/* Card 4: Inteligência Artificial (Gemini / Groq) */}
+          {/* Card 4: Status do Banco de Dados & Sincronização em Nuvem (Supabase) */}
+          <Card className="border-sky-200/80 bg-gradient-to-br from-white via-sky-50/20 to-brand-50/20 shadow-sm">
+            <CardHeader className="pb-3 border-b border-sky-100/60">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2 text-slate-900">
+                  <div className="w-7 h-7 rounded-lg bg-sky-600 flex items-center justify-center text-white shadow-sm">
+                    <Database className="w-4 h-4" />
+                  </div>
+                  4. Sincronização em Nuvem & Banco de Dados (Supabase)
+                </CardTitle>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleTestDatabase}
+                  disabled={isTestingDb}
+                  className="h-8 text-xs font-semibold gap-1.5 bg-white hover:bg-sky-50 border-sky-300 text-sky-800"
+                >
+                  <RefreshCcw className={`w-3.5 h-3.5 ${isTestingDb ? "animate-spin" : ""}`} />
+                  {isTestingDb ? "Testando..." : "Testar Conexão Supabase"}
+                </Button>
+              </div>
+              <CardDescription className="text-xs text-slate-600 mt-1">
+                Verifique se o seu PC e o seu Celular estão conectados ao mesmo banco na nuvem para garantir que tudo seja salvo e sincronizado.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-4 text-xs">
+              {dbStatus ? (
+                <div
+                  className={`p-3.5 rounded-xl border ${
+                    dbStatus.connected
+                      ? "bg-emerald-50/80 border-emerald-200 text-emerald-900"
+                      : "bg-rose-50/80 border-rose-200 text-rose-900"
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    {dbStatus.connected ? (
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                    )}
+                    <div className="space-y-1">
+                      <div className="font-bold text-sm">
+                        {dbStatus.connected
+                          ? "Banco Supabase Conectado e Sincronizado!"
+                          : "Atenção: Falha na Sincronização com o Supabase"}
+                      </div>
+                      <p className="leading-relaxed">
+                        {dbStatus.connected
+                          ? "As impressoras, lotes de resina e pedidos estão gravando diretamente na nuvem e ficarão visíveis simultaneamente no PC e no Celular."
+                          : `O banco respondeu com erro: "${dbStatus.error}". Para desbloquear leituras e gravações do app, execute o script SQL de liberação.`}
+                      </p>
+                      {!dbStatus.connected && (
+                        <div className="pt-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            onClick={handleCopyUnlockSql}
+                            className="gap-1.5 font-bold"
+                          >
+                            <Copy className="w-4 h-4" />
+                            Copiar Script de Liberação (SQL Editor do Supabase)
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between">
+                  <div className="text-slate-600">
+                    <span className="font-semibold text-slate-800 block mb-0.5">Diagnóstico de Nuvem</span>
+                    Clique no botão acima para testar a comunicação em tempo real entre o app e as tabelas do Supabase.
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={handleTestDatabase}
+                    disabled={isTestingDb}
+                    className="gap-1 font-semibold text-xs"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    Testar Agora
+                  </Button>
+                </div>
+              )}
+
+              <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-[11px] text-slate-600 flex items-start justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="font-semibold text-slate-800">Script de Desbloqueio de RLS:</div>
+                  <div>
+                    Caso cadastre algo no PC e não veja no celular, execute o script <code>supabase/LIBERAR_BANCO_SEM_BLOQUEIOS.sql</code> para remover travas de segurança por linha (RLS) no Supabase.
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopyUnlockSql}
+                  className="shrink-0 h-7 text-[11px] gap-1"
+                >
+                  <Copy className="w-3 h-3" />
+                  Copiar SQL
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card 5: Inteligência Artificial (Gemini / Groq) */}
           <Card className="border-indigo-200/80 bg-gradient-to-br from-white via-indigo-50/20 to-brand-50/20 shadow-sm">
             <CardHeader className="pb-3 border-b border-indigo-100/60">
               <div className="flex items-center justify-between">
@@ -398,7 +574,7 @@ export default function AdminConfiguracoesPage() {
                   <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-indigo-600 to-brand-600 flex items-center justify-center text-white shadow-sm">
                     <Sparkles className="w-4 h-4" />
                   </div>
-                  4. Inteligência Artificial do Laboratório (Gemini & Groq)
+                  5. Inteligência Artificial do Laboratório (Gemini & Groq)
                 </CardTitle>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-medium text-slate-600">Copiloto Ativo:</span>

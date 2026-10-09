@@ -424,8 +424,9 @@ export class OdontoPrintService {
   // --- IMPRESSORAS E MANUTENÇÕES ---
   static async getPrinters(): Promise<PrinterWithStatus[]> {
     const settings = await this.getSettings();
-    mockPrinters = loadLocal("odontoprint_printers", mockPrinters);
-    mockMaintenances = loadLocal("odontoprint_maintenances", mockMaintenances);
+    const deletedPrinters = new Set(loadLocal<string[]>("odontoprint_deleted_printers", []));
+    mockPrinters = loadLocal<Printer[]>("odontoprint_printers", mockPrinters).filter((p) => !deletedPrinters.has(p.id));
+    mockMaintenances = loadLocal<PrinterMaintenance[]>("odontoprint_maintenances", mockMaintenances);
 
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
@@ -440,7 +441,8 @@ export class OdontoPrintService {
           .order("performed_at", { ascending: false });
 
         if (!pErr && printersData) {
-          mockPrinters = mergeById(printersData, mockPrinters);
+          const activePrintersData = printersData.filter((p: Printer) => !deletedPrinters.has(p.id));
+          mockPrinters = mergeById(activePrintersData, mockPrinters);
           saveLocal("odontoprint_printers", mockPrinters);
         }
         if (!mErr && maintData) {
@@ -452,8 +454,8 @@ export class OdontoPrintService {
       }
     }
 
-    mockPrinters = loadLocal("odontoprint_printers", mockPrinters);
-    mockMaintenances = loadLocal("odontoprint_maintenances", mockMaintenances);
+    mockPrinters = loadLocal<Printer[]>("odontoprint_printers", mockPrinters).filter((p) => !deletedPrinters.has(p.id));
+    mockMaintenances = loadLocal<PrinterMaintenance[]>("odontoprint_maintenances", mockMaintenances);
 
     return mockPrinters.map((printer) => {
       const printerMaint = mockMaintenances
@@ -496,6 +498,10 @@ export class OdontoPrintService {
       updated_at: now,
     };
 
+    // Remove do conjunto de deletadas caso tenha sido reaproveitado
+    const deleted = loadLocal<string[]>("odontoprint_deleted_printers", []).filter((d) => d !== newPrinter.id);
+    saveLocal("odontoprint_deleted_printers", deleted);
+
     mockPrinters = loadLocal("odontoprint_printers", mockPrinters);
     mockPrinters.push(newPrinter);
     saveLocal("odontoprint_printers", mockPrinters);
@@ -505,13 +511,67 @@ export class OdontoPrintService {
       try {
         const { error } = await client.from("printers").insert(newPrinter);
         if (error) {
-          console.warn("Supabase insert printer error:", error);
+          console.error("Supabase insert printer error:", error);
         }
       } catch (err) {
-        console.warn("Supabase insert printer exception:", err);
+        console.error("Supabase insert printer exception:", err);
       }
     }
     return newPrinter;
+  }
+
+  static async deletePrinter(id: string): Promise<{ success: boolean; error?: string }> {
+    // 1. Registra no conjunto de deletadas para evitar re-surgimento em merges
+    const deleted = loadLocal<string[]>("odontoprint_deleted_printers", []);
+    if (!deleted.includes(id)) {
+      deleted.push(id);
+      saveLocal("odontoprint_deleted_printers", deleted);
+    }
+
+    // 2. Remove do estado e localStorage de impressoras
+    mockPrinters = loadLocal<Printer[]>("odontoprint_printers", mockPrinters).filter((p) => p.id !== id);
+    saveLocal("odontoprint_printers", mockPrinters);
+
+    // 3. Remove manutenções, calibrações e impressões vinculadas localmente
+    mockMaintenances = loadLocal<PrinterMaintenance[]>("odontoprint_maintenances", mockMaintenances).filter((m) => m.printer_id !== id);
+    saveLocal("odontoprint_maintenances", mockMaintenances);
+
+    mockCalibrations = loadLocal<ResinCalibration[]>("odontoprint_calibrations", mockCalibrations).filter((c) => c.printer_id !== id);
+    saveLocal("odontoprint_calibrations", mockCalibrations);
+
+    mockPrintRuns = loadLocal<PrintRun[]>("odontoprint_print_runs", mockPrintRuns).filter((r) => r.printer_id !== id);
+    saveLocal("odontoprint_print_runs", mockPrintRuns);
+
+    // 4. Executa DELETE no Supabase em ordem segura de dependências
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        await client.from("print_runs").delete().eq("printer_id", id);
+        await client.from("resin_calibrations").delete().eq("printer_id", id);
+        await client.from("printer_maintenances").delete().eq("printer_id", id);
+        const { error } = await client.from("printers").delete().eq("id", id);
+        if (error) {
+          console.error("Supabase delete printer error:", error);
+        }
+      } catch (err) {
+        console.error("Supabase delete printer exception:", err);
+      }
+    }
+
+    // 5. Registra log de auditoria
+    mockAuditLogs = loadLocal("odontoprint_audit_logs", mockAuditLogs);
+    mockAuditLogs.unshift({
+      id: crypto.randomUUID(),
+      user_id: null,
+      action: "IMPRESSORA_EXCLUIDA",
+      entity_type: "printers",
+      entity_id: id,
+      new_data: { id },
+      created_at: new Date().toISOString(),
+    });
+    saveLocal("odontoprint_audit_logs", mockAuditLogs);
+
+    return { success: true };
   }
 
   static async addPrinterMaintenance(params: {
@@ -579,7 +639,9 @@ export class OdontoPrintService {
 
   // --- RESINAS E CALIBRAÇÕES ---
   static async getResinBatches(): Promise<ResinBatch[]> {
-    mockResinBatches = loadLocal("odontoprint_resin_batches", mockResinBatches);
+    const deletedResins = new Set(loadLocal<string[]>("odontoprint_deleted_resins", []));
+    mockResinBatches = loadLocal<ResinBatch[]>("odontoprint_resin_batches", mockResinBatches).filter((b) => !deletedResins.has(b.id));
+
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
@@ -588,14 +650,17 @@ export class OdontoPrintService {
           .select("*")
           .order("received_at", { ascending: false });
         if (!error && data) {
-          mockResinBatches = mergeById(data, mockResinBatches);
+          const activeResins = data.filter((b: ResinBatch) => !deletedResins.has(b.id));
+          mockResinBatches = mergeById(activeResins, mockResinBatches);
           saveLocal("odontoprint_resin_batches", mockResinBatches);
         }
       } catch (err) {
         console.warn("Supabase getResinBatches error:", err);
       }
     }
-    return [...mockResinBatches].sort((a, b) => new Date(b.received_at).getTime() - new Date(a.received_at).getTime());
+    return [...mockResinBatches]
+      .filter((b) => !deletedResins.has(b.id))
+      .sort((a, b) => new Date(b.received_at).getTime() - new Date(a.received_at).getTime());
   }
 
   static async getResinBatchById(id: string): Promise<{
@@ -643,6 +708,10 @@ export class OdontoPrintService {
       updated_at: now,
     };
 
+    // Remove do conjunto de deletadas caso tenha sido reaproveitado
+    const deleted = loadLocal<string[]>("odontoprint_deleted_resins", []).filter((d) => d !== newBatch.id);
+    saveLocal("odontoprint_deleted_resins", deleted);
+
     mockResinBatches = loadLocal("odontoprint_resin_batches", mockResinBatches);
     mockResinBatches.unshift(newBatch);
     saveLocal("odontoprint_resin_batches", mockResinBatches);
@@ -679,6 +748,97 @@ export class OdontoPrintService {
     saveLocal("odontoprint_audit_logs", mockAuditLogs);
 
     return newBatch;
+  }
+
+  static async deleteResinBatch(id: string): Promise<{ success: boolean; error?: string }> {
+    // 1. Registra no conjunto de deletadas para evitar re-surgimento em merges
+    const deleted = loadLocal<string[]>("odontoprint_deleted_resins", []);
+    if (!deleted.includes(id)) {
+      deleted.push(id);
+      saveLocal("odontoprint_deleted_resins", deleted);
+    }
+
+    // 2. Remove do estado e localStorage de lotes de resina
+    mockResinBatches = loadLocal<ResinBatch[]>("odontoprint_resin_batches", mockResinBatches).filter((b) => b.id !== id);
+    saveLocal("odontoprint_resin_batches", mockResinBatches);
+
+    // 3. Remove calibrações e impressões vinculadas localmente
+    mockCalibrations = loadLocal<ResinCalibration[]>("odontoprint_calibrations", mockCalibrations).filter((c) => c.resin_batch_id !== id);
+    saveLocal("odontoprint_calibrations", mockCalibrations);
+
+    mockPrintRuns = loadLocal<PrintRun[]>("odontoprint_print_runs", mockPrintRuns).filter((r) => r.resin_batch_id !== id);
+    saveLocal("odontoprint_print_runs", mockPrintRuns);
+
+    // 4. Executa DELETE no Supabase em ordem segura de dependências
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        await client.from("print_runs").delete().eq("resin_batch_id", id);
+        await client.from("resin_calibrations").delete().eq("resin_batch_id", id);
+        const { error } = await client.from("resin_batches").delete().eq("id", id);
+        if (error) {
+          console.error("Supabase delete resin_batch error:", error);
+        }
+      } catch (err) {
+        console.error("Supabase delete resin_batch exception:", err);
+      }
+    }
+
+    // 5. Registra log de auditoria
+    mockAuditLogs = loadLocal("odontoprint_audit_logs", mockAuditLogs);
+    mockAuditLogs.unshift({
+      id: crypto.randomUUID(),
+      user_id: null,
+      action: "LOTE_RESINA_EXCLUIDO",
+      entity_type: "resin_batches",
+      entity_id: id,
+      new_data: { id },
+      created_at: new Date().toISOString(),
+    });
+    saveLocal("odontoprint_audit_logs", mockAuditLogs);
+
+    return { success: true };
+  }
+
+  // --- DIAGNÓSTICO E TESTE DE CONEXÃO COM O BANCO DE DADOS SUPABASE ---
+  static async testDatabaseConnection(): Promise<{
+    configured: boolean;
+    url?: string;
+    connected: boolean;
+    error?: string;
+  }> {
+    const { client, isConfigured, supabaseUrl } = this.getSupabase();
+    if (!isConfigured || !client) {
+      return {
+        configured: false,
+        connected: false,
+        error: "Chaves do Supabase não configuradas no ambiente ou localStorage.",
+      };
+    }
+
+    try {
+      const { data, error } = await client.from("printers").select("id").limit(1);
+      if (error) {
+        return {
+          configured: true,
+          url: supabaseUrl,
+          connected: false,
+          error: `${error.message || error.code || "Erro ao consultar Supabase"} (Código: ${(error as any).code || "42501 - Verifique o RLS no Supabase"})`,
+        };
+      }
+      return {
+        configured: true,
+        url: supabaseUrl,
+        connected: true,
+      };
+    } catch (err: any) {
+      return {
+        configured: true,
+        url: supabaseUrl,
+        connected: false,
+        error: err?.message || "Exceção ao comunicar com Supabase.",
+      };
+    }
   }
 
   static async getCalibrations(): Promise<(ResinCalibration & { resin_brand: string; resin_lot: string; printer_name: string })[]> {

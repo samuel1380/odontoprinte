@@ -16,11 +16,14 @@ import {
   XCircle,
   Printer,
   Sparkles,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
 export default function ResinaDetalhesPage() {
@@ -30,6 +33,20 @@ export default function ResinaDetalhesPage() {
 
   const [data, setData] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await OdontoPrintService.deleteResinBatch(batchId);
+      toast.success("Lote de resina apagado com sucesso!");
+      router.push("/resinas");
+    } catch {
+      toast.error("Erro ao apagar lote de resina.");
+      setIsDeleting(false);
+    }
+  };
 
   useEffect(() => {
     async function load() {
@@ -103,12 +120,24 @@ export default function ResinaDetalhesPage() {
             </div>
           </div>
 
-          <Link href={`/calibracoes/nova?batch=${b.id}`}>
-            <Button variant="default" size="sm" className="gap-1.5 font-bold">
-              <Compass className="w-4 h-4" />
-              Nova Calibração com este Lote
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDeleteDialogOpen(true)}
+              className="text-rose-600 border-rose-200 hover:bg-rose-50 gap-1.5 font-bold"
+            >
+              <Trash2 className="w-4 h-4" />
+              Excluir Lote
             </Button>
-          </Link>
+
+            <Link href={`/calibracoes/nova?batch=${b.id}`}>
+              <Button variant="default" size="sm" className="gap-1.5 font-bold">
+                <Compass className="w-4 h-4" />
+                Nova Calibração com este Lote
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {/* Overview */}
@@ -201,6 +230,45 @@ export default function ResinaDetalhesPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Modal: Confirmar Exclusão de Lote de Resina */}
+        <Dialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          title="Excluir Lote de Resina"
+          description={`Tem certeza que deseja apagar o lote ${b.lot} (${b.brand})?`}
+        >
+          <div className="space-y-4 pt-2">
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+              <div>
+                <span className="font-semibold block mb-0.5">Atenção: Ação Irreversível</span>
+                O lote <strong>{b.lot}</strong> ({b.brand} - {b.resin_type}, Volume: {b.volume} {b.volume_unit}) será removido permanentemente.
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDeleteDialogOpen(false)}
+                disabled={isDeleting}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="gap-1.5 font-bold"
+              >
+                <Trash2 className="w-4 h-4" />
+                {isDeleting ? "Excluindo..." : "Confirmar Exclusão"}
+              </Button>
+            </div>
+          </div>
+        </Dialog>
       </div>
     </AppShell>
   );

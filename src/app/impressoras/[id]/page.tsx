@@ -16,11 +16,13 @@ import {
   ArrowLeft,
   Calendar,
   Layers,
+  Trash2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
 export default function ImpressoraDetalhesPage() {
@@ -30,6 +32,20 @@ export default function ImpressoraDetalhesPage() {
 
   const [data, setData] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await OdontoPrintService.deletePrinter(printerId);
+      toast.success("Impressora apagada com sucesso!");
+      router.push("/impressoras");
+    } catch {
+      toast.error("Erro ao apagar impressora.");
+      setIsDeleting(false);
+    }
+  };
 
   useEffect(() => {
     async function load() {
@@ -103,12 +119,24 @@ export default function ImpressoraDetalhesPage() {
             </div>
           </div>
 
-          <Link href={`/impressoras/${p.id}/manutencao`}>
-            <Button variant="default" size="sm" className="gap-1.5 font-bold">
-              <Wrench className="w-4 h-4" />
-              Realizar Nova Manutenção
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDeleteDialogOpen(true)}
+              className="text-rose-600 border-rose-200 hover:bg-rose-50 gap-1.5 font-bold"
+            >
+              <Trash2 className="w-4 h-4" />
+              Excluir Impressora
             </Button>
-          </Link>
+
+            <Link href={`/impressoras/${p.id}/manutencao`}>
+              <Button variant="default" size="sm" className="gap-1.5 font-bold">
+                <Wrench className="w-4 h-4" />
+                Realizar Nova Manutenção
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {/* Maintenance History */}
@@ -161,6 +189,45 @@ export default function ImpressoraDetalhesPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Modal: Confirmar Exclusão de Impressora */}
+        <Dialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          title="Excluir Impressora"
+          description={`Tem certeza que deseja apagar a impressora "${p.name}"? Esta ação removerá o equipamento e seu histórico de manutenções.`}
+        >
+          <div className="space-y-4 pt-2">
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+              <div>
+                <span className="font-semibold block mb-0.5">Atenção: Ação Irreversível</span>
+                O equipamento <strong>{p.name}</strong> ({p.brand} - {p.model}, Série: {p.serial_number}) será permanentemente removido do parque de impressoras.
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDeleteDialogOpen(false)}
+                disabled={isDeleting}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="gap-1.5 font-bold"
+              >
+                <Trash2 className="w-4 h-4" />
+                {isDeleting ? "Excluindo..." : "Confirmar Exclusão"}
+              </Button>
+            </div>
+          </div>
+        </Dialog>
       </div>
     </AppShell>
   );
