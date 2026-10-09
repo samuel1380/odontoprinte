@@ -37,8 +37,53 @@ import {
 import { DEFAULT_SYSTEM_SETTINGS, FILE_TYPE_LABELS } from "@/lib/constants";
 
 // ====================================================================
-// INITIAL DEMO STATE (Espelha exatamente supabase/seed.sql)
 // ====================================================================
+// INITIAL DEMO STATE & LOCAL PERSISTENCE HELPERS
+// ====================================================================
+function loadLocal<T>(key: string, fallback: T): T {
+  if (typeof window !== "undefined") {
+    try {
+      const data = localStorage.getItem(key);
+      if (data) return JSON.parse(data);
+    } catch {
+      // ignore
+    }
+  }
+  return fallback;
+}
+
+function saveLocal<T>(key: string, val: T): void {
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(key, JSON.stringify(val));
+    } catch {
+      // ignore
+    }
+  }
+}
+
+function mergeById<T extends { id: string }>(
+  remoteList: T[] | null | undefined,
+  localList: T[] | null | undefined
+): T[] {
+  const map = new Map<string, T>();
+  if (Array.isArray(localList)) {
+    for (const item of localList) {
+      if (item && item.id) {
+        map.set(item.id, item);
+      }
+    }
+  }
+  if (Array.isArray(remoteList)) {
+    for (const item of remoteList) {
+      if (item && item.id) {
+        map.set(item.id, item);
+      }
+    }
+  }
+  return Array.from(map.values());
+}
+
 let mockSettings: SystemSettings = {
   id: "90000000-0000-0000-0000-000000000001",
   maintenance_interval_days: 7,
@@ -75,23 +120,48 @@ export class OdontoPrintService {
 
   // --- SETTINGS ---
   static async getSettings(): Promise<SystemSettings> {
+    mockSettings = loadLocal("odontoprint_system_settings", mockSettings);
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
-      const { data } = await client.from("system_settings").select("*").limit(1).single();
-      if (data) return data;
+      try {
+        const { data, error } = await client.from("system_settings").select("*").limit(1).single();
+        if (!error && data) {
+          mockSettings = { ...mockSettings, ...data };
+          saveLocal("odontoprint_system_settings", mockSettings);
+          return mockSettings;
+        }
+      } catch (err) {
+        console.warn("Supabase getSettings error:", err);
+      }
     }
     return mockSettings;
   }
 
   static async updateSettings(settings: Partial<SystemSettings>): Promise<SystemSettings> {
+    mockSettings = loadLocal("odontoprint_system_settings", mockSettings);
     mockSettings = {
       ...mockSettings,
       ...settings,
       updated_at: new Date().toISOString(),
     };
+    saveLocal("odontoprint_system_settings", mockSettings);
+
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
-      await client.from("system_settings").update(settings).eq("id", mockSettings.id);
+      try {
+        if (mockSettings.id && mockSettings.id !== "90000000-0000-0000-0000-000000000001") {
+          await client.from("system_settings").update(settings).eq("id", mockSettings.id);
+        } else {
+          const { data: current } = await client.from("system_settings").select("id").limit(1).single();
+          if (current?.id) {
+            mockSettings.id = current.id;
+            saveLocal("odontoprint_system_settings", mockSettings);
+            await client.from("system_settings").update(settings).eq("id", current.id);
+          }
+        }
+      } catch (err) {
+        console.warn("Supabase updateSettings error:", err);
+      }
     }
     return mockSettings;
   }
@@ -181,14 +251,28 @@ export class OdontoPrintService {
       created_at: now,
     }));
 
-    // Persist in mock state
+    // Persist in mock state & localStorage
+    mockCases = loadLocal("odontoprint_cases", mockCases);
     mockCases.unshift(newCase);
+    saveLocal("odontoprint_cases", mockCases);
+
+    if (millingFiles.length > 0) {
+      mockMillingItems = loadLocal("odontoprint_milling_items", mockMillingItems);
+      saveLocal("odontoprint_milling_items", mockMillingItems);
+    }
+
     if (newItems.length > 0) {
+      mockPrintJobs = loadLocal("odontoprint_jobs", mockPrintJobs);
       mockPrintJobs.unshift(newJob);
+      saveLocal("odontoprint_jobs", mockPrintJobs);
+
+      mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
       mockPrintJobItems.unshift(...newItems);
+      saveLocal("odontoprint_job_items", mockPrintJobItems);
     }
 
     // Audit log
+    mockAuditLogs = loadLocal("odontoprint_audit_logs", mockAuditLogs);
     mockAuditLogs.unshift({
       id: crypto.randomUUID(),
       user_id: params.user_id || null,
@@ -202,6 +286,7 @@ export class OdontoPrintService {
       },
       created_at: now,
     });
+    saveLocal("odontoprint_audit_logs", mockAuditLogs);
 
     // If live Supabase is connected, persist to DB
     const { client, isConfigured } = this.getSupabase();
@@ -228,21 +313,57 @@ export class OdontoPrintService {
 
   // --- CASOS / PACIENTES ---
   static async getCases(): Promise<Case[]> {
+    mockCases = loadLocal("odontoprint_cases", mockCases);
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        const { data } = await client.from("cases").select("*").order("created_at", { ascending: false });
-        if (data) return data;
+        const { data, error } = await client.from("cases").select("*").order("created_at", { ascending: false });
+        if (!error && data) {
+          mockCases = mergeById(data, mockCases);
+          saveLocal("odontoprint_cases", mockCases);
+        }
       } catch (err) {
         console.warn("Supabase getCases error:", err);
       }
     }
-    return [...mockCases];
+    return [...mockCases].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }
 
   // --- FILA DE IMPRESSÃO (FIFO) ---
   static async getQueue(): Promise<{ items: QueueItem[]; cards: PatientQueueCard[] }> {
     const settings = await this.getSettings();
+
+    mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
+    mockPrintJobs = loadLocal("odontoprint_jobs", mockPrintJobs);
+    mockCases = loadLocal("odontoprint_cases", mockCases);
+
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        const { data: jobItems, error: jiErr } = await client.from("print_job_items").select("*");
+        const { data: jobs, error: jErr } = await client.from("print_jobs").select("*");
+        const { data: cases, error: cErr } = await client.from("cases").select("*");
+
+        if (!jiErr && jobItems) {
+          mockPrintJobItems = mergeById(jobItems, mockPrintJobItems);
+          saveLocal("odontoprint_job_items", mockPrintJobItems);
+        }
+        if (!jErr && jobs) {
+          mockPrintJobs = mergeById(jobs, mockPrintJobs);
+          saveLocal("odontoprint_jobs", mockPrintJobs);
+        }
+        if (!cErr && cases) {
+          mockCases = mergeById(cases, mockCases);
+          saveLocal("odontoprint_cases", mockCases);
+        }
+      } catch (err) {
+        console.warn("Supabase getQueue error:", err);
+      }
+    }
+
+    mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
+    mockPrintJobs = loadLocal("odontoprint_jobs", mockPrintJobs);
+    mockCases = loadLocal("odontoprint_cases", mockCases);
 
     // Filtra itens aguardando na fila
     const waitingItems = mockPrintJobItems.filter((i) => i.status === "AGUARDANDO_FILA");
@@ -300,6 +421,36 @@ export class OdontoPrintService {
   // --- IMPRESSORAS E MANUTENÇÕES ---
   static async getPrinters(): Promise<PrinterWithStatus[]> {
     const settings = await this.getSettings();
+    mockPrinters = loadLocal("odontoprint_printers", mockPrinters);
+    mockMaintenances = loadLocal("odontoprint_maintenances", mockMaintenances);
+
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        const { data: printersData, error: pErr } = await client
+          .from("printers")
+          .select("*")
+          .order("name", { ascending: true });
+        const { data: maintData, error: mErr } = await client
+          .from("printer_maintenances")
+          .select("*")
+          .order("performed_at", { ascending: false });
+
+        if (!pErr && printersData) {
+          mockPrinters = mergeById(printersData, mockPrinters);
+          saveLocal("odontoprint_printers", mockPrinters);
+        }
+        if (!mErr && maintData) {
+          mockMaintenances = mergeById(maintData, mockMaintenances);
+          saveLocal("odontoprint_maintenances", mockMaintenances);
+        }
+      } catch (err) {
+        console.warn("Supabase getPrinters error:", err);
+      }
+    }
+
+    mockPrinters = loadLocal("odontoprint_printers", mockPrinters);
+    mockMaintenances = loadLocal("odontoprint_maintenances", mockMaintenances);
 
     return mockPrinters.map((printer) => {
       const printerMaint = mockMaintenances
@@ -325,6 +476,7 @@ export class OdontoPrintService {
   }> {
     const printers = await this.getPrinters();
     const printer = printers.find((p) => p.id === id) || null;
+    mockMaintenances = loadLocal("odontoprint_maintenances", mockMaintenances);
     const maintenances = mockMaintenances
       .filter((m) => m.printer_id === id)
       .sort((a, b) => new Date(b.performed_at).getTime() - new Date(a.performed_at).getTime());
@@ -333,12 +485,29 @@ export class OdontoPrintService {
   }
 
   static async createPrinter(params: Omit<Printer, "id" | "created_at" | "updated_at">): Promise<Printer> {
+    const now = new Date().toISOString();
     const newPrinter: Printer = {
       id: crypto.randomUUID(),
       ...params,
-      created_at: new Date().toISOString(),
+      created_at: now,
+      updated_at: now,
     };
+
+    mockPrinters = loadLocal("odontoprint_printers", mockPrinters);
     mockPrinters.push(newPrinter);
+    saveLocal("odontoprint_printers", mockPrinters);
+
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        const { error } = await client.from("printers").insert(newPrinter);
+        if (error) {
+          console.warn("Supabase insert printer error:", error);
+        }
+      } catch (err) {
+        console.warn("Supabase insert printer exception:", err);
+      }
+    }
     return newPrinter;
   }
 
@@ -368,9 +537,22 @@ export class OdontoPrintService {
       created_at: now,
     };
 
+    mockMaintenances = loadLocal("odontoprint_maintenances", mockMaintenances);
     mockMaintenances.unshift(newMaint);
+    saveLocal("odontoprint_maintenances", mockMaintenances);
 
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        await client.from("printer_maintenances").insert(newMaint);
+      } catch (err) {
+        console.warn("Supabase insert maintenance error:", err);
+      }
+    }
+
+    mockPrinters = loadLocal("odontoprint_printers", mockPrinters);
     const printer = mockPrinters.find((p) => p.id === params.printer_id);
+    mockAuditLogs = loadLocal("odontoprint_audit_logs", mockAuditLogs);
     mockAuditLogs.unshift({
       id: crypto.randomUUID(),
       user_id: params.performed_by || null,
@@ -384,12 +566,29 @@ export class OdontoPrintService {
       },
       created_at: now,
     });
+    saveLocal("odontoprint_audit_logs", mockAuditLogs);
 
     return { success: true, maintenance: newMaint, approved };
   }
 
   // --- RESINAS E CALIBRAÇÕES ---
   static async getResinBatches(): Promise<ResinBatch[]> {
+    mockResinBatches = loadLocal("odontoprint_resin_batches", mockResinBatches);
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        const { data, error } = await client
+          .from("resin_batches")
+          .select("*")
+          .order("received_at", { ascending: false });
+        if (!error && data) {
+          mockResinBatches = mergeById(data, mockResinBatches);
+          saveLocal("odontoprint_resin_batches", mockResinBatches);
+        }
+      } catch (err) {
+        console.warn("Supabase getResinBatches error:", err);
+      }
+    }
     return [...mockResinBatches].sort((a, b) => new Date(b.received_at).getTime() - new Date(a.received_at).getTime());
   }
 
@@ -397,7 +596,11 @@ export class OdontoPrintService {
     batch: ResinBatch | null;
     calibrations: (ResinCalibration & { printer_name?: string })[];
   }> {
-    const batch = mockResinBatches.find((b) => b.id === id) || null;
+    const batches = await this.getResinBatches();
+    const batch = batches.find((b) => b.id === id) || null;
+    mockCalibrations = loadLocal("odontoprint_calibrations", mockCalibrations);
+    mockPrinters = loadLocal("odontoprint_printers", mockPrinters);
+
     const calibrations = mockCalibrations
       .filter((c) => c.resin_batch_id === id)
       .sort((a, b) => b.calibration_number - a.calibration_number)
@@ -431,10 +634,26 @@ export class OdontoPrintService {
       active: true,
       created_by: params.created_by || null,
       created_at: now,
+      updated_at: now,
     };
 
+    mockResinBatches = loadLocal("odontoprint_resin_batches", mockResinBatches);
     mockResinBatches.unshift(newBatch);
+    saveLocal("odontoprint_resin_batches", mockResinBatches);
 
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        const { error } = await client.from("resin_batches").insert(newBatch);
+        if (error) {
+          console.warn("Supabase insert resin_batch error:", error);
+        }
+      } catch (err) {
+        console.warn("Supabase insert resin_batch exception:", err);
+      }
+    }
+
+    mockAuditLogs = loadLocal("odontoprint_audit_logs", mockAuditLogs);
     mockAuditLogs.unshift({
       id: crypto.randomUUID(),
       user_id: params.created_by || null,
@@ -444,11 +663,36 @@ export class OdontoPrintService {
       new_data: { brand: newBatch.brand, type: newBatch.resin_type, lot: newBatch.lot },
       created_at: now,
     });
+    saveLocal("odontoprint_audit_logs", mockAuditLogs);
 
     return newBatch;
   }
 
   static async getCalibrations(): Promise<(ResinCalibration & { resin_brand: string; resin_lot: string; printer_name: string })[]> {
+    mockCalibrations = loadLocal("odontoprint_calibrations", mockCalibrations);
+    mockResinBatches = loadLocal("odontoprint_resin_batches", mockResinBatches);
+    mockPrinters = loadLocal("odontoprint_printers", mockPrinters);
+
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        const { data, error } = await client
+          .from("resin_calibrations")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (!error && data) {
+          mockCalibrations = mergeById(data, mockCalibrations);
+          saveLocal("odontoprint_calibrations", mockCalibrations);
+        }
+      } catch (err) {
+        console.warn("Supabase getCalibrations error:", err);
+      }
+    }
+
+    mockCalibrations = loadLocal("odontoprint_calibrations", mockCalibrations);
+    mockResinBatches = loadLocal("odontoprint_resin_batches", mockResinBatches);
+    mockPrinters = loadLocal("odontoprint_printers", mockPrinters);
+
     return mockCalibrations.map((cal) => {
       const batch = mockResinBatches.find((b) => b.id === cal.resin_batch_id);
       const printer = mockPrinters.find((p) => p.id === cal.printer_id);
@@ -491,7 +735,7 @@ export class OdontoPrintService {
       maxHex: settings.calibration_hexagon_max,
     });
 
-    // Conta calibrações existentes para essa combinação resina + impressora
+    mockCalibrations = loadLocal("odontoprint_calibrations", mockCalibrations);
     const existing = mockCalibrations.filter(
       (c) => c.resin_batch_id === params.resin_batch_id && c.printer_id === params.printer_id
     );
@@ -520,15 +764,31 @@ export class OdontoPrintService {
     };
 
     mockCalibrations.unshift(newCal);
+    saveLocal("odontoprint_calibrations", mockCalibrations);
 
     // Se aprovada, marca o lote como CALIBRADA
     if (validation.approved) {
+      mockResinBatches = loadLocal("odontoprint_resin_batches", mockResinBatches);
       const batch = mockResinBatches.find((b) => b.id === params.resin_batch_id);
       if (batch) {
         batch.status = "CALIBRADA";
+        saveLocal("odontoprint_resin_batches", mockResinBatches);
       }
     }
 
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        await client.from("resin_calibrations").insert(newCal);
+        if (validation.approved) {
+          await client.from("resin_batches").update({ status: "CALIBRADA" }).eq("id", params.resin_batch_id);
+        }
+      } catch (err) {
+        console.warn("Supabase insert calibration error:", err);
+      }
+    }
+
+    mockAuditLogs = loadLocal("odontoprint_audit_logs", mockAuditLogs);
     mockAuditLogs.unshift({
       id: crypto.randomUUID(),
       user_id: params.created_by || null,
@@ -543,6 +803,7 @@ export class OdontoPrintService {
       },
       created_at: now,
     });
+    saveLocal("odontoprint_audit_logs", mockAuditLogs);
 
     return {
       success: true,
@@ -559,6 +820,12 @@ export class OdontoPrintService {
   }> {
     const allPrinters = await this.getPrinters();
     const eligiblePrinters = allPrinters.filter((p) => p.is_eligible_for_print);
+
+    await this.getCalibrations();
+    await this.getResinBatches();
+
+    mockCalibrations = loadLocal("odontoprint_calibrations", mockCalibrations);
+    mockResinBatches = loadLocal("odontoprint_resin_batches", mockResinBatches);
 
     // Resinas com calibração aprovada
     const approvedCalibrations = mockCalibrations.filter((c) => c.status === "APROVADA");
@@ -632,19 +899,28 @@ export class OdontoPrintService {
       started_at: now,
       created_by: params.user_id || null,
       created_at: now,
+      updated_at: now,
     };
 
+    mockPrintRuns = loadLocal("odontoprint_print_runs", mockPrintRuns);
     mockPrintRuns.unshift(newRun);
+    saveLocal("odontoprint_print_runs", mockPrintRuns);
 
+    mockPrintRunItems = loadLocal("odontoprint_print_run_items", mockPrintRunItems);
+    mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
+
+    const runItemsToInsert: PrintRunItem[] = [];
     // Vincula itens à impressão e atualiza status para EM_IMPRESSAO
     for (const itemId of params.item_ids) {
-      mockPrintRunItems.push({
+      const runItem: PrintRunItem = {
         id: crypto.randomUUID(),
         print_run_id: newRun.id,
         print_job_item_id: itemId,
         result: "PENDENTE",
         created_at: now,
-      });
+      };
+      runItemsToInsert.push(runItem);
+      mockPrintRunItems.push(runItem);
 
       const item = mockPrintJobItems.find((i) => i.id === itemId);
       if (item) {
@@ -652,8 +928,25 @@ export class OdontoPrintService {
         item.last_run_code = params.run_code;
       }
     }
+    saveLocal("odontoprint_print_run_items", mockPrintRunItems);
+    saveLocal("odontoprint_job_items", mockPrintJobItems);
 
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        await client.from("print_runs").insert(newRun);
+        await client.from("print_run_items").insert(runItemsToInsert);
+        for (const itemId of params.item_ids) {
+          await client.from("print_job_items").update({ status: "EM_IMPRESSAO", last_run_code: params.run_code }).eq("id", itemId);
+        }
+      } catch (err) {
+        console.warn("Supabase startPrintRun error:", err);
+      }
+    }
+
+    mockPrinters = loadLocal("odontoprint_printers", mockPrinters);
     const printer = mockPrinters.find((p) => p.id === params.printer_id);
+    mockAuditLogs = loadLocal("odontoprint_audit_logs", mockAuditLogs);
     mockAuditLogs.unshift({
       id: crypto.randomUUID(),
       user_id: params.user_id || null,
@@ -667,6 +960,7 @@ export class OdontoPrintService {
       },
       created_at: now,
     });
+    saveLocal("odontoprint_audit_logs", mockAuditLogs);
 
     return { success: true, run: newRun };
   }
@@ -676,6 +970,7 @@ export class OdontoPrintService {
     failed_items: { item_id: string; reason?: string }[];
     user_id?: string;
   }): Promise<{ success: boolean; completed_count: number; failed_count: number; error?: string }> {
+    mockPrintRuns = loadLocal("odontoprint_print_runs", mockPrintRuns);
     const run = mockPrintRuns.find((r) => r.id === params.run_id);
     if (!run) return { success: false, completed_count: 0, failed_count: 0, error: "Impressão não encontrada." };
     if (run.status === "FINALIZADA") {
@@ -685,6 +980,14 @@ export class OdontoPrintService {
     const now = new Date().toISOString();
     run.status = "FINALIZADA";
     run.finished_at = now;
+    saveLocal("odontoprint_print_runs", mockPrintRuns);
+
+    mockPrintRunItems = loadLocal("odontoprint_print_run_items", mockPrintRunItems);
+    mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
+    mockFinishingItems = loadLocal("odontoprint_finishing_items", mockFinishingItems);
+    mockPrintJobs = loadLocal("odontoprint_jobs", mockPrintJobs);
+    mockCases = loadLocal("odontoprint_cases", mockCases);
+    mockAuditLogs = loadLocal("odontoprint_audit_logs", mockAuditLogs);
 
     const runItems = mockPrintRunItems.filter((ri) => ri.print_run_id === run.id);
     const failedMap = new Map(params.failed_items.map((f) => [f.item_id, f.reason]));
@@ -772,6 +1075,21 @@ export class OdontoPrintService {
       }
     }
 
+    saveLocal("odontoprint_print_run_items", mockPrintRunItems);
+    saveLocal("odontoprint_job_items", mockPrintJobItems);
+    saveLocal("odontoprint_finishing_items", mockFinishingItems);
+    saveLocal("odontoprint_jobs", mockPrintJobs);
+    saveLocal("odontoprint_audit_logs", mockAuditLogs);
+
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        await client.from("print_runs").update({ status: "FINALIZADA", finished_at: now }).eq("id", run.id);
+      } catch (err) {
+        console.warn("Supabase finalizePrintRun error:", err);
+      }
+    }
+
     mockAuditLogs.unshift({
       id: crypto.randomUUID(),
       user_id: params.user_id || null,
@@ -785,11 +1103,40 @@ export class OdontoPrintService {
       },
       created_at: now,
     });
+    saveLocal("odontoprint_audit_logs", mockAuditLogs);
 
     return { success: true, completed_count: completedCount, failed_count: failedCount };
   }
 
   static async getPrintRuns(): Promise<(PrintRun & { printer_name: string; resin_brand: string; items_count: number })[]> {
+    mockPrintRuns = loadLocal("odontoprint_print_runs", mockPrintRuns);
+    mockPrintRunItems = loadLocal("odontoprint_print_run_items", mockPrintRunItems);
+    mockPrinters = loadLocal("odontoprint_printers", mockPrinters);
+    mockResinBatches = loadLocal("odontoprint_resin_batches", mockResinBatches);
+
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        const { data: runsData, error: rErr } = await client.from("print_runs").select("*").order("created_at", { ascending: false });
+        const { data: runItemsData, error: riErr } = await client.from("print_run_items").select("*");
+        if (!rErr && runsData) {
+          mockPrintRuns = mergeById(runsData, mockPrintRuns);
+          saveLocal("odontoprint_print_runs", mockPrintRuns);
+        }
+        if (!riErr && runItemsData) {
+          mockPrintRunItems = mergeById(runItemsData, mockPrintRunItems);
+          saveLocal("odontoprint_print_run_items", mockPrintRunItems);
+        }
+      } catch (err) {
+        console.warn("Supabase getPrintRuns error:", err);
+      }
+    }
+
+    mockPrintRuns = loadLocal("odontoprint_print_runs", mockPrintRuns);
+    mockPrintRunItems = loadLocal("odontoprint_print_run_items", mockPrintRunItems);
+    mockPrinters = loadLocal("odontoprint_printers", mockPrinters);
+    mockResinBatches = loadLocal("odontoprint_resin_batches", mockResinBatches);
+
     return mockPrintRuns.map((r) => {
       const printer = mockPrinters.find((p) => p.id === r.printer_id);
       const batch = mockResinBatches.find((b) => b.id === r.resin_batch_id);
@@ -1043,16 +1390,19 @@ export class OdontoPrintService {
   // MÓDULO 2.B: FRESAGEM CNC (USINAGEM DE ZIRCÔNIA & PMMA)
   // ====================================================================
   static async getMillingItems(): Promise<MillingItem[]> {
+    mockMillingItems = loadLocal<MillingItem[]>("odontoprint_milling_items", mockMillingItems);
     return mockMillingItems;
   }
 
   static async startMilling(id: string, block_lot: string, user_id?: string): Promise<{ success: boolean; error?: string }> {
+    mockMillingItems = loadLocal<MillingItem[]>("odontoprint_milling_items", mockMillingItems);
     const item = mockMillingItems.find((m) => m.id === id);
     if (!item) return { success: false, error: "Item de fresagem não encontrado." };
 
     item.status = "EM_USINAGEM";
     item.block_lot = block_lot;
     item.started_at = new Date().toISOString();
+    saveLocal("odontoprint_milling_items", mockMillingItems);
 
     mockAuditLogs.unshift({
       id: crypto.randomUUID(),
@@ -1063,6 +1413,7 @@ export class OdontoPrintService {
       new_data: { patient_code: item.patient_code, file_type: item.file_type, block_lot },
       created_at: item.started_at,
     });
+    saveLocal("odontoprint_audit_logs", mockAuditLogs);
 
     return { success: true };
   }
@@ -1073,6 +1424,8 @@ export class OdontoPrintService {
     failureReason?: string,
     user_id?: string
   ): Promise<{ success: boolean; error?: string }> {
+    mockMillingItems = loadLocal<MillingItem[]>("odontoprint_milling_items", mockMillingItems);
+    mockFinishingItems = loadLocal<FinishingCaseItem[]>("odontoprint_finishing_items", mockFinishingItems);
     const item = mockMillingItems.find((m) => m.id === id);
     if (!item) return { success: false, error: "Item de fresagem não encontrado." };
 
@@ -1081,6 +1434,7 @@ export class OdontoPrintService {
 
     if (!success) {
       item.status = "FALHOU";
+      saveLocal("odontoprint_milling_items", mockMillingItems);
       mockAuditLogs.unshift({
         id: crypto.randomUUID(),
         user_id: user_id || null,
@@ -1090,10 +1444,12 @@ export class OdontoPrintService {
         new_data: { patient_code: item.patient_code, reason: failureReason || "Falha técnica na usinagem" },
         created_at: now,
       });
+      saveLocal("odontoprint_audit_logs", mockAuditLogs);
       return { success: true };
     }
 
     item.status = "FRESADO_CONCLUIDO";
+    saveLocal("odontoprint_milling_items", mockMillingItems);
 
     // Envia os dentes fresados para a Bancada de Acabamento & Maquiagem para encaixe nos furos do modelo!
     mockFinishingItems.unshift({
@@ -1110,6 +1466,7 @@ export class OdontoPrintService {
       glaze_applied: false,
       created_at: now,
     });
+    saveLocal("odontoprint_finishing_items", mockFinishingItems);
 
     mockAuditLogs.unshift({
       id: crypto.randomUUID(),
@@ -1120,6 +1477,7 @@ export class OdontoPrintService {
       new_data: { patient_code: item.patient_code, file_type: item.file_type },
       created_at: now,
     });
+    saveLocal("odontoprint_audit_logs", mockAuditLogs);
 
     return { success: true };
   }
@@ -1128,6 +1486,7 @@ export class OdontoPrintService {
   // MÓDULO 3: BANCADA DE ACABAMENTO, MONTAGEM DE DENTES & MAQUIAGEM
   // ====================================================================
   static async getFinishingItems(): Promise<FinishingCaseItem[]> {
+    mockFinishingItems = loadLocal<FinishingCaseItem[]>("odontoprint_finishing_items", mockFinishingItems);
     return mockFinishingItems;
   }
 
@@ -1138,6 +1497,7 @@ export class OdontoPrintService {
     glaze_applied?: boolean;
     technician_name?: string;
   }): Promise<{ success: boolean; item?: FinishingCaseItem; error?: string }> {
+    mockFinishingItems = loadLocal<FinishingCaseItem[]>("odontoprint_finishing_items", mockFinishingItems);
     const item = mockFinishingItems.find((f) => f.id === params.id);
     if (!item) return { success: false, error: "Trabalho não encontrado na bancada de acabamento." };
 
@@ -1150,6 +1510,7 @@ export class OdontoPrintService {
       item.status = "EM_MAQUIAGEM";
     }
 
+    saveLocal("odontoprint_finishing_items", mockFinishingItems);
     return { success: true, item };
   }
 
@@ -1158,19 +1519,24 @@ export class OdontoPrintService {
     notes?: string,
     user_id?: string
   ): Promise<{ success: boolean; error?: string }> {
+    mockFinishingItems = loadLocal<FinishingCaseItem[]>("odontoprint_finishing_items", mockFinishingItems);
     const item = mockFinishingItems.find((f) => f.id === id);
     if (!item) return { success: false, error: "Trabalho não encontrado na bancada de acabamento." };
 
     const now = new Date().toISOString();
     item.status = "APROVADO_CQ";
     item.finished_at = now;
+    saveLocal("odontoprint_finishing_items", mockFinishingItems);
 
     // Atualiza status final do item correspondente de impressão para concluído total
+    mockPrintJobItems = loadLocal<PrintJobItem[]>("odontoprint_queue_items", mockPrintJobItems);
     const jobItem = mockPrintJobItems.find((i) => i.id === id);
     if (jobItem) {
       jobItem.status = "CONCLUIDO";
+      saveLocal("odontoprint_queue_items", mockPrintJobItems);
     }
 
+    mockAuditLogs = loadLocal<AuditLog[]>("odontoprint_audit_logs", mockAuditLogs);
     mockAuditLogs.unshift({
       id: crypto.randomUUID(),
       user_id: user_id || null,
@@ -1185,12 +1551,15 @@ export class OdontoPrintService {
       },
       created_at: now,
     });
+    saveLocal("odontoprint_audit_logs", mockAuditLogs);
 
     return { success: true };
   }
 
   // --- GESTÃO DE USUÁRIOS E SOLICITAÇÕES DE ACESSO ---
   static async getUsers(): Promise<(Profile & { email?: string })[]> {
+    let localUsers = loadLocal<(Profile & { email?: string })[]>("odontoprint_all_users", []);
+
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
@@ -1199,7 +1568,9 @@ export class OdontoPrintService {
           .select("*")
           .order("created_at", { ascending: false });
         if (!error && data && data.length > 0) {
-          return data as (Profile & { email?: string })[];
+          const merged = mergeById(data as (Profile & { email?: string })[], localUsers);
+          saveLocal("odontoprint_all_users", merged);
+          return merged;
         }
       } catch {
         // fallback para local

@@ -32,6 +32,7 @@ export class AIService {
     if (typeof window !== "undefined") {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+        window.dispatchEvent(new CustomEvent("odontoprint_ai_config_changed", { detail: config }));
       } catch {
         // ignore
       }

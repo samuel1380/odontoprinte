@@ -89,15 +89,10 @@ export default function AdminConfiguracoesPage() {
 
         // Carrega configurações de IA salvas
         const aiCfg = AIService.getConfig();
-        // Se não houver chave local, mas o Render tiver provedor preferencial, prioriza
-        if (!aiCfg.apiKey && envStatus.preferredProvider) {
-          setAiProvider(envStatus.preferredProvider);
-          if (envStatus.preferredProvider === "GEMINI") {
-            setAiModel("gemini-3.8-flash");
-          } else {
-            setAiModel("openai/gpt-oss-120b");
-          }
-        } else {
+        const hasSavedConfig = typeof window !== "undefined" && Boolean(localStorage.getItem("odontoprint_ai_config"));
+
+        if (hasSavedConfig) {
+          // Usuário já salvou explicitamente: RESPEITA INTEGRALMENTE a escolha do usuário!
           setAiProvider(aiCfg.provider || "GEMINI");
           setAiModel(
             aiCfg.model ||
@@ -105,6 +100,17 @@ export default function AdminConfiguracoesPage() {
                 ? "openai/gpt-oss-120b"
                 : "gemini-3.8-flash")
           );
+        } else if (envStatus.preferredProvider) {
+          // Apenas primeira inicialização sem nenhuma preferência salva no navegador
+          setAiProvider(envStatus.preferredProvider);
+          setAiModel(
+            envStatus.preferredProvider === "GROQ"
+              ? "openai/gpt-oss-120b"
+              : "gemini-3.8-flash"
+          );
+        } else {
+          setAiProvider(aiCfg.provider || "GEMINI");
+          setAiModel(aiCfg.model || "gemini-3.8-flash");
         }
         setAiApiKey(aiCfg.apiKey || "");
         setAiEnabled(aiCfg.enabled ?? true);
@@ -118,11 +124,15 @@ export default function AdminConfiguracoesPage() {
   const handleProviderChange = (newProvider: AIProvider) => {
     setAiProvider(newProvider);
     setTestResult(null);
-    if (newProvider === "GEMINI") {
-      setAiModel("gemini-3.8-flash");
-    } else {
-      setAiModel("openai/gpt-oss-120b");
-    }
+    const newModel = newProvider === "GEMINI" ? "gemini-3.8-flash" : "openai/gpt-oss-120b";
+    setAiModel(newModel);
+    // Salva imediatamente para sincronizar instantaneamente com o Copilot
+    AIService.saveConfig({
+      provider: newProvider,
+      apiKey: aiApiKey.trim(),
+      model: newModel,
+      enabled: aiEnabled,
+    });
   };
 
   const handleCopyDiagnostic = () => {

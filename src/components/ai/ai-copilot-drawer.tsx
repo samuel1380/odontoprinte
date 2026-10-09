@@ -36,37 +36,55 @@ export function AICopilotDrawer() {
   ]);
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [aiProvider, setAiProvider] = useState<string>("GEMINI");
+  const [aiProvider, setAiProvider] = useState<"GEMINI" | "GROQ">("GEMINI");
   const [isRenderKey, setIsRenderKey] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const syncConfig = async () => {
+    const config = AIService.getConfig();
+    const currentProvider = (config.provider || "GEMINI") as "GEMINI" | "GROQ";
+    setAiProvider(currentProvider);
+
+    try {
+      const envStatus = await AIService.getEnvStatus();
+      const hasKeyInRender =
+        (currentProvider === "GEMINI" && envStatus.gemini) ||
+        (currentProvider === "GROQ" && envStatus.groq);
+      setIsRenderKey(Boolean(hasKeyInRender));
+    } catch {
+      setIsRenderKey(false);
+    }
+  };
+
   useEffect(() => {
-    async function checkStatus() {
-      const config = AIService.getConfig();
-      try {
-        const envStatus = await AIService.getEnvStatus();
-        if (!config.apiKey && envStatus.preferredProvider) {
-          setAiProvider(envStatus.preferredProvider);
-          setIsRenderKey(true);
-        } else if (
-          (config.provider === "GROQ" && envStatus.groq) ||
-          (config.provider === "GEMINI" && envStatus.gemini)
-        ) {
-          setAiProvider(config.provider);
-          setIsRenderKey(true);
-        } else {
-          setAiProvider(config.provider);
-          setIsRenderKey(false);
-        }
-      } catch {
-        setAiProvider(config.provider);
-      }
-    }
-    if (isOpen) {
-      checkStatus();
-    }
+    syncConfig();
+
+    const handleConfigChange = () => {
+      syncConfig();
+    };
+
+    window.addEventListener("odontoprint_ai_config_changed", handleConfigChange);
+    window.addEventListener("storage", handleConfigChange);
+
+    return () => {
+      window.removeEventListener("odontoprint_ai_config_changed", handleConfigChange);
+      window.removeEventListener("storage", handleConfigChange);
+    };
   }, [isOpen]);
+
+  const handleToggleProvider = (targetProvider: "GEMINI" | "GROQ") => {
+    const currentConfig = AIService.getConfig();
+    const targetModel = targetProvider === "GEMINI" ? "gemini-3.8-flash" : "openai/gpt-oss-120b";
+    const updated = {
+      ...currentConfig,
+      provider: targetProvider,
+      model: targetModel,
+    };
+    AIService.saveConfig(updated);
+    setAiProvider(targetProvider);
+    toast.success(`Copiloto alternado para ${targetProvider === "GEMINI" ? "Google Gemini 3.8" : "Groq Cloud"}`);
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -100,10 +118,11 @@ export function AICopilotDrawer() {
       setMessages((prev) => [...prev, assistantMsg]);
     } catch (err: any) {
       const errDetails = err?.message || "Tente novamente mais tarde.";
+      const targetName = aiProvider === "GROQ" ? "Groq (GROQ_API_KEY)" : "Google Gemini 3.8 (GEMINI_API_KEY)";
       const errorMsg: AIChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: `⚠️ Ocorreu uma instabilidade na consulta da OdontoIA:\n\n${errDetails}\n\n💡 Dica: Verifique se sua chave do Google Gemini está configurada em [Configurações](/admin/configuracoes) ou no Render (variável GEMINI_API_KEY).`,
+        content: `⚠️ Ocorreu uma instabilidade na consulta da OdontoIA (${aiProvider}):\n\n${errDetails}\n\n💡 Dica: Verifique se sua chave do ${targetName} está configurada em [Configurações](/admin/configuracoes) ou no Render.`,
         timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errorMsg]);
@@ -176,7 +195,32 @@ export function AICopilotDrawer() {
                       )}
                     </Badge>
                   </div>
-                  <p className="text-[11px] text-slate-400">Inteligência Operacional de Bancada</p>
+                  <div className="flex items-center gap-1 mt-1">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleProvider("GEMINI")}
+                      className={`px-2 py-0.5 rounded text-[10px] font-semibold transition ${
+                        aiProvider === "GEMINI"
+                          ? "bg-brand-600 text-white shadow-xs"
+                          : "text-slate-400 hover:text-white bg-slate-800/80"
+                      }`}
+                      title="Usar Google Gemini 3.8 Flash"
+                    >
+                      ✨ Gemini 3.8
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleProvider("GROQ")}
+                      className={`px-2 py-0.5 rounded text-[10px] font-semibold transition ${
+                        aiProvider === "GROQ"
+                          ? "bg-amber-600 text-white shadow-xs"
+                          : "text-slate-400 hover:text-white bg-slate-800/80"
+                      }`}
+                      title="Usar Groq Cloud"
+                    >
+                      ⚡ Groq
+                    </button>
+                  </div>
                 </div>
               </div>
 
