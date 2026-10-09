@@ -65,28 +65,28 @@ export default function ResinasPage() {
     <AppShell>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[#EFECE6] pb-4">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-              Resinas Fotopolimerizáveis
+            <h1 className="text-xl sm:text-2xl font-bold text-[#18181B] tracking-tight">
+              Resinas 3D
             </h1>
-            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-              Gerencie seus frascos de resina, cadastre novos lotes e realize testes de calibração.
+            <p className="text-xs sm:text-sm text-[#716D66] mt-0.5">
+              Inventário de lotes e calibrações fotopolimerizáveis.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 pt-1 sm:pt-0">
             <Link href="/calibracoes/nova">
-              <Button variant="outline" size="sm" className="gap-1.5 text-xs font-medium h-9">
-                <Compass className="w-3.5 h-3.5 text-brand-600" />
+              <Button variant="outline" size="sm" className="gap-1.5 text-xs font-medium">
+                <Compass className="w-3.5 h-3.5 text-[#DE5A35]" />
                 Nova Calibração
               </Button>
             </Link>
 
             <Link href="/resinas/recebimento">
-              <Button variant="default" size="sm" className="gap-1.5 text-xs font-semibold h-9">
+              <Button variant="default" size="sm" className="gap-1.5 text-xs font-semibold">
                 <Plus className="w-4 h-4" />
-                + Cadastrar Nova Resina
+                Nova Resina
               </Button>
             </Link>
           </div>
@@ -96,7 +96,7 @@ export default function ResinasPage() {
         {isLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
             {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-48 w-full rounded-2xl" />
+              <Skeleton key={i} className="h-48 w-full rounded-3xl" />
             ))}
           </div>
         ) : (
@@ -108,20 +108,20 @@ export default function ResinasPage() {
               return (
                 <Card
                   key={batch.id}
-                  className="flex flex-col justify-between overflow-hidden border border-slate-200/90 bg-white rounded-xl sm:rounded-2xl transition-all hover:border-slate-300 hover:shadow-xs"
+                  className="flex flex-col justify-between overflow-hidden border border-[#EFECE6] bg-white transition hover:border-[#18181B]/30"
                 >
                   <CardHeader className="p-4 sm:p-5 pb-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <CardTitle className="text-base text-slate-900 font-bold truncate">{batch.brand}</CardTitle>
-                        <CardDescription className="text-xs text-slate-500 mt-0.5 truncate">{batch.resin_type}</CardDescription>
+                        <CardTitle className="text-base text-[#18181B] font-bold truncate">{batch.brand}</CardTitle>
+                        <p className="text-xs text-[#716D66] mt-0.5 truncate">{batch.resin_type}</p>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
-                        <Badge className={statusCfg.color}>{statusCfg.label}</Badge>
+                        <Badge variant={isCalibrated ? "default" : "secondary"}>{statusCfg.label}</Badge>
                         <button
                           type="button"
                           onClick={() => setBatchToDelete(batch)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                          className="p-1.5 rounded-full text-[#716D66] hover:text-[#DE3535] hover:bg-rose-50 transition"
                           title="Excluir lote de resina"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -131,20 +131,20 @@ export default function ResinasPage() {
                   </CardHeader>
 
                   <CardContent className="p-4 sm:p-5 pt-0 space-y-3 text-xs">
-                    <div className="divide-y divide-slate-100 rounded-xl bg-slate-50/70 p-3 border border-slate-100 space-y-1.5">
+                    <div className="divide-y divide-[#EFECE6] rounded-2xl bg-[#FAF8F5] p-3.5 border border-[#EFECE6] space-y-1.5">
                       <div className="flex justify-between items-center">
-                        <span className="text-slate-400">Lote:</span>
-                        <span className="font-mono font-bold text-slate-800">{batch.lot}</span>
+                        <span className="text-[#716D66]">Lote:</span>
+                        <span className="font-mono font-bold text-[#18181B]">{batch.lot}</span>
                       </div>
                       <div className="flex justify-between items-center pt-1.5">
-                        <span className="text-slate-400">Volume:</span>
-                        <span className="font-medium text-slate-700">
+                        <span className="text-[#716D66]">Volume:</span>
+                        <span className="font-medium text-[#18181B]">
                           {batch.volume} {batch.volume_unit}
                         </span>
                       </div>
                       <div className="flex justify-between items-center pt-1.5">
-                        <span className="text-slate-400">Recebimento:</span>
-                        <span className="font-medium text-slate-700">
+                        <span className="text-[#716D66]">Recebimento:</span>
+                        <span className="font-medium text-[#18181B]">
                           {formatDate(batch.received_at)}
                         </span>
                       </div>
@@ -154,7 +154,7 @@ export default function ResinasPage() {
                   <div className="p-4 sm:p-5 pt-0 flex gap-2">
                     {!isCalibrated && (
                       <Link href={`/calibracoes/nova?batch=${batch.id}`} className="flex-1">
-                        <Button variant="default" size="sm" className="w-full text-xs font-semibold gap-1 h-8.5">
+                        <Button variant="default" size="sm" className="w-full text-xs font-semibold gap-1">
                           <Compass className="w-3.5 h-3.5" />
                           Calibrar
                         </Button>
@@ -162,7 +162,7 @@ export default function ResinasPage() {
                     )}
 
                     <Link href={`/resinas/${batch.id}`} className={isCalibrated ? "w-full" : ""}>
-                      <Button variant="outline" size="sm" className="w-full text-xs h-8.5 text-slate-700">
+                      <Button variant="outline" size="sm" className="w-full text-xs text-[#2D2A26]">
                         Detalhes
                       </Button>
                     </Link>

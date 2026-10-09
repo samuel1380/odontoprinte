@@ -4,36 +4,36 @@
 
 @layer base {
   :root {
-    --background: 210 40% 98%;
-    --foreground: 222.2 84% 4.9%;
-    --primary: 196 90% 34%; /* #087AA4 */
-    --primary-foreground: 210 40% 98%;
+    --background: 40 33% 97%; /* #FBF9F5 */
+    --foreground: 24 10% 12%; /* #1E1C1A */
+    --primary: 240 6% 10%; /* #18181B */
+    --primary-foreground: 40 33% 97%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --border: 214.3 31.8% 91.4%;
-    --radius: 0.5rem;
+    --card-foreground: 24 10% 12%;
+    --border: 40 20% 92%; /* #EFECE6 */
+    --radius: 1.25rem;
   }
 
   body {
-    @apply bg-slate-50 text-slate-900 antialiased font-sans;
+    @apply bg-[#FBF9F5] text-[#1E1C1A] antialiased font-sans;
     min-height: 100vh;
   }
 }
 
 /* Custom scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #ded7cb;
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #c9c1b3;
 }
 
 /* Micro-animations */

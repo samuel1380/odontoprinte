@@ -35,13 +35,13 @@ export function Topbar({ onOpenMobileMenu }: TopbarProps) {
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 sm:h-16 lg:h-18 w-full items-center justify-between border-b border-slate-200/80 bg-white/95 px-3.5 sm:px-6 lg:px-8 backdrop-blur-md">
+    <header className="sticky top-0 z-30 flex h-14 sm:h-16 lg:h-18 w-full items-center justify-between border-b border-[#EFECE6] bg-[#FBF9F5]/90 px-3.5 sm:px-6 lg:px-8 backdrop-blur-md">
       {/* Left: Mobile Toggle & Breadcrumbs */}
       <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         <button
           type="button"
           onClick={onOpenMobileMenu}
-          className="lg:hidden p-2 -ml-1 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition focus:outline-hidden shrink-0"
+          className="lg:hidden p-2 -ml-1 rounded-full text-[#2D2A26] hover:bg-[#EFEAE2] transition focus:outline-hidden shrink-0"
           aria-label="Abrir menu de navegação"
         >
           <Menu className="w-5 h-5" />
@@ -52,14 +52,14 @@ export function Topbar({ onOpenMobileMenu }: TopbarProps) {
       </div>
 
       {/* Right: Operational Status & User Profile */}
-      <div className="flex items-center gap-3 sm:gap-4">
+      <div className="flex items-center gap-2.5 sm:gap-3">
         {/* Status Operacional do Sistema */}
-        <div className="hidden sm:flex items-center gap-2 rounded-full border border-slate-200/80 bg-slate-50/70 px-3 py-1 text-xs text-slate-600">
+        <div className="hidden sm:flex items-center gap-2 rounded-full border border-[#E2DDD5] bg-white px-3.5 py-1 text-xs text-[#2D2A26] shadow-xs">
           <span className="relative flex h-2 w-2">
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-[#18181B]"></span>
           </span>
-          <span className="font-medium text-slate-700">
-            {isSupabaseConnected ? "Nuvem Conectada" : "Linha de Produção Ativa"}
+          <span className="font-medium text-[#1E1C1A]">
+            {isSupabaseConnected ? "Nuvem Conectada" : "Linha Ativa"}
           </span>
         </div>
 
@@ -68,22 +68,22 @@ export function Topbar({ onOpenMobileMenu }: TopbarProps) {
           <button
             type="button"
             onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-            className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 bg-white p-1.5 sm:px-3 sm:py-1.5 text-xs text-slate-700 shadow-xs hover:bg-slate-50 hover:border-slate-300 transition"
+            className="flex items-center gap-2 rounded-full border border-[#E2DDD5] bg-white p-1 sm:px-3 sm:py-1 text-xs text-[#1E1C1A] shadow-xs hover:bg-[#FAF8F5] transition"
           >
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-600 text-white font-semibold text-xs shadow-xs">
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#18181B] text-white font-semibold text-xs shadow-xs">
               {user?.full_name?.charAt(0) || "U"}
             </div>
-            
-            <div className="hidden md:block text-left leading-tight">
-              <span className="block font-semibold text-slate-800 text-xs">
+
+            <div className="hidden md:block text-left leading-tight pr-1">
+              <span className="block font-semibold text-[#1E1C1A] text-xs">
                 {user?.full_name || "Usuário"}
               </span>
-              <span className="text-[10px] text-slate-400 font-medium">
-                {activeRole ? ((USER_ROLES as Record<string, string>)[activeRole] || activeRole) : "Acesso Restrito"}
+              <span className="text-[10px] text-[#9E988F] font-medium">
+                {activeRole ? ((USER_ROLES as Record<string, string>)[activeRole] || activeRole) : "Operador"}
               </span>
             </div>
 
-            <ChevronDown className="h-3.5 w-3.5 text-slate-400 ml-0.5" />
+            <ChevronDown className="h-3.5 w-3.5 text-[#9E988F]" />
           </button>
 
           {profileMenuOpen && (

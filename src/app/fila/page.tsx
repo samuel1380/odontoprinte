@@ -111,13 +111,13 @@ export default function FilaPage() {
     <AppShell>
       <div className="space-y-6">
         {/* Top Header & Proceed Button */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[#EFECE6] pb-4">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-bold text-[#18181B] tracking-tight">
               Fila de Impressão 3D
             </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Selecione itens de um ou múltiplos pacientes para compor a mesa no Fatiador.
+            <p className="text-xs text-[#716D66] mt-0.5">
+              Selecione os modelos para compor a mesa de impressão.
             </p>
           </div>
 
@@ -126,7 +126,7 @@ export default function FilaPage() {
               variant="outline"
               size="sm"
               onClick={loadQueue}
-              className="gap-1.5 text-xs text-slate-600 w-full sm:w-auto justify-center"
+              className="gap-1.5 text-xs text-[#2D2A26] w-full sm:w-auto justify-center"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               Atualizar
@@ -135,9 +135,9 @@ export default function FilaPage() {
             <Button
               onClick={handleProceedToSlicer}
               disabled={selectedItemIds.length === 0}
-              variant={selectedItemIds.length > 0 ? "lime" : "default"}
+              variant={selectedItemIds.length > 0 ? "accent" : "default"}
               size="default"
-              className="gap-2 font-bold shadow-xs w-full sm:w-auto justify-center"
+              className="gap-2 font-bold w-full sm:w-auto justify-center"
             >
               <Scissors className="w-4 h-4" />
               Preparar no Fatiador ({selectedItemIds.length})
@@ -147,50 +147,60 @@ export default function FilaPage() {
         </div>
 
         {/* Filter Bar */}
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200/90 shadow-2xs">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white p-2.5 sm:p-3 rounded-2xl sm:rounded-3xl border border-[#EFECE6]">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full lg:w-auto">
             <div className="relative w-full sm:w-64">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <Search className="w-4 h-4 text-[#716D66] absolute left-3.5 top-3" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Filtrar paciente (ex: PAC-100)..."
-                className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-brand-500 bg-slate-50/50"
+                placeholder="Buscar paciente..."
+                className="w-full pl-9 pr-4 py-2 text-xs rounded-full border border-[#EFECE6] focus:outline-none focus:ring-2 focus:ring-[#18181B] bg-[#FAF8F5]/60 text-[#18181B]"
               />
             </div>
 
-            <div className="flex flex-wrap items-center gap-1 sm:border-l sm:border-slate-200 sm:pl-2">
-              <Button
-                size="sm"
-                variant={activeFilter === "TODOS" ? "default" : "ghost"}
+            {/* Segmented Controls / Pill Filter */}
+            <div className="flex flex-wrap items-center gap-1 bg-[#FAF8F5] p-1 rounded-full border border-[#EFECE6]">
+              <button
+                type="button"
                 onClick={() => setActiveFilter("TODOS")}
-                className="text-xs h-8 flex-1 sm:flex-initial"
+                className={`px-3 py-1 text-xs font-semibold rounded-full transition ${
+                  activeFilter === "TODOS"
+                    ? "bg-[#18181B] text-white shadow-xs"
+                    : "text-[#716D66] hover:text-[#18181B]"
+                }`}
               >
                 Todos ({totalItemsInQueue})
-              </Button>
-              <Button
-                size="sm"
-                variant={activeFilter === "REIMPRESSAO" ? "destructive" : "ghost"}
+              </button>
+              <button
+                type="button"
                 onClick={() => setActiveFilter("REIMPRESSAO")}
-                className="text-xs h-8 gap-1.5 flex-1 sm:flex-initial"
+                className={`px-3 py-1 text-xs font-semibold rounded-full flex items-center gap-1 transition ${
+                  activeFilter === "REIMPRESSAO"
+                    ? "bg-[#DE5A35] text-white shadow-xs"
+                    : "text-[#716D66] hover:text-[#DE5A35]"
+                }`}
               >
-                <AlertTriangle className="w-3 h-3 text-rose-500" />
+                <AlertTriangle className="w-3 h-3" />
                 Reimpressões ({totalReprintItems})
-              </Button>
-              <Button
-                size="sm"
-                variant={activeFilter === "AGUARDANDO" ? "secondary" : "ghost"}
+              </button>
+              <button
+                type="button"
                 onClick={() => setActiveFilter("AGUARDANDO")}
-                className="text-xs h-8 flex-1 sm:flex-initial"
+                className={`px-3 py-1 text-xs font-semibold rounded-full transition ${
+                  activeFilter === "AGUARDANDO"
+                    ? "bg-[#18181B] text-white shadow-xs"
+                    : "text-[#716D66] hover:text-[#18181B]"
+                }`}
               >
                 Novos ({totalItemsInQueue - totalReprintItems})
-              </Button>
+              </button>
             </div>
           </div>
 
-          <div className="text-xs text-slate-500 font-medium sm:text-right">
-            <span className="font-bold text-brand-600">{selectedItemIds.length}</span> modelos selecionados
+          <div className="text-xs text-[#716D66] font-medium sm:text-right px-2">
+            <span className="font-bold text-[#18181B]">{selectedItemIds.length}</span> modelos selecionados
           </div>
         </div>
 
@@ -204,7 +214,7 @@ export default function FilaPage() {
         ) : filteredCards.length === 0 ? (
           <EmptyState
             icon={ListOrdered}
-            title="Nenhum item na fila com os filtros selecionados"
+            title="Nenhum item na fila"
             description="Todos os trabalhos foram fatiados ou ainda não há novos modelos solicitados pelo Cadista."
             actionLabel="+ Criar Novo Trabalho"
             onAction={() => router.push("/cadista/status")}
@@ -220,49 +230,49 @@ export default function FilaPage() {
                   key={card.case_id}
                   className={`overflow-hidden transition-all duration-200 border ${
                     hasReprintItem
-                      ? "border-rose-200 bg-white"
-                      : "border-slate-200/90 bg-white"
-                  } shadow-2xs`}
+                      ? "border-[#DE5A35]/30 bg-white"
+                      : "border-[#EFECE6] bg-white"
+                  }`}
                 >
                   {/* Card Patient Header */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-50/70 border-b border-slate-100 px-4 sm:px-5 py-2.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-[#FAF8F5]/80 border-b border-[#EFECE6] px-4 sm:px-6 py-3">
                     <div className="flex items-center gap-3">
                       <button
                         type="button"
                         onClick={() => handleSelectAllInCard(card.items)}
-                        className="text-slate-400 hover:text-brand-600 transition shrink-0"
-                        title={allCardSelected ? "Desmarcar todos deste paciente" : "Selecionar todos deste paciente"}
+                        className="text-[#716D66] hover:text-[#18181B] transition shrink-0"
+                        title={allCardSelected ? "Desmarcar todos" : "Selecionar todos"}
                       >
                         {allCardSelected ? (
-                          <CheckSquare className="w-5 h-5 text-brand-500" />
+                          <CheckSquare className="w-5 h-5 text-[#18181B]" />
                         ) : (
                           <Square className="w-5 h-5" />
                         )}
                       </button>
 
                       <div className="flex flex-wrap items-baseline gap-1.5 sm:gap-2">
-                        <span className="font-mono font-bold text-sm sm:text-base text-slate-900 tracking-wider">
+                        <span className="font-mono font-bold text-sm sm:text-base text-[#18181B] tracking-wider">
                           {card.patient_code}
                         </span>
                         {card.patient_name && (
-                          <span className="text-xs text-slate-500 font-medium">
+                          <span className="text-xs text-[#716D66] font-medium">
                             &bull; {card.patient_name}
                           </span>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs text-slate-500 pl-8 sm:pl-0">
-                      <div className="flex items-center gap-1.5 text-slate-600 bg-white px-2.5 py-1 rounded-md border border-slate-200 text-xs shadow-2xs">
-                        <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs text-[#716D66] pl-8 sm:pl-0">
+                      <div className="flex items-center gap-1.5 text-[#2D2A26] bg-white px-3 py-1 rounded-full border border-[#EFECE6] text-xs">
+                        <Clock className="w-3.5 h-3.5 text-[#716D66] shrink-0" />
                         <span>Entrada: {formatDate(card.queue_entered_at)}</span>
-                        <span className="font-semibold text-slate-700">
+                        <span className="font-semibold text-[#18181B]">
                           ({formatRelativeWait(card.queue_entered_at)} atrás)
                         </span>
                       </div>
 
                       {hasReprintItem && (
-                        <Badge variant="reprint" className="gap-1 text-[11px]">
+                        <Badge variant="destructive" className="gap-1 text-[11px]">
                           <AlertTriangle className="w-3 h-3" />
                           Reimpressão
                         </Badge>
@@ -280,48 +290,42 @@ export default function FilaPage() {
                           <div
                             key={item.id}
                             onClick={() => toggleItemSelection(item.id)}
-                            className={`flex items-start justify-between p-3 rounded-xl border cursor-pointer transition-all ${
+                            className={`flex items-start justify-between p-3.5 rounded-2xl border cursor-pointer transition-all ${
                               isSelected
                                 ? item.is_retry
-                                  ? "border-rose-400 bg-rose-50/70 shadow-2xs ring-1 ring-rose-400"
-                                  : "border-brand-500 bg-brand-50/50 shadow-2xs ring-1 ring-brand-500"
+                                  ? "border-[#DE5A35] bg-rose-50/50"
+                                  : "border-[#18181B] bg-[#FAF8F5]"
                                 : item.is_retry
-                                ? "border-rose-200 bg-rose-50/30 hover:bg-rose-50/60"
-                                : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50"
+                                ? "border-[#DE5A35]/30 bg-rose-50/20 hover:bg-rose-50/40"
+                                : "border-[#EFECE6] bg-white hover:border-[#E2DDD5] hover:bg-[#FAF8F5]/40"
                             }`}
                           >
                             <div className="flex items-start gap-2.5">
-                              {/* Checkbox visual */}
                               <div
-                                className={`mt-0.5 h-4.5 w-4.5 rounded border flex items-center justify-center transition-all ${
+                                className={`mt-0.5 h-4.5 w-4.5 rounded-full border flex items-center justify-center transition-all ${
                                   isSelected
                                     ? item.is_retry
-                                      ? "border-rose-600 bg-rose-500 text-white"
-                                      : "border-brand-600 bg-brand-500 text-white"
-                                    : "border-slate-300 bg-white"
+                                      ? "border-[#DE5A35] bg-[#DE5A35] text-white"
+                                      : "border-[#18181B] bg-[#18181B] text-white"
+                                    : "border-[#D1CCC4] bg-white"
                                 }`}
                               >
-                                {isSelected && <CheckSquare className="w-3.5 h-3.5" />}
+                                {isSelected && <CheckSquare className="w-3 h-3" />}
                               </div>
 
                               <div>
-                                <div className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                                <div className="text-xs font-bold text-[#18181B] flex items-center gap-2">
                                   {FILE_TYPE_LABELS[item.file_type]}
                                 </div>
 
                                 {item.is_retry && (
                                   <div className="mt-1 space-y-0.5">
-                                    <Badge variant="reprint" className="text-[10px] py-0 px-1.5">
+                                    <Badge variant="destructive" className="text-[10px] py-0 px-2">
                                       Tentativa {item.retry_count + 1}
                                     </Badge>
                                     {item.last_failure_reason && (
-                                      <p className="text-[11px] text-rose-700 font-medium leading-tight">
+                                      <p className="text-[11px] text-[#DE3535] font-medium leading-tight">
                                         Motivo: {item.last_failure_reason}
-                                      </p>
-                                    )}
-                                    {item.last_run_code && (
-                                      <p className="text-[10px] text-slate-400">
-                                        Ordem original: {item.last_run_code}
                                       </p>
                                     )}
                                   </div>
@@ -330,12 +334,12 @@ export default function FilaPage() {
                             </div>
 
                             <span
-                              className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md ${
+                              className={`text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full ${
                                 isSelected
                                   ? item.is_retry
-                                    ? "bg-rose-100 text-rose-800"
-                                    : "bg-brand-100 text-brand-800"
-                                  : "text-slate-400"
+                                    ? "bg-[#DE5A35]/15 text-[#DE5A35]"
+                                    : "bg-[#18181B] text-white"
+                                  : "text-[#716D66] bg-[#FAF8F5]"
                               }`}
                             >
                               {isSelected ? "Selecionado" : "Na Fila"}
@@ -343,12 +347,6 @@ export default function FilaPage() {
                           </div>
                         );
                       })}
-                    </div>
-
-                    <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
-                      <span>
-                        Itens desmarcados deste paciente continuarão na fila para as próximas impressões.
-                      </span>
                     </div>
                   </CardContent>
                 </Card>

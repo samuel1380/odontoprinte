@@ -12,11 +12,6 @@ import {
   User,
   Settings,
   RefreshCw,
-  Search,
-  Printer,
-  ListOrdered,
-  FlaskConical,
-  Zap,
   Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -30,7 +25,7 @@ export function AICopilotDrawer() {
       id: "welcome",
       role: "assistant",
       content:
-        "Olá! Sou a **OdontoIA**, sua copiloto técnica do laboratório OdontoPrint. 🦷✨\n\nVocê pode me perguntar coisas como:\n- *\"O modelo da Vanessa já foi enviado?\"*\n- *\"Quais impressoras estão liberadas hoje?\"*\n- *\"Quantos modelos temos na fila de espera?\"*\n- *\"Qual a recomendação de calibração para a resina PriZma?\"*",
+        "Olá! Sou a **OdontoIA**, sua copiloto técnica do laboratório OdontoPrint.\n\nPergunte-me sobre status de modelos, impressoras liberadas ou calibração de resinas.",
       timestamp: new Date().toISOString(),
     },
   ]);
@@ -83,7 +78,7 @@ export function AICopilotDrawer() {
     };
     AIService.saveConfig(updated);
     setAiProvider(targetProvider);
-    toast.success(`Copiloto alternado para ${targetProvider === "GEMINI" ? "Google Gemini 3.8" : "Groq Cloud"}`);
+    toast.success(`Copiloto: ${targetProvider === "GEMINI" ? "Gemini 3.8" : "Groq Cloud"}`);
   };
 
   useEffect(() => {
@@ -118,11 +113,10 @@ export function AICopilotDrawer() {
       setMessages((prev) => [...prev, assistantMsg]);
     } catch (err: any) {
       const errDetails = err?.message || "Tente novamente mais tarde.";
-      const targetName = aiProvider === "GROQ" ? "Groq (GROQ_API_KEY)" : "Google Gemini 3.8 (GEMINI_API_KEY)";
       const errorMsg: AIChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: `⚠️ Ocorreu uma instabilidade na consulta da OdontoIA (${aiProvider}):\n\n${errDetails}\n\n💡 Dica: Verifique se sua chave do ${targetName} está configurada em [Configurações](/admin/configuracoes) ou no Render.`,
+        content: `⚠️ Erro de conexão com ${aiProvider}:\n\n${errDetails}`,
         timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errorMsg]);
@@ -131,94 +125,81 @@ export function AICopilotDrawer() {
     }
   };
 
-  const handleQuickQuestion = (q: string) => {
-    handleSend(q);
-  };
-
   return (
     <>
       {/* Botão Flutuante Global */}
-      <div className="fixed bottom-4 right-4 sm:bottom-5 sm:right-5 z-40 flex items-center gap-2">
+      <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40 flex items-center gap-2">
         {!isOpen && (
-          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/95 border border-brand-200 text-xs font-semibold text-brand-700 shadow-md backdrop-blur-md animate-in fade-in slide-in-from-right-3">
+          <div className="hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/95 border border-[#EFECE6] text-xs font-semibold text-[#18181B] shadow-sm backdrop-blur-md">
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-brand-500"></span>
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#DE5A35] opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#DE5A35]"></span>
             </span>
-            <span>OdontoIA Copilot</span>
+            <span>OdontoIA</span>
           </div>
         )}
 
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
-          className="flex h-12 w-12 sm:h-13 sm:w-13 items-center justify-center rounded-2xl bg-gradient-to-tr from-brand-600 via-brand-500 to-cyan-500 text-white shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200 border-2 border-white/60 focus:outline-hidden"
+          className="flex h-12 w-12 sm:h-13 sm:w-13 items-center justify-center rounded-full bg-[#18181B] text-white shadow-lg hover:bg-black hover:scale-105 active:scale-95 transition-all duration-200 border border-white/20 focus:outline-hidden"
           title="Abrir OdontoIA Copilot"
           aria-label="Abrir assistente virtual OdontoIA"
         >
-          {isOpen ? <X className="h-5 w-5 sm:h-6 sm:w-6" /> : <Sparkles className="h-5 w-5 sm:h-6 sm:w-6" />}
+          {isOpen ? <X className="h-5 w-5 sm:h-6 sm:w-6" /> : <Sparkles className="h-5 w-5 sm:h-6 sm:w-6 text-amber-300" />}
         </button>
       </div>
 
-      {/* Painel do Chat (Drawer Deslizante) */}
+      {/* Painel do Chat */}
       {isOpen && (
         <>
           {/* Backdrop para mobile */}
           <div
-            className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-xs sm:hidden"
+            className="fixed inset-0 z-40 bg-black/30 backdrop-blur-xs sm:hidden"
             onClick={() => setIsOpen(false)}
           />
 
-          <div className="fixed bottom-18 sm:bottom-20 right-3 sm:right-6 z-50 w-[calc(100vw-24px)] sm:w-[420px] h-[min(560px,calc(100dvh-90px))] rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            {/* Header da IA */}
-            <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-gradient-to-r from-slate-900 to-slate-800 text-white">
+          <div className="fixed bottom-18 sm:bottom-22 right-3 sm:right-6 z-50 w-[calc(100vw-24px)] sm:w-[420px] h-[min(560px,calc(100dvh-90px))] rounded-3xl border border-[#EFECE6] bg-[#FBF9F5] shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-[#EFECE6] bg-white">
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  <img
-                    src="/logo.jpg"
-                    alt="OdontoPrint Logo"
-                    className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl object-contain bg-white p-1 border border-white/20 shadow-xs shrink-0"
-                  />
-                  <span className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-slate-900">
-                    <span className="h-1.5 w-1.5 rounded-full bg-white"></span>
+                  <div className="h-10 w-10 rounded-full bg-[#18181B] text-white flex items-center justify-center font-bold text-sm">
+                    <Sparkles className="h-5 w-5 text-amber-300" />
+                  </div>
+                  <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-white">
+                    <span className="h-1 w-1 rounded-full bg-white"></span>
                   </span>
                 </div>
                 <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-sm tracking-tight">OdontoIA Copilot</span>
-                    <Badge variant="secondary" className="bg-brand-500/20 text-brand-300 border-brand-400/30 text-[9px] py-0 px-1.5 flex items-center gap-1">
-                      <span>{aiProvider}</span>
-                      {isRenderKey && (
-                        <span className="text-[8px] bg-emerald-500/30 text-emerald-300 px-1 py-0.2 rounded font-semibold">
-                          Render
-                        </span>
-                      )}
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-sm text-[#18181B] tracking-tight">OdontoIA</span>
+                    <Badge variant="outline" className="rounded-full border-[#E2DDD5] text-[10px] px-2 py-0">
+                      {aiProvider}
                     </Badge>
                   </div>
                   <div className="flex items-center gap-1 mt-1">
                     <button
                       type="button"
                       onClick={() => handleToggleProvider("GEMINI")}
-                      className={`px-2 py-0.5 rounded text-[10px] font-semibold transition ${
+                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold transition-all ${
                         aiProvider === "GEMINI"
-                          ? "bg-brand-600 text-white shadow-xs"
-                          : "text-slate-400 hover:text-white bg-slate-800/80"
+                          ? "bg-[#18181B] text-white"
+                          : "bg-[#EFEAE2] text-[#71717A] hover:text-[#18181B]"
                       }`}
-                      title="Usar Google Gemini 3.8 Flash"
                     >
-                      ✨ Gemini 3.8
+                      Gemini 3.8
                     </button>
                     <button
                       type="button"
                       onClick={() => handleToggleProvider("GROQ")}
-                      className={`px-2 py-0.5 rounded text-[10px] font-semibold transition ${
+                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold transition-all ${
                         aiProvider === "GROQ"
-                          ? "bg-amber-600 text-white shadow-xs"
-                          : "text-slate-400 hover:text-white bg-slate-800/80"
+                          ? "bg-[#18181B] text-white"
+                          : "bg-[#EFEAE2] text-[#71717A] hover:text-[#18181B]"
                       }`}
-                      title="Usar Groq Cloud"
                     >
-                      ⚡ Groq
+                      Groq
                     </button>
                   </div>
                 </div>
@@ -228,15 +209,15 @@ export function AICopilotDrawer() {
                 <Link
                   href="/admin/configuracoes"
                   onClick={() => setIsOpen(false)}
-                  className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
-                  title="Configurar Chaves da IA (Gemini / Groq)"
+                  className="p-2 text-[#71717A] hover:text-[#18181B] rounded-full hover:bg-[#EFEAE2] transition"
+                  title="Configurar IA"
                 >
                   <Settings className="w-4 h-4" />
                 </Link>
                 <button
                   type="button"
                   onClick={() => setIsOpen(false)}
-                  className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
+                  className="p-2 text-[#71717A] hover:text-[#18181B] rounded-full hover:bg-[#EFEAE2] transition"
                   aria-label="Fechar assistente"
                 >
                   <X className="w-4 h-4" />
@@ -244,33 +225,33 @@ export function AICopilotDrawer() {
               </div>
             </div>
 
-            {/* Sugestões Rápidas de 1 Clique */}
-            <div className="p-2.5 bg-slate-50 border-b border-slate-100 flex gap-1.5 overflow-x-auto text-[11px] no-scrollbar">
+            {/* Sugestões Rápidas */}
+            <div className="p-2.5 bg-white border-b border-[#EFECE6] flex gap-1.5 overflow-x-auto text-[11px] no-scrollbar">
               <button
                 type="button"
-                onClick={() => handleQuickQuestion("Quais impressoras estão liberadas hoje?")}
-                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-white border border-slate-200 text-slate-700 hover:border-brand-500 hover:text-brand-700 transition shrink-0"
+                onClick={() => handleSend("Quais impressoras estão liberadas hoje?")}
+                className="whitespace-nowrap px-3 py-1 rounded-full bg-[#FBF9F5] border border-[#EFECE6] text-[#2D2A26] hover:bg-[#EFEAE2] transition shrink-0"
               >
-                🖨️ Impressoras liberadas
+                Impressoras liberadas
               </button>
               <button
                 type="button"
-                onClick={() => handleQuickQuestion("Quantos modelos estão aguardando na fila 3D?")}
-                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-white border border-slate-200 text-slate-700 hover:border-brand-500 hover:text-brand-700 transition shrink-0"
+                onClick={() => handleSend("Quantos modelos estão aguardando na fila 3D?")}
+                className="whitespace-nowrap px-3 py-1 rounded-full bg-[#FBF9F5] border border-[#EFECE6] text-[#2D2A26] hover:bg-[#EFEAE2] transition shrink-0"
               >
-                📋 Fila 3D atual
+                Fila atual
               </button>
               <button
                 type="button"
-                onClick={() => handleQuickQuestion("Qual o tempo de calibração recomendado para resina de modelo?")}
-                className="whitespace-nowrap px-2.5 py-1 rounded-full bg-white border border-slate-200 text-slate-700 hover:border-brand-500 hover:text-brand-700 transition shrink-0"
+                onClick={() => handleSend("Qual o tempo de calibração recomendado para resina de modelo?")}
+                className="whitespace-nowrap px-3 py-1 rounded-full bg-[#FBF9F5] border border-[#EFECE6] text-[#2D2A26] hover:bg-[#EFEAE2] transition shrink-0"
               >
-                🧪 Calibrar resina
+                Calibrar resina
               </button>
             </div>
 
-            {/* Área de Mensagens */}
-            <div className="flex-1 p-4 overflow-y-auto space-y-3.5 text-xs bg-slate-50/30">
+            {/* Mensagens */}
+            <div className="flex-1 p-4 overflow-y-auto space-y-3.5 text-xs bg-[#FBF9F5]">
               {messages.map((m) => {
                 const isAssistant = m.role === "assistant";
 
@@ -282,40 +263,39 @@ export function AICopilotDrawer() {
                     }`}
                   >
                     {isAssistant && (
-                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-500 text-white shadow-2xs shrink-0 mt-0.5">
-                        <Bot className="h-4 w-4" />
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#18181B] text-white shrink-0 mt-0.5">
+                        <Bot className="h-3.5 w-3.5" />
                       </div>
                     )}
 
                     <div
                       className={`group relative max-w-[85%] rounded-2xl p-3 leading-relaxed whitespace-pre-wrap ${
                         isAssistant
-                          ? "bg-white text-slate-800 border border-slate-200/80 shadow-2xs"
-                          : "bg-brand-600 text-white font-medium shadow-xs"
+                          ? "bg-white text-[#18181B] border border-[#EFECE6] shadow-xs"
+                          : "bg-[#18181B] text-white font-medium shadow-xs"
                       }`}
                     >
                       {m.content}
                       {isAssistant && m.id !== "welcome" && (
-                        <div className="mt-2 pt-1 border-t border-slate-100 flex justify-end">
+                        <div className="mt-2 pt-1 border-t border-[#EFECE6] flex justify-end">
                           <button
                             type="button"
                             onClick={() => {
                               navigator.clipboard.writeText(m.content);
-                              toast.success("Mensagem copiada para a área de transferência!");
+                              toast.success("Copiado!");
                             }}
-                            className="text-[10px] text-slate-400 hover:text-slate-700 font-medium inline-flex items-center gap-1 transition"
-                            title="Copiar mensagem ou diagnóstico"
+                            className="text-[10px] text-[#71717A] hover:text-[#18181B] font-medium inline-flex items-center gap-1 transition"
                           >
                             <Copy className="w-3 h-3" />
-                            <span>Copiar texto</span>
+                            <span>Copiar</span>
                           </button>
                         </div>
                       )}
                     </div>
 
                     {!isAssistant && (
-                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-200 text-slate-700 shrink-0 mt-0.5">
-                        <User className="h-4 w-4" />
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#EFEAE2] text-[#2D2A26] shrink-0 mt-0.5">
+                        <User className="h-3.5 w-3.5" />
                       </div>
                     )}
                   </div>
@@ -323,9 +303,9 @@ export function AICopilotDrawer() {
               })}
 
               {isSending && (
-                <div className="flex items-center gap-2 text-xs text-slate-400 p-2 bg-white rounded-xl border border-slate-200/60 w-fit">
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-brand-500" />
-                  <span>OdontoIA consultando o laboratório...</span>
+                <div className="flex items-center gap-2 text-xs text-[#71717A] p-2 bg-white rounded-full border border-[#EFECE6] w-fit">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#DE5A35]" />
+                  <span>Consultando...</span>
                 </div>
               )}
 
@@ -338,22 +318,22 @@ export function AICopilotDrawer() {
                 e.preventDefault();
                 handleSend();
               }}
-              className="p-3 border-t border-slate-100 bg-white flex items-center gap-2"
+              className="p-3 border-t border-[#EFECE6] bg-white flex items-center gap-2"
             >
               <input
                 type="text"
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
-                placeholder="Pergunte sobre um paciente ou resina..."
-                className="flex-1 px-3.5 py-2 text-xs rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-brand-500 bg-slate-50/50"
+                placeholder="Digite sua dúvida..."
+                className="flex-1 px-4 py-2 text-xs rounded-full border border-[#E2DDD5] focus:outline-hidden focus:ring-2 focus:ring-[#18181B] bg-[#FBF9F5]"
               />
               <Button
                 type="submit"
                 disabled={!inputText.trim() || isSending}
                 size="sm"
-                className="h-9 w-9 p-0 rounded-xl bg-brand-600 hover:bg-brand-700 shrink-0"
+                className="h-8 w-8 p-0 rounded-full bg-[#18181B] hover:bg-black text-white shrink-0"
               >
-                <Send className="w-4 h-4" />
+                <Send className="w-3.5 h-3.5" />
               </Button>
             </form>
           </div>

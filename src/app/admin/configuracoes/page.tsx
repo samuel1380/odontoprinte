@@ -4,28 +4,23 @@ import React, { useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/shell";
 import { OdontoPrintService } from "@/services/odontoprint-service";
 import { AIService } from "@/services/ai-service";
-import { AIConfig, AIProvider } from "@/types/ai.types";
+import { AIProvider } from "@/types/ai.types";
 import { SystemSettings } from "@/types/database.types";
 import {
-  Settings,
-  Save,
   RefreshCcw,
-  Info,
   Sliders,
   CheckCircle2,
   Sparkles,
-  Bot,
   KeyRound,
   Eye,
   EyeOff,
-  Zap,
-  Check,
   AlertTriangle,
   ExternalLink,
   Copy,
   Database,
+  Save,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -98,12 +93,10 @@ export default function AdminConfiguracoesPage() {
 
         setRenderAiStatus(envStatus);
 
-        // Carrega configurações de IA salvas
         const aiCfg = AIService.getConfig();
         const hasSavedConfig = typeof window !== "undefined" && Boolean(localStorage.getItem("odontoprint_ai_config"));
 
         if (hasSavedConfig) {
-          // Usuário já salvou explicitamente: RESPEITA INTEGRALMENTE a escolha do usuário!
           setAiProvider(aiCfg.provider || "GEMINI");
           setAiModel(
             aiCfg.model ||
@@ -112,7 +105,6 @@ export default function AdminConfiguracoesPage() {
                 : "gemini-3.8-flash")
           );
         } else if (envStatus.preferredProvider) {
-          // Apenas primeira inicialização sem nenhuma preferência salva no navegador
           setAiProvider(envStatus.preferredProvider);
           setAiModel(
             envStatus.preferredProvider === "GROQ"
@@ -137,7 +129,6 @@ export default function AdminConfiguracoesPage() {
     setTestResult(null);
     const newModel = newProvider === "GEMINI" ? "gemini-3.8-flash" : "openai/gpt-oss-120b";
     setAiModel(newModel);
-    // Salva imediatamente para sincronizar instantaneamente com o Copilot
     AIService.saveConfig({
       provider: newProvider,
       apiKey: aiApiKey.trim(),
@@ -146,21 +137,13 @@ export default function AdminConfiguracoesPage() {
     });
   };
 
-  const handleCopyDiagnostic = () => {
-    const report =
-      testResult?.details?.diagnosticReport ||
-      `[DIAGNÓSTICO ODONTOIA]\nProvedor: ${aiProvider}\nModelo: ${aiModel}\nMensagem: ${testResult?.message}`;
-    navigator.clipboard.writeText(report);
-    toast.success("Diagnóstico técnico copiado! Cole aqui no chat para analisarmos.");
-  };
-
   const hasKeyFromRender =
     (aiProvider === "GEMINI" && Boolean(renderAiStatus?.gemini)) ||
     (aiProvider === "GROQ" && Boolean(renderAiStatus?.groq));
 
   const handleTestAi = async () => {
     if (!aiApiKey.trim() && !hasKeyFromRender) {
-      toast.warning("Por favor, digite uma Chave de API ou configure no Render antes de testar.");
+      toast.warning("Digite uma Chave de API ou configure no servidor antes de testar.");
       return;
     }
 
@@ -180,7 +163,7 @@ export default function AdminConfiguracoesPage() {
         toast.error(res.message);
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Erro desconhecido de conexão";
+      const msg = err instanceof Error ? err.message : "Erro de conexão";
       setTestResult({ success: false, message: msg });
       toast.error("Falha ao comunicar com o provedor de IA.");
     } finally {
@@ -200,12 +183,12 @@ export default function AdminConfiguracoesPage() {
         error: res.error,
       });
       if (res.connected) {
-        toast.success("Banco de Dados Supabase conectado! Sincronização em tempo real ativa.");
+        toast.success("Banco de Dados Supabase conectado!");
       } else {
-        toast.error(`Falha no Supabase: ${res.error || "Verifique o RLS."}`);
+        toast.error(`Falha no Supabase: ${res.error || "Verifique permissões."}`);
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Erro desconhecido ao testar Supabase.";
+      const msg = err instanceof Error ? err.message : "Erro desconhecido";
       setDbStatus({
         tested: true,
         configured: false,
@@ -240,13 +223,13 @@ GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;`;
     navigator.clipboard.writeText(sql);
-    toast.success("Script SQL copiado com sucesso! Execute no SQL Editor do Supabase.");
+    toast.success("Script SQL copiado com sucesso!");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (hexagonMin >= hexagonMax) {
-      toast.error("O hexágono mínimo deve ser estritamente menor que o máximo.");
+      toast.error("O hexágono mínimo deve ser menor que o máximo.");
       return;
     }
 
@@ -261,7 +244,6 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
       });
       setSettings(updated);
 
-      // Salva configurações de Inteligência Artificial
       AIService.saveConfig({
         provider: aiProvider,
         apiKey: aiApiKey.trim(),
@@ -269,7 +251,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
         enabled: aiEnabled,
       });
 
-      toast.success("Parâmetros e IA do sistema atualizados com sucesso!");
+      toast.success("Configurações atualizadas!");
     } catch {
       toast.error("Erro ao salvar configurações.");
     } finally {
@@ -283,15 +265,15 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
     setHexagonMax(10.01);
     setNormalPrefix("A");
     setRetryPrefix("00A");
-    toast.info("Valores padrão restaurados no formulário. Clique em 'Salvar' para aplicar.");
+    toast.info("Valores padrão restaurados.");
   };
 
   if (isLoading) {
     return (
       <AppShell>
         <div className="max-w-3xl mx-auto space-y-6">
-          <Skeleton className="h-10 w-64" />
-          <Skeleton className="h-96 w-full rounded-2xl" />
+          <Skeleton className="h-10 w-64 rounded-full" />
+          <Skeleton className="h-96 w-full rounded-3xl" />
         </div>
       </AppShell>
     );
@@ -301,13 +283,13 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
     <AppShell>
       <div className="max-w-3xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[#EFECE6] pb-4">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-              Configurações do Sistema
+            <h1 className="text-xl sm:text-2xl font-bold text-[#18181B] tracking-tight">
+              Configurações
             </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Ajuste limites de calibração, janelas de manutenção de impressoras e parâmetros operacionais.
+            <p className="text-xs text-[#71717A] mt-0.5">
+              Parâmetros operacionais, banco de dados e inteligência artificial
             </p>
           </div>
 
@@ -316,7 +298,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
             variant="outline"
             size="sm"
             onClick={handleResetDefaults}
-            className="gap-1 text-xs w-full sm:w-auto justify-center"
+            className="rounded-full gap-1.5 text-xs w-full sm:w-auto border-[#E2DDD5] text-[#2D2A26] hover:bg-[#EFEAE2]"
           >
             <RefreshCcw className="w-3.5 h-3.5" />
             Restaurar Padrões
@@ -325,22 +307,19 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Card 1: Manutenção */}
-          <Card>
+          <Card className="rounded-2xl sm:rounded-3xl border border-[#EFECE6] bg-white shadow-xs">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Sliders className="w-4 h-4 text-brand-500" />
-                1. Prazo de Manutenção Preventiva
+              <CardTitle className="text-base text-[#18181B] flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-[#DE5A35]" />
+                Prazo de Manutenção Preventiva
               </CardTitle>
-              <CardDescription>
-                Quantos dias a impressora pode trabalhar antes de solicitar manutenção (padrão: 7 dias).
-              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="max-w-xs">
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Intervalo Máximo de Manutenção (Dias) *
+                <label className="block text-xs font-semibold text-[#3F3F46] mb-1.5">
+                  Intervalo Máximo (Dias)
                 </label>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <input
                     type="number"
                     min={1}
@@ -348,33 +327,27 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
                     required
                     value={maintenanceDays}
                     onChange={(e) => setMaintenanceDays(Number(e.target.value))}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full px-3.5 py-2 text-sm rounded-full border border-[#E2DDD5] font-semibold text-[#18181B] focus:outline-none focus:ring-2 focus:ring-[#18181B]"
                   />
-                  <span className="text-xs text-slate-500 font-medium">dias corridos</span>
+                  <span className="text-xs text-[#71717A] font-medium shrink-0">dias</span>
                 </div>
-                <p className="text-[11px] text-slate-400 mt-1.5">
-                  Padrão do laboratório: 7 dias. Ultrapassado este prazo, a impressora muda para MANUTENÇÃO VENCIDA.
-                </p>
               </div>
             </CardContent>
           </Card>
 
           {/* Card 2: Tolerância de Calibração */}
-          <Card>
+          <Card className="rounded-2xl sm:rounded-3xl border border-[#EFECE6] bg-white shadow-xs">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Sliders className="w-4 h-4 text-brand-500" />
-                2. Tamanho Aceitável do Hexágono (Calibração)
+              <CardTitle className="text-base text-[#18181B] flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-[#DE5A35]" />
+                Tolerância do Hexágono de Calibração
               </CardTitle>
-              <CardDescription>
-                Medida mínima e máxima no paquímetro para aprovar a resina (padrão: 9.99 mm a 10.01 mm).
-              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-md">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Tamanho Mínimo (mm) *
+                  <label className="block text-xs font-semibold text-[#3F3F46] mb-1.5">
+                    Mínimo (mm)
                   </label>
                   <input
                     type="number"
@@ -382,14 +355,13 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
                     required
                     value={hexagonMin}
                     onChange={(e) => setHexagonMin(Number(e.target.value))}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full px-3.5 py-2 text-sm rounded-full border border-[#E2DDD5] font-mono font-semibold text-[#18181B] focus:outline-none focus:ring-2 focus:ring-[#18181B]"
                   />
-                  <span className="text-[11px] text-slate-400 mt-1 block">Padrão: 9.99 mm</span>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Tamanho Máximo (mm) *
+                  <label className="block text-xs font-semibold text-[#3F3F46] mb-1.5">
+                    Máximo (mm)
                   </label>
                   <input
                     type="number"
@@ -397,67 +369,59 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
                     required
                     value={hexagonMax}
                     onChange={(e) => setHexagonMax(Number(e.target.value))}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full px-3.5 py-2 text-sm rounded-full border border-[#E2DDD5] font-mono font-semibold text-[#18181B] focus:outline-none focus:ring-2 focus:ring-[#18181B]"
                   />
-                  <span className="text-[11px] text-slate-400 mt-1 block">Padrão: 10.01 mm</span>
                 </div>
               </div>
             </CardContent>
           </Card>
 
           {/* Card 3: Nomenclatura */}
-          <Card>
+          <Card className="rounded-2xl sm:rounded-3xl border border-[#EFECE6] bg-white shadow-xs">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Sliders className="w-4 h-4 text-brand-500" />
-                3. Prefixos de Identificação das Peças
+              <CardTitle className="text-base text-[#18181B] flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-[#DE5A35]" />
+                Prefixos de Identificação
               </CardTitle>
-              <CardDescription>
-                Letras iniciais geradas para peças normais e para repetições.
-              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-md">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Prefixo Normal (ex: A001) *
+                  <label className="block text-xs font-semibold text-[#3F3F46] mb-1.5">
+                    Prefixo Normal
                   </label>
                   <input
                     type="text"
                     required
                     value={normalPrefix}
                     onChange={(e) => setNormalPrefix(e.target.value)}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 uppercase"
+                    className="w-full px-3.5 py-2 text-sm rounded-full border border-[#E2DDD5] font-mono font-semibold text-[#18181B] focus:outline-none focus:ring-2 focus:ring-[#18181B] uppercase"
                   />
-                  <span className="text-[11px] text-slate-400 mt-1 block">Exemplo gerado: {normalPrefix}001</span>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Prefixo Reimpressão (ex: 00A001) *
+                  <label className="block text-xs font-semibold text-[#3F3F46] mb-1.5">
+                    Prefixo Reimpressão
                   </label>
                   <input
                     type="text"
                     required
                     value={retryPrefix}
                     onChange={(e) => setRetryPrefix(e.target.value)}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 font-mono font-bold text-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-500 uppercase"
+                    className="w-full px-3.5 py-2 text-sm rounded-full border border-[#E2DDD5] font-mono font-semibold text-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-500 uppercase"
                   />
-                  <span className="text-[11px] text-slate-400 mt-1 block">Exemplo gerado: {retryPrefix}001</span>
                 </div>
               </div>
             </CardContent>
           </Card>
 
           {/* Card 4: Status do Banco de Dados & Sincronização em Nuvem (Supabase) */}
-          <Card className="border border-slate-200/90 bg-white shadow-2xs">
-            <CardHeader className="pb-3 border-b border-slate-100">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base flex items-center gap-2 text-slate-900">
-                  <div className="w-7 h-7 rounded-lg bg-slate-900 flex items-center justify-center text-white shadow-2xs">
-                    <Database className="w-4 h-4" />
-                  </div>
-                  4. Sincronização em Nuvem & Banco de Dados (Supabase)
+          <Card className="rounded-2xl sm:rounded-3xl border border-[#EFECE6] bg-white shadow-xs">
+            <CardHeader className="pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <CardTitle className="text-base flex items-center gap-2 text-[#18181B]">
+                  <Database className="w-4 h-4 text-[#DE5A35]" />
+                  Banco de Dados & Nuvem (Supabase)
                 </CardTitle>
                 <Button
                   type="button"
@@ -465,250 +429,131 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
                   variant="outline"
                   onClick={handleTestDatabase}
                   disabled={isTestingDb}
-                  className="h-8 text-xs font-semibold gap-1.5 bg-white hover:bg-sky-50 border-sky-300 text-sky-800"
+                  className="rounded-full h-8 text-xs font-medium gap-1.5 border-[#E2DDD5] text-[#2D2A26] hover:bg-[#EFEAE2]"
                 >
                   <RefreshCcw className={`w-3.5 h-3.5 ${isTestingDb ? "animate-spin" : ""}`} />
-                  {isTestingDb ? "Testando..." : "Testar Conexão Supabase"}
+                  {isTestingDb ? "Testando..." : "Testar Conexão"}
                 </Button>
               </div>
-              <CardDescription className="text-xs text-slate-600 mt-1">
-                Verifique se o seu PC e o seu Celular estão conectados ao mesmo banco na nuvem para garantir que tudo seja salvo e sincronizado.
-              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 pt-4 text-xs">
+            <CardContent className="space-y-4 pt-1 text-xs">
               {dbStatus ? (
                 <div
-                  className={`p-3.5 rounded-xl border ${
+                  className={`p-3.5 rounded-2xl border ${
                     dbStatus.connected
                       ? "bg-emerald-50/80 border-emerald-200 text-emerald-900"
                       : "bg-rose-50/80 border-rose-200 text-rose-900"
                   }`}
                 >
-                  <div className="flex items-start gap-2.5">
-                    {dbStatus.connected ? (
-                      <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-                    ) : (
-                      <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-                    )}
-                    <div className="space-y-1">
-                      <div className="font-bold text-sm">
-                        {dbStatus.connected
-                          ? "Banco Supabase Conectado e Sincronizado!"
-                          : "Atenção: Falha na Sincronização com o Supabase"}
-                      </div>
-                      <p className="leading-relaxed">
-                        {dbStatus.connected
-                          ? "As impressoras, lotes de resina e pedidos estão gravando diretamente na nuvem e ficarão visíveis simultaneamente no PC e no Celular."
-                          : `O banco respondeu com erro: "${dbStatus.error}". Para desbloquear leituras e gravações do app, execute o script SQL de liberação.`}
-                      </p>
-                      {!dbStatus.connected && (
-                        <div className="pt-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="destructive"
-                            onClick={handleCopyUnlockSql}
-                            className="gap-1.5 font-bold"
-                          >
-                            <Copy className="w-4 h-4" />
-                            Copiar Script de Liberação (SQL Editor do Supabase)
-                          </Button>
-                        </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      {dbStatus.connected ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      ) : (
+                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
                       )}
+                      <span className="font-semibold text-xs">
+                        {dbStatus.connected
+                          ? "Supabase conectado e sincronizado"
+                          : `Falha na conexão: ${dbStatus.error || "Verifique permissões"}`}
+                      </span>
                     </div>
+                    {!dbStatus.connected && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        onClick={handleCopyUnlockSql}
+                        className="rounded-full h-7 text-xs gap-1"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        Copiar SQL
+                      </Button>
+                    )}
                   </div>
                 </div>
               ) : (
-                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between">
-                  <div className="text-slate-600">
-                    <span className="font-semibold text-slate-800 block mb-0.5">Diagnóstico de Nuvem</span>
-                    Clique no botão acima para testar a comunicação em tempo real entre o app e as tabelas do Supabase.
-                  </div>
+                <div className="p-3.5 rounded-2xl bg-[#FBF9F5] border border-[#EFECE6] flex items-center justify-between">
+                  <span className="text-[#71717A]">Clique em testar para validar o Supabase</span>
                   <Button
                     type="button"
                     size="sm"
                     variant="secondary"
                     onClick={handleTestDatabase}
                     disabled={isTestingDb}
-                    className="gap-1 font-semibold text-xs"
+                    className="rounded-full bg-[#18181B] text-white hover:bg-black h-7 text-xs"
                   >
-                    <Check className="w-3.5 h-3.5" />
-                    Testar Agora
+                    Testar
                   </Button>
                 </div>
               )}
-
-              <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-[11px] text-slate-600 flex items-start justify-between gap-3">
-                <div className="space-y-0.5">
-                  <div className="font-semibold text-slate-800">Script de Desbloqueio de RLS:</div>
-                  <div>
-                    Caso cadastre algo no PC e não veja no celular, execute o script <code>supabase/LIBERAR_BANCO_SEM_BLOQUEIOS.sql</code> para remover travas de segurança por linha (RLS) no Supabase.
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCopyUnlockSql}
-                  className="shrink-0 h-7 text-[11px] gap-1"
-                >
-                  <Copy className="w-3 h-3" />
-                  Copiar SQL
-                </Button>
-              </div>
             </CardContent>
           </Card>
 
           {/* Card 5: Inteligência Artificial (Gemini / Groq) */}
-          <Card className="border border-slate-200/90 bg-white shadow-2xs">
-            <CardHeader className="pb-3 border-b border-slate-100">
+          <Card className="rounded-2xl sm:rounded-3xl border border-[#EFECE6] bg-white shadow-xs">
+            <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base flex items-center gap-2 text-slate-900">
-                  <div className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center text-white shadow-2xs">
-                    <Sparkles className="w-4 h-4" />
-                  </div>
-                  5. Inteligência Artificial do Laboratório (Gemini & Groq)
+                <CardTitle className="text-base flex items-center gap-2 text-[#18181B]">
+                  <Sparkles className="w-4 h-4 text-[#DE5A35]" />
+                  Inteligência Artificial
                 </CardTitle>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-slate-600">Copiloto Ativo:</span>
+                  <span className="text-xs text-[#71717A]">Ativo:</span>
                   <button
                     type="button"
                     onClick={() => setAiEnabled(!aiEnabled)}
-                    className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors duration-200 ease-in-out ${
-                      aiEnabled ? "bg-brand-600" : "bg-slate-300"
+                    className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors duration-200 ${
+                      aiEnabled ? "bg-[#18181B]" : "bg-[#E2DDD5]"
                     }`}
                   >
                     <div
-                      className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${
+                      className={`bg-white w-4 h-4 rounded-full shadow-sm transform transition-transform duration-200 ${
                         aiEnabled ? "translate-x-5" : "translate-x-0"
                       }`}
                     />
                   </button>
                 </div>
               </div>
-              <CardDescription className="text-xs text-slate-600 mt-1">
-                Conecte a IA para recomendar calibragem ideal de resina por impressora e responder dúvidas da equipe sobre o status dos trabalhos em tempo real.
-              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-5 pt-4">
-              {/* Banner de Status das Chaves do Render */}
-              <div className="p-3.5 rounded-xl border border-indigo-200/90 bg-indigo-50/60 text-xs">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-bold text-indigo-950 flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-indigo-600" />
-                    Chaves de IA no Servidor (Render / Variáveis de Ambiente):
-                  </span>
-                  <Badge variant="outline" className="text-[10px] bg-white border-indigo-200 text-indigo-700">
-                    Sincronizado com Render
-                  </Badge>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                  <div className="flex items-center justify-between p-2 rounded-lg bg-white border border-indigo-100">
-                    <span className="font-semibold text-slate-700">Groq (GROQ_API_KEY):</span>
-                    {renderAiStatus?.groq ? (
-                      <Badge className="bg-emerald-600 text-white text-[10px]">
-                        Ativa ({renderAiStatus.groqMasked})
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-slate-400 text-[10px]">
-                        Não detectada
-                      </Badge>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between p-2 rounded-lg bg-white border border-indigo-100">
-                    <span className="font-semibold text-slate-700">Google Gemini (GEMINI_API_KEY):</span>
-                    {renderAiStatus?.gemini ? (
-                      <Badge className="bg-emerald-600 text-white text-[10px]">
-                        Ativa ({renderAiStatus.geminiMasked})
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-slate-400 text-[10px]">
-                        Não detectada
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-                {(renderAiStatus?.groq || renderAiStatus?.gemini) ? (
-                  <p className="mt-2 text-[11px] text-emerald-700 font-medium flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    As chaves configuradas no Render estão ativas! Você pode usar a IA e testar sem precisar digitar nada no navegador.
-                  </p>
-                ) : (
-                  <p className="mt-2 text-[11px] text-slate-500">
-                    Dica: No dashboard do Render, defina <code className="text-indigo-600 font-mono">GROQ_API_KEY</code> e/ou <code className="text-indigo-600 font-mono">GEMINI_API_KEY</code> em Environment Variables.
-                  </p>
-                )}
-              </div>
-
-              {/* Seletor de Provedor */}
+            <CardContent className="space-y-4 pt-1">
+              {/* Segmented Controls for Provider */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-2">
-                  Selecione o Provedor de IA
+                <label className="block text-xs font-semibold text-[#3F3F46] mb-2">
+                  Provedor
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Google Gemini (PRIORIDADE #1) */}
-                  <div
+                <div className="inline-flex p-1 bg-[#F5F2EB] rounded-full border border-[#EFECE6]">
+                  <button
+                    type="button"
                     onClick={() => handleProviderChange("GEMINI")}
-                    className={`cursor-pointer rounded-xl border-2 p-3 transition-all ${
+                    className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
                       aiProvider === "GEMINI"
-                        ? "border-blue-600 bg-blue-50/70 shadow-sm ring-1 ring-blue-500/20"
-                        : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50"
+                        ? "bg-[#18181B] text-white shadow-xs"
+                        : "text-[#71717A] hover:text-[#18181B]"
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <Sparkles className="w-4 h-4 text-blue-600" />
-                        <span className="text-sm font-bold text-slate-900">Google Gemini</span>
-                      </div>
-                      {aiProvider === "GEMINI" ? (
-                        <Badge className="bg-blue-600 text-white text-[10px] px-1.5 py-0 h-4">
-                          Ativo ⭐
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-blue-700 border-blue-300 text-[9px] px-1 py-0 h-4">
-                          Prioritário
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-slate-600 leading-relaxed">
-                      Motor principal oficial com <strong>Gemini 3.8 Flash</strong>. Alta capacidade analítica e raciocínio para calibragem e laboratório.
-                    </p>
-                  </div>
-
-                  {/* Groq */}
-                  <div
+                    Google Gemini 3.8
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => handleProviderChange("GROQ")}
-                    className={`cursor-pointer rounded-xl border-2 p-3 transition-all ${
+                    className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
                       aiProvider === "GROQ"
-                        ? "border-brand-600 bg-brand-50/70 shadow-sm ring-1 ring-brand-500/20"
-                        : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50"
+                        ? "bg-[#18181B] text-white shadow-xs"
+                        : "text-[#71717A] hover:text-[#18181B]"
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <Zap className="w-4 h-4 text-amber-500" />
-                        <span className="text-sm font-bold text-slate-900">Groq Cloud</span>
-                      </div>
-                      {aiProvider === "GROQ" && (
-                        <Badge className="bg-brand-600 text-white text-[10px] px-1.5 py-0 h-4">
-                          Ativo
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-slate-600 leading-relaxed">
-                      Aceleração LPU ultra-rápida (&lt; 0.5s) com modelos ativos: <strong>OpenAI GPT-OSS 120B/20B</strong> e <strong>Qwen 3.8</strong>.
-                    </p>
-                  </div>
+                    Groq Cloud
+                  </button>
                 </div>
               </div>
 
               {/* Chave de API */}
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                    <KeyRound className="w-3.5 h-3.5 text-slate-500" />
-                    Chave de API ({aiProvider === "GROQ" ? "Groq" : "Google AI Studio"})
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-[#3F3F46] flex items-center gap-1.5">
+                    <KeyRound className="w-3.5 h-3.5 text-[#71717A]" />
+                    Chave de API
                   </label>
                   <a
                     href={
@@ -718,9 +563,9 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
                     }
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[11px] text-brand-600 hover:text-brand-700 font-medium inline-flex items-center gap-1 hover:underline"
+                    className="text-[11px] text-[#DE5A35] font-medium inline-flex items-center gap-1 hover:underline"
                   >
-                    Obter chave gratuita <ExternalLink className="w-3 h-3" />
+                    Obter chave <ExternalLink className="w-3 h-3" />
                   </a>
                 </div>
                 <div className="relative">
@@ -729,22 +574,19 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
                     value={aiApiKey}
                     onChange={(e) => setAiApiKey(e.target.value)}
                     placeholder={
-                      aiProvider === "GROQ" && renderAiStatus?.groq
-                        ? `Chave ativa via Render (${renderAiStatus.groqMasked})`
-                        : aiProvider === "GEMINI" && renderAiStatus?.gemini
-                        ? `Chave ativa via Render (${renderAiStatus.geminiMasked})`
+                      hasKeyFromRender
+                        ? "Chave ativa no servidor"
                         : aiProvider === "GROQ"
-                        ? "gsk_... (ou deixe em branco para usar do Render)"
-                        : "AIzaSy... (ou deixe em branco para usar do Render)"
+                        ? "gsk_..."
+                        : "AIzaSy..."
                     }
-                    className="w-full pl-3.5 pr-24 py-2 text-xs rounded-lg border border-slate-200 font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full pl-3.5 pr-24 py-2 text-xs rounded-full border border-[#E2DDD5] font-mono text-[#18181B] focus:outline-none focus:ring-2 focus:ring-[#18181B]"
                   />
-                  <div className="absolute right-1 top-1 flex items-center gap-1">
+                  <div className="absolute right-1.5 top-1 flex items-center gap-1">
                     <button
                       type="button"
                       onClick={() => setShowApiKey(!showApiKey)}
-                      className="p-1.5 text-slate-400 hover:text-slate-600 rounded text-xs"
-                      title={showApiKey ? "Ocultar Chave" : "Mostrar Chave"}
+                      className="p-1.5 text-[#71717A] hover:text-[#18181B] rounded-full text-xs"
                     >
                       {showApiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                     </button>
@@ -754,153 +596,83 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
                       variant="secondary"
                       disabled={isTestingAi || (!aiApiKey.trim() && !hasKeyFromRender)}
                       onClick={handleTestAi}
-                      className="h-7 text-[11px] px-2.5 font-semibold gap-1"
+                      className="h-7 text-[11px] px-3 rounded-full font-semibold bg-[#EFEAE2] hover:bg-[#E5DFD5] text-[#2D2A26]"
                     >
                       {isTestingAi ? (
-                        <>
-                          <RefreshCcw className="w-3 h-3 animate-spin" />
-                          Testando...
-                        </>
+                        <RefreshCcw className="w-3 h-3 animate-spin" />
                       ) : (
-                        <>
-                          <Check className="w-3 h-3" />
-                          Testar
-                        </>
+                        "Testar"
                       )}
                     </Button>
                   </div>
                 </div>
-                <p className="text-[11px] text-slate-500 mt-1">
-                  {hasKeyFromRender && !aiApiKey.trim()
-                    ? "✅ A chave está ativa nas Variáveis de Ambiente do Render! Não é necessário digitar nada aqui."
-                    : "Sua chave é armazenada com segurança e utilizada exclusivamente nas requisições do sistema."}
-                </p>
               </div>
 
               {/* Modelo de IA */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Modelo Selecionado
+                <label className="block text-xs font-semibold text-[#3F3F46] mb-1.5">
+                  Modelo
                 </label>
                 <input
                   type="text"
                   value={aiModel}
                   onChange={(e) => setAiModel(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="w-full px-3.5 py-2 text-xs rounded-full border border-[#E2DDD5] font-mono text-[#18181B] focus:outline-none focus:ring-2 focus:ring-[#18181B]"
                 />
                 <div className="flex flex-wrap gap-1.5 mt-2">
-                  <span className="text-[10px] text-slate-400 self-center mr-1">Sugestões:</span>
                   {aiProvider === "GROQ" ? (
                     <>
                       <button
                         type="button"
                         onClick={() => setAiModel("openai/gpt-oss-120b")}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors font-medium"
+                        className="text-[11px] px-3 py-1 rounded-full bg-[#EFEAE2] text-[#2D2A26] font-mono font-medium hover:bg-[#E5DFD5] transition-colors"
                       >
-                        openai/gpt-oss-120b (Padrão Ativo ⭐)
+                        openai/gpt-oss-120b
                       </button>
                       <button
                         type="button"
                         onClick={() => setAiModel("qwen/qwen3.8-27b")}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors font-medium"
+                        className="text-[11px] px-3 py-1 rounded-full bg-[#EFEAE2] text-[#2D2A26] font-mono font-medium hover:bg-[#E5DFD5] transition-colors"
                       >
-                        qwen/qwen3.8-27b (Qwen 3.8 Ativo)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAiModel("openai/gpt-oss-20b")}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors font-medium"
-                      >
-                        openai/gpt-oss-20b (Ultra Rápido Ativo)
+                        qwen/qwen3.8-27b
                       </button>
                     </>
                   ) : (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setAiModel("gemini-3.8-flash")}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 hover:bg-blue-100 hover:text-blue-800 text-blue-700 font-mono font-semibold transition-colors"
-                      >
-                        gemini-3.8-flash (Modelo Oficial 3.8 ⭐)
-                      </button>
-                    </>
+                    <button
+                      type="button"
+                      onClick={() => setAiModel("gemini-3.8-flash")}
+                      className="text-[11px] px-3 py-1 rounded-full bg-[#EFEAE2] text-[#2D2A26] font-mono font-medium hover:bg-[#E5DFD5] transition-colors"
+                    >
+                      gemini-3.8-flash
+                    </button>
                   )}
                 </div>
               </div>
 
-              {/* Status do Teste de Conexão com Diagnóstico Detalhado */}
+              {/* Status do Teste de Conexão */}
               {testResult && (
                 <div
-                  className={`p-4 rounded-xl border text-xs transition-all space-y-3 ${
+                  className={`p-3.5 rounded-2xl border text-xs flex items-center justify-between ${
                     testResult.success
                       ? "bg-emerald-50/90 border-emerald-300 text-emerald-900"
                       : "bg-rose-50/90 border-rose-300 text-rose-900"
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      {testResult.success ? (
-                        <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                      ) : (
-                        <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
-                      )}
-                      <div>
-                        <span className="font-bold text-sm block">
-                          {testResult.success
-                            ? "Conexão Estabelecida com Sucesso!"
-                            : "Aviso / Falha na Conexão com a IA"}
-                        </span>
-                        <span className="text-xs text-slate-700">{testResult.message}</span>
-                      </div>
-                    </div>
-                    {testResult.latency !== undefined && (
-                      <Badge
-                        variant="outline"
-                        className={`font-mono text-[10px] shrink-0 ${
-                          testResult.success
-                            ? "bg-white border-emerald-300 text-emerald-700"
-                            : "bg-white border-rose-300 text-rose-700"
-                        }`}
-                      >
-                        ⚡ {testResult.latency}ms
-                      </Badge>
+                  <div className="flex items-center gap-2">
+                    {testResult.success ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
                     )}
+                    <span className="font-semibold">{testResult.message}</span>
                   </div>
-
-                  {/* Relatório Técnico de Diagnóstico e Botão de Cópia */}
-                  {testResult.details?.diagnosticReport && (
-                    <div className="pt-2 border-t border-slate-200/60">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="font-semibold text-[11px] text-slate-700 flex items-center gap-1">
-                          <Info className="w-3.5 h-3.5 text-slate-500" />
-                          Relatório Técnico de Diagnóstico (Pronto para copiar):
-                        </span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={handleCopyDiagnostic}
-                          className="h-7 text-[11px] px-2.5 font-semibold gap-1.5 bg-white hover:bg-slate-50 border-slate-300 text-slate-700 shadow-xs cursor-pointer"
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                          Copiar Diagnóstico
-                        </Button>
-                      </div>
-                      <pre className="bg-slate-950 text-slate-100 p-3 rounded-lg font-mono text-[11px] overflow-x-auto whitespace-pre-wrap select-all leading-relaxed border border-slate-800">
-                        {testResult.details.diagnosticReport}
-                      </pre>
-                    </div>
+                  {testResult.latency !== undefined && (
+                    <Badge variant="outline" className="rounded-full bg-white border-[#E2DDD5] text-xs">
+                      {testResult.latency}ms
+                    </Badge>
                   )}
                 </div>
               )}
-
-              {/* Fallback Info */}
-              <div className="p-3 rounded-lg bg-amber-50/70 border border-amber-200/80 text-[11px] text-amber-900 flex items-start gap-2">
-                <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <strong>Modo Inteligente sem Chave de API:</strong> Se você ainda não cadastrou a chave, não se preocupe! O Copiloto OdontoPrint continuará respondendo perguntas sobre os pacientes, pedidos, impressoras e resinas com base no banco de dados ativo do laboratório.
-                </div>
-              </div>
             </CardContent>
           </Card>
 
@@ -910,10 +682,10 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
               type="submit"
               size="lg"
               disabled={isSaving}
-              className="gap-2 font-bold px-8"
+              className="rounded-full bg-[#18181B] text-white hover:bg-black font-semibold px-8 h-11"
             >
-              <Save className="w-4 h-4" />
-              {isSaving ? "Salvando Parâmetros..." : "Salvar Configurações"}
+              <Save className="w-4 h-4 mr-2" />
+              {isSaving ? "Salvando..." : "Salvar Configurações"}
             </Button>
           </div>
         </form>

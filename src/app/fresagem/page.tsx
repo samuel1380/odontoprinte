@@ -104,66 +104,63 @@ export default function FresagemPage() {
     <AppShell>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[#EFECE6] pb-4">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-bold text-[#18181B] tracking-tight">
               Fila de Fresagem CNC
             </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Peças desenhadas pelo Cadista em Zircônia, PMMA ou cera para usinagem nas fresadoras.
+            <p className="text-xs text-[#716D66] mt-0.5">
+              Usinagem de peças em Zircônia e PMMA.
             </p>
           </div>
 
-          <div className="text-xs text-slate-500">
-            Operador: <span className="font-semibold text-slate-800">{user?.full_name || "Operador"}</span>
+          <div className="text-xs text-[#716D66] bg-[#EFEAE2] px-3.5 py-1.5 rounded-full w-fit">
+            Operador: <span className="font-semibold text-[#18181B]">{user?.full_name || "Operador"}</span>
           </div>
         </div>
 
         {/* KPIs */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="p-3.5 rounded-xl border border-slate-200/90 bg-white shadow-2xs flex items-center justify-between">
+          <div className="p-4 rounded-2xl sm:rounded-3xl border border-[#EFECE6] bg-white flex items-center justify-between">
             <div>
-              <span className="text-xs font-semibold text-slate-600">Aguardando Fresagem</span>
-              <div className="text-2xl font-bold text-slate-900 mt-0.5">{countPending}</div>
-              <span className="text-[11px] text-slate-400">Projetos CAD prontos</span>
+              <span className="text-xs font-semibold text-[#716D66]">Aguardando Fresagem</span>
+              <div className="text-2xl font-bold text-[#18181B] mt-0.5">{countPending}</div>
             </div>
-            <Disc className="w-6 h-6 text-purple-400" />
+            <Disc className="w-5 h-5 text-[#716D66]" />
           </div>
 
-          <div className="p-3.5 rounded-xl border border-slate-200/90 bg-white shadow-2xs flex items-center justify-between">
+          <div className="p-4 rounded-2xl sm:rounded-3xl border border-[#EFECE6] bg-white flex items-center justify-between">
             <div>
-              <span className="text-xs font-semibold text-slate-600">Em Usinagem CNC</span>
-              <div className="text-2xl font-bold text-slate-900 mt-0.5">{countMilling}</div>
-              <span className="text-[11px] text-slate-400">Fresadoras em operação</span>
+              <span className="text-xs font-semibold text-[#716D66]">Em Usinagem</span>
+              <div className="text-2xl font-bold text-[#18181B] mt-0.5">{countMilling}</div>
             </div>
-            <Cog className="w-6 h-6 text-blue-400 animate-spin" />
+            <Cog className="w-5 h-5 text-[#DE5A35] animate-spin" />
           </div>
 
-          <div className="p-3.5 rounded-xl border border-slate-200/90 bg-white shadow-2xs flex items-center justify-between">
+          <div className="p-4 rounded-2xl sm:rounded-3xl border border-[#EFECE6] bg-white flex items-center justify-between">
             <div>
-              <span className="text-xs font-semibold text-slate-600">Fresados & Despachados</span>
-              <div className="text-2xl font-bold text-slate-900 mt-0.5">{countFinished}</div>
-              <span className="text-[11px] text-slate-400">Enviados para Acabamento</span>
+              <span className="text-xs font-semibold text-[#716D66]">Concluídos</span>
+              <div className="text-2xl font-bold text-[#18181B] mt-0.5">{countFinished}</div>
             </div>
-            <Sparkles className="w-6 h-6 text-emerald-400" />
+            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
           </div>
         </div>
 
         {/* Search */}
-        <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-between gap-3">
+        <div className="bg-white p-2.5 sm:p-3 rounded-2xl sm:rounded-3xl border border-[#EFECE6] flex items-center justify-between gap-3">
           <div className="relative w-full sm:w-72">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <Search className="w-4 h-4 text-[#716D66] absolute left-3.5 top-3" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Filtrar por paciente..."
-              className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-purple-500 bg-slate-50/50"
+              placeholder="Buscar por paciente..."
+              className="w-full pl-9 pr-4 py-2 text-xs rounded-full border border-[#EFECE6] focus:outline-none focus:ring-2 focus:ring-[#18181B] bg-[#FAF8F5]/60 text-[#18181B]"
             />
           </div>
 
-          <div className="text-xs text-slate-500 font-medium hidden sm:block">
-            {items.length} itens na esteira de fresagem
+          <div className="text-xs text-[#716D66] font-medium hidden sm:block px-2">
+            {items.length} itens na fila
           </div>
         </div>
 
@@ -171,14 +168,14 @@ export default function FresagemPage() {
         {isLoading ? (
           <div className="space-y-4">
             {[1, 2].map((i) => (
-              <Skeleton key={i} className="h-32 w-full rounded-2xl" />
+              <Skeleton key={i} className="h-32 w-full rounded-3xl" />
             ))}
           </div>
         ) : filteredItems.length === 0 ? (
           <EmptyState
             icon={Cog}
             title="Nenhum item na fila de fresagem"
-            description="Quando o Cadista criar trabalhos direcionados para fresagem ou coroas de zircônia/PMMA, eles aparecerão aqui para usinagem."
+            description="Peças direcionadas para usinagem CNC de Zircônia ou PMMA aparecerão aqui."
           />
         ) : (
           <div className="space-y-3">
@@ -194,45 +191,38 @@ export default function FresagemPage() {
                     isDone
                       ? "border-emerald-200 bg-emerald-50/10"
                       : isMilling
-                      ? "border-blue-300 bg-blue-50/20 shadow-2xs"
-                      : "border-slate-200/90 bg-white shadow-2xs"
+                      ? "border-[#18181B] bg-[#FAF8F5]"
+                      : "border-[#EFECE6] bg-white hover:border-[#18181B]/30"
                   }`}
                 >
                   <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2.5">
-                        <span className="font-mono font-black text-base text-slate-900 tracking-wider">
+                        <span className="font-mono font-black text-base text-[#18181B] tracking-wider">
                           {item.patient_code}
                         </span>
                         {item.patient_name && (
-                          <span className="text-xs text-slate-500 font-medium">
+                          <span className="text-xs text-[#716D66] font-medium">
                             &bull; {item.patient_name}
                           </span>
                         )}
-                        <Badge
-                          variant="secondary"
-                          className={
-                            item.material === "ZIRCONIA"
-                              ? "bg-purple-50 text-purple-700 border-purple-200 text-[10px]"
-                              : "bg-blue-50 text-blue-700 border-blue-200 text-[10px]"
-                          }
-                        >
+                        <Badge variant="secondary" className="text-[10px]">
                           {item.material}
                         </Badge>
                       </div>
 
-                      <div className="text-xs font-semibold text-slate-700">
+                      <div className="text-xs font-semibold text-[#18181B]">
                         {FILE_TYPE_LABELS[item.file_type] || item.file_type}
                       </div>
 
                       {item.block_lot && (
-                        <div className="text-[11px] text-slate-500 font-mono">
-                          Lote do Disco: <span className="font-bold text-slate-800">{item.block_lot}</span>
+                        <div className="text-[11px] text-[#716D66] font-mono">
+                          Disco: <span className="font-bold text-[#18181B]">{item.block_lot}</span>
                         </div>
                       )}
 
-                      <div className="text-[10px] text-slate-400">
-                        Criado em: {formatDate(item.created_at)}
+                      <div className="text-[10px] text-[#A19D95]">
+                        {formatDate(item.created_at)}
                       </div>
                     </div>
 
@@ -244,7 +234,7 @@ export default function FresagemPage() {
                           size="sm"
                           className="gap-1.5 font-bold w-full sm:w-auto"
                         >
-                          <Play className="w-3.5 h-3.5" />
+                          <Play className="w-3.5 h-3.5 fill-white" />
                           Iniciar Usinagem
                         </Button>
                       )}
@@ -252,19 +242,18 @@ export default function FresagemPage() {
                       {isMilling && (
                         <Button
                           onClick={() => handleFinalizeMilling(item.id, item.patient_code)}
-                          variant="lime"
+                          variant="default"
                           size="sm"
                           className="gap-1.5 font-bold w-full sm:w-auto"
                         >
                           <Check className="w-4 h-4 stroke-[3]" />
-                          Concluir Fresagem & Enviar para Acabamento
+                          Concluir Fresagem
                         </Button>
                       )}
 
                       {isDone && (
-                        <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 gap-1 py-1 px-3">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          Enviado para Maquiagem
+                        <Badge variant="default" className="text-xs">
+                          Concluído
                         </Badge>
                       )}
                     </div>

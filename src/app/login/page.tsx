@@ -199,68 +199,77 @@ export default function LoginPage() {
       </div>
 
       {/* Coluna Direita: Formulário de Autenticação */}
-      <div className="w-full lg:w-1/2 flex flex-col justify-center px-6 py-12 sm:px-12 xl:px-24 bg-white">
-        <div className="mx-auto w-full max-w-sm">
+      {/* Coluna Direita: Formulário de Autenticação */}
+      <div className="w-full lg:w-1/2 flex flex-col justify-center px-4 sm:px-12 xl:px-24 py-12 relative overflow-hidden bg-[#0B0F19] lg:bg-white text-white lg:text-[#1E1C1A]">
+        {/* Efeito de Fundo Exclusivo para Celular */}
+        <div className="absolute inset-0 lg:hidden pointer-events-none">
+          <div className="absolute -top-32 -left-32 w-80 h-80 bg-cyan-500/25 rounded-full blur-3xl animate-pulse" />
+          <div className="absolute -bottom-32 -right-32 w-80 h-80 bg-blue-600/25 rounded-full blur-3xl" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-brand-500/20 rounded-full blur-3xl" />
+          <div className="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.08)_1px,transparent_1px)] [background-size:24px_24px] opacity-40" />
+        </div>
+
+        <div className="relative z-10 mx-auto w-full max-w-sm bg-white/10 backdrop-blur-xl border border-white/15 p-6 sm:p-8 rounded-3xl shadow-2xl lg:bg-transparent lg:backdrop-blur-none lg:border-0 lg:p-0 lg:shadow-none">
           {/* Logo visível em telas menores */}
-          <div className="flex lg:hidden items-center gap-3 mb-8">
+          <div className="flex lg:hidden items-center gap-3 mb-6">
             <img
               src="/logo.jpg"
               alt="Logo OdontoPrint"
-              className="h-11 w-11 rounded-2xl object-contain shadow-xs border border-slate-200 p-0.5 bg-white shrink-0"
+              className="h-10 w-10 rounded-full object-contain border border-white/20 p-0.5 bg-white shrink-0 shadow-md"
             />
             <div>
-              <span className="text-lg font-black tracking-tight text-slate-900">
-                ODONTO<span className="text-brand-600">PRINT</span>
+              <span className="text-base font-black tracking-tight text-white">
+                ODONTO<span className="text-cyan-400">PRINT</span>
               </span>
-              <span className="block text-[9px] uppercase tracking-wider text-slate-400 font-bold">
+              <span className="block text-[8px] uppercase tracking-wider text-slate-300 font-bold">
                 Dental 3D Laboratory
               </span>
             </div>
           </div>
 
           {/* Abas: Acessar Conta vs Solicitar Acesso */}
-          <div className="flex p-1 bg-slate-100 rounded-xl mb-6">
+          <div className="flex p-1 bg-white/10 lg:bg-[#EFEAE2] rounded-full mb-6">
             <button
               type="button"
               onClick={() => setIsRegisterMode(false)}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-semibold rounded-lg transition ${
+              className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-semibold rounded-full transition ${
                 !isRegisterMode
                   ? "bg-white text-slate-900 shadow-xs"
-                  : "text-slate-500 hover:text-slate-900"
+                  : "text-slate-300 lg:text-slate-600 hover:text-white lg:hover:text-slate-900"
               }`}
             >
               <LogIn className="w-3.5 h-3.5" />
-              <span>Acessar Conta</span>
+              <span>Acessar</span>
             </button>
             <button
               type="button"
               onClick={() => setIsRegisterMode(true)}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-semibold rounded-lg transition ${
+              className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-semibold rounded-full transition ${
                 isRegisterMode
                   ? "bg-white text-slate-900 shadow-xs"
-                  : "text-slate-500 hover:text-slate-900"
+                  : "text-slate-300 lg:text-slate-600 hover:text-white lg:hover:text-slate-900"
               }`}
             >
               <UserPlus className="w-3.5 h-3.5" />
-              <span>Primeiro Acesso</span>
+              <span>Solicitar Acesso</span>
             </button>
           </div>
 
           <div className="mb-6">
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900">
-              {isRegisterMode ? "Solicitar Acesso ao Laboratório" : "Acesso à Plataforma"}
+            <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white lg:text-slate-900">
+              {isRegisterMode ? "Solicitar Acesso" : "Entrar na Plataforma"}
             </h2>
-            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+            <p className="text-xs text-slate-300 lg:text-slate-500 mt-1 leading-relaxed">
               {isRegisterMode
-                ? "Preencha seus dados corporativos para enviar a solicitação ao Administrador do laboratório."
-                : "Insira suas credenciais para entrar na central operacional do laboratório."}
+                ? "Preencha seus dados para autorização no laboratório."
+                : "Insira suas credenciais corporativas."}
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {isRegisterMode && (
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label className="block text-xs font-medium text-slate-200 lg:text-slate-700 mb-1.5">
                   Nome Completo
                 </label>
                 <div className="relative">
@@ -271,14 +280,14 @@ export default function LoginPage() {
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     placeholder="Ex: Dra. Camila Soares"
-                    className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-slate-50/50 hover:bg-white transition"
+                    className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm rounded-full border border-white/20 lg:border-[#E2DDD5] bg-white/10 lg:bg-[#FAF8F5] text-white lg:text-[#1E1C1A] placeholder:text-white/40 lg:placeholder:text-[#9E988F] focus:outline-none focus:ring-2 focus:ring-brand-500 transition"
                   />
                 </div>
               </div>
             )}
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+              <label className="block text-xs font-medium text-slate-200 lg:text-slate-700 mb-1.5">
                 E-mail Corporativo
               </label>
               <div className="relative">
@@ -290,14 +299,14 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="seu.nome@odontoprint.com.br"
-                  className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-slate-50/50 hover:bg-white transition"
+                  className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm rounded-full border border-white/20 lg:border-[#E2DDD5] bg-white/10 lg:bg-[#FAF8F5] text-white lg:text-[#1E1C1A] placeholder:text-white/40 lg:placeholder:text-[#9E988F] focus:outline-none focus:ring-2 focus:ring-brand-500 transition"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                Senha {isRegisterMode && "de Acesso"}
+              <label className="block text-xs font-medium text-slate-200 lg:text-slate-700 mb-1.5">
+                Senha
               </label>
 
               <div className="relative">
@@ -308,12 +317,12 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
-                  className="w-full pl-10 pr-10 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-slate-50/50 hover:bg-white transition"
+                  className="w-full pl-10 pr-10 py-2.5 text-xs sm:text-sm rounded-full border border-white/20 lg:border-[#E2DDD5] bg-white/10 lg:bg-[#FAF8F5] text-white lg:text-[#1E1C1A] placeholder:text-white/40 lg:placeholder:text-[#9E988F] focus:outline-none focus:ring-2 focus:ring-brand-500 transition"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 p-0.5"
+                  className="absolute right-3.5 top-2.5 text-slate-400 hover:text-white lg:hover:text-slate-700 p-0.5"
                   title={showPassword ? "Ocultar senha" : "Exibir senha"}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -323,21 +332,18 @@ export default function LoginPage() {
 
             {isRegisterMode && (
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1.5">
-                  <Briefcase className="w-3.5 h-3.5 text-slate-500" />
-                  Função / Setor Solicitado
+                <label className="block text-xs font-medium text-slate-200 lg:text-slate-700 mb-1.5 flex items-center gap-1.5">
+                  <Briefcase className="w-3.5 h-3.5 text-slate-400" />
+                  Função / Setor
                 </label>
                 <select
                   value={requestedRole}
                   onChange={(e) => setRequestedRole(e.target.value as UserRole)}
-                  className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-slate-50/50 hover:bg-white transition font-medium text-slate-800"
+                  className="w-full px-4 py-2.5 text-xs sm:text-sm rounded-full border border-white/20 lg:border-[#E2DDD5] bg-white/10 lg:bg-[#FAF8F5] text-white lg:text-[#1E1C1A] focus:outline-none focus:ring-2 focus:ring-brand-500 transition font-medium"
                 >
-                  <option value="CADISTA">Cadista (Design / Modelagem CAD)</option>
-                  <option value="OPERADOR_IMPRESSAO">Operador de Impressão 3D & Resinas</option>
+                  <option value="CADISTA" className="text-slate-900">Cadista (Design CAD)</option>
+                  <option value="OPERADOR_IMPRESSAO" className="text-slate-900">Operador de Impressão 3D & Resinas</option>
                 </select>
-                <p className="text-[11px] text-slate-500 mt-1">
-                  Selecione sua função técnica. O Administrador avaliará seu acesso.
-                </p>
               </div>
             )}
 
@@ -350,7 +356,7 @@ export default function LoginPage() {
                     onChange={(e) => setRememberMe(e.target.checked)}
                     className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
                   />
-                  <span className="text-xs text-slate-600">Lembrar neste navegador</span>
+                  <span className="text-xs text-slate-300 lg:text-slate-600">Lembrar neste navegador</span>
                 </label>
               </div>
             )}
@@ -358,35 +364,23 @@ export default function LoginPage() {
             <Button
               type="submit"
               disabled={isSubmitting}
-              className="w-full mt-3 h-11 text-sm font-semibold rounded-xl bg-brand-600 hover:bg-brand-700 text-white shadow-sm gap-2"
+              className="w-full mt-4 h-11 text-xs sm:text-sm font-semibold rounded-full bg-[#18181B] hover:bg-black text-white shadow-md gap-2"
             >
               {isSubmitting ? (
                 <>
                   <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                  <span>{isRegisterMode ? "Enviando solicitação..." : "Verificando credenciais..."}</span>
+                  <span>Aguarde...</span>
                 </>
               ) : (
                 <>
-                  <span>{isRegisterMode ? "Enviar Solicitação de Acesso" : "Entrar no Sistema"}</span>
+                  <span>{isRegisterMode ? "Enviar Solicitação" : "Entrar"}</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
             </Button>
           </form>
 
-          {/* Dica de Acesso */}
-          <div className="mt-6 rounded-xl border border-slate-200/90 bg-slate-50/60 p-3 text-xs text-slate-500">
-            <span className="font-semibold text-slate-700">
-              {isRegisterMode ? "Fluxo de Liberação:" : "Acesso Seguro:"}
-            </span>
-            <p className="mt-0.5 text-[11px] text-slate-500 leading-relaxed">
-              {isRegisterMode
-                ? "Após o envio, a solicitação ficará pendente no painel do Administrador até ser aprovada."
-                : "Acesso restrito à equipe técnica autorizada do laboratório OdontoPrint."}
-            </p>
-          </div>
-
-          <div className="mt-8 pt-6 border-t border-slate-100 flex items-center justify-center gap-2 text-[11px] text-slate-400">
+          <div className="mt-6 pt-4 border-t border-white/10 lg:border-slate-100 flex items-center justify-center gap-2 text-[10px] text-slate-400">
             <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
             <span>Ambiente Seguro Criptografado &bull; TLS 1.3</span>
           </div>

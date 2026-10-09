@@ -126,109 +126,115 @@ export default function AcabamentoPage() {
     <AppShell>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[#EFECE6] pb-4">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-              Bancada de Acabamento & Maquiagem
+            <h1 className="text-xl sm:text-2xl font-bold text-[#18181B] tracking-tight">
+              Bancada de Acabamento
             </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Encaixe dos dentes nos furos dos modelos impressos, verificação de oclusão e aplicação de glaze.
+            <p className="text-xs text-[#716D66] mt-0.5">
+              Encaixe de dentes, conferência de oclusão e controle de qualidade.
             </p>
           </div>
 
-          <div className="text-xs text-slate-500">
-            Técnico: <span className="font-semibold text-slate-800">{user?.full_name || "Técnico"}</span>
+          <div className="text-xs text-[#716D66] bg-[#EFEAE2] px-3.5 py-1.5 rounded-full w-fit">
+            Técnico: <span className="font-semibold text-[#18181B]">{user?.full_name || "Técnico"}</span>
           </div>
         </div>
 
         {/* KPI Strip da Bancada */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="p-3.5 rounded-xl border border-slate-200/90 bg-white shadow-2xs flex items-center justify-between">
+          <div className="p-4 rounded-2xl sm:rounded-3xl border border-[#EFECE6] bg-white flex items-center justify-between">
             <div>
-              <span className="text-xs font-semibold text-slate-600">Aguardando Montagem</span>
-              <div className="text-2xl font-bold text-slate-900 mt-0.5">{countPending}</div>
-              <span className="text-[11px] text-slate-400">Modelos com furos e dentes</span>
+              <span className="text-xs font-semibold text-[#716D66]">Aguardando Montagem</span>
+              <div className="text-2xl font-bold text-[#18181B] mt-0.5">{countPending}</div>
             </div>
-            <div className="h-9 w-9 rounded-lg bg-amber-50 text-amber-700 border border-amber-200/80 flex items-center justify-center font-bold text-xs">
+            <div className="h-8 w-8 rounded-full bg-[#FAF8F5] text-[#18181B] border border-[#EFECE6] flex items-center justify-center font-bold text-xs">
               1
             </div>
           </div>
 
-          <div className="p-3.5 rounded-xl border border-slate-200/90 bg-white shadow-2xs flex items-center justify-between">
+          <div className="p-4 rounded-2xl sm:rounded-3xl border border-[#EFECE6] bg-white flex items-center justify-between">
             <div>
-              <span className="text-xs font-semibold text-slate-600">Em Maquiagem & Glaze</span>
-              <div className="text-2xl font-bold text-slate-900 mt-0.5">{countInMakeup}</div>
-              <span className="text-[11px] text-slate-400">Caracterização estética</span>
+              <span className="text-xs font-semibold text-[#716D66]">Em Maquiagem</span>
+              <div className="text-2xl font-bold text-[#18181B] mt-0.5">{countInMakeup}</div>
             </div>
-            <div className="h-9 w-9 rounded-lg bg-blue-50 text-blue-700 border border-blue-200/80 flex items-center justify-center font-bold text-xs">
+            <div className="h-8 w-8 rounded-full bg-[#FAF8F5] text-[#18181B] border border-[#EFECE6] flex items-center justify-center font-bold text-xs">
               2
             </div>
           </div>
 
-          <div className="p-3.5 rounded-xl border border-slate-200/90 bg-white shadow-2xs flex items-center justify-between">
+          <div className="p-4 rounded-2xl sm:rounded-3xl border border-[#EFECE6] bg-white flex items-center justify-between">
             <div>
-              <span className="text-xs font-semibold text-slate-600">Aprovados no CQ</span>
-              <div className="text-2xl font-bold text-slate-900 mt-0.5">{countApproved}</div>
-              <span className="text-[11px] text-slate-400">Prontos para expedição</span>
+              <span className="text-xs font-semibold text-[#716D66]">Aprovados CQ</span>
+              <div className="text-2xl font-bold text-[#18181B] mt-0.5">{countApproved}</div>
             </div>
-            <div className="h-9 w-9 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200/80 flex items-center justify-center font-bold text-xs">
+            <div className="h-8 w-8 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center font-bold text-xs">
               3
             </div>
           </div>
         </div>
 
         {/* Filter Bar */}
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-xs">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white p-2.5 sm:p-3 rounded-2xl sm:rounded-3xl border border-[#EFECE6]">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full lg:w-auto">
             <div className="relative w-full sm:w-64">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <Search className="w-4 h-4 text-[#716D66] absolute left-3.5 top-3" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Filtrar por paciente..."
-                className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-brand-500 bg-slate-50/50"
+                placeholder="Buscar por paciente..."
+                className="w-full pl-9 pr-4 py-2 text-xs rounded-full border border-[#EFECE6] focus:outline-none focus:ring-2 focus:ring-[#18181B] bg-[#FAF8F5]/60 text-[#18181B]"
               />
             </div>
 
-            <div className="flex flex-wrap items-center gap-1 sm:border-l sm:border-slate-200 sm:pl-2">
-              <Button
-                size="sm"
-                variant={activeFilter === "TODOS" ? "default" : "ghost"}
+            {/* Segmented Controls */}
+            <div className="flex flex-wrap items-center gap-1 bg-[#FAF8F5] p-1 rounded-full border border-[#EFECE6]">
+              <button
+                type="button"
                 onClick={() => setActiveFilter("TODOS")}
-                className="text-xs h-8 flex-1 sm:flex-initial"
+                className={`px-3 py-1 text-xs font-semibold rounded-full transition ${
+                  activeFilter === "TODOS"
+                    ? "bg-[#18181B] text-white shadow-xs"
+                    : "text-[#716D66] hover:text-[#18181B]"
+                }`}
               >
                 Todos ({items.length})
-              </Button>
-              <Button
-                size="sm"
-                variant={activeFilter === "PENDENTES" ? "secondary" : "ghost"}
+              </button>
+              <button
+                type="button"
                 onClick={() => setActiveFilter("PENDENTES")}
-                className="text-xs h-8 flex-1 sm:flex-initial"
+                className={`px-3 py-1 text-xs font-semibold rounded-full transition ${
+                  activeFilter === "PENDENTES"
+                    ? "bg-[#18181B] text-white shadow-xs"
+                    : "text-[#716D66] hover:text-[#18181B]"
+                }`}
               >
                 Aguardando ({countPending})
-              </Button>
-              <Button
-                size="sm"
-                variant={activeFilter === "MAQUIAGEM" ? "secondary" : "ghost"}
+              </button>
+              <button
+                type="button"
                 onClick={() => setActiveFilter("MAQUIAGEM")}
-                className="text-xs h-8 flex-1 sm:flex-initial"
+                className={`px-3 py-1 text-xs font-semibold rounded-full transition ${
+                  activeFilter === "MAQUIAGEM"
+                    ? "bg-[#18181B] text-white shadow-xs"
+                    : "text-[#716D66] hover:text-[#18181B]"
+                }`}
               >
                 Maquiagem ({countInMakeup})
-              </Button>
-              <Button
-                size="sm"
-                variant={activeFilter === "APROVADOS" ? "secondary" : "ghost"}
+              </button>
+              <button
+                type="button"
                 onClick={() => setActiveFilter("APROVADOS")}
-                className="text-xs h-8 flex-1 sm:flex-initial"
+                className={`px-3 py-1 text-xs font-semibold rounded-full transition ${
+                  activeFilter === "APROVADOS"
+                    ? "bg-[#18181B] text-white shadow-xs"
+                    : "text-[#716D66] hover:text-[#18181B]"
+                }`}
               >
-                Aprovados CQ ({countApproved})
-              </Button>
+                Aprovados ({countApproved})
+              </button>
             </div>
-          </div>
-
-          <div className="text-xs text-slate-500 font-medium sm:text-right">
-            Trabalhos recebidos da <span className="font-bold text-slate-700">Impressão 3D e Fresagem</span>
           </div>
         </div>
 
@@ -236,14 +242,14 @@ export default function AcabamentoPage() {
         {isLoading ? (
           <div className="space-y-4">
             {[1, 2].map((i) => (
-              <Skeleton key={i} className="h-44 w-full rounded-2xl" />
+              <Skeleton key={i} className="h-44 w-full rounded-3xl" />
             ))}
           </div>
         ) : filteredItems.length === 0 ? (
           <EmptyState
             icon={Sparkles}
-            title="Nenhum trabalho na bancada de acabamento"
-            description="Os modelos aparecem aqui automaticamente assim que saem da impressão 3D (pós-cura) ou da fresadora CNC para montagem dos dentes e maquiagem."
+            title="Nenhum trabalho na bancada"
+            description="Os modelos aparecem aqui automaticamente após a pós-cura da impressão 3D ou da fresadora CNC."
           />
         ) : (
           <div className="space-y-4">
@@ -255,50 +261,37 @@ export default function AcabamentoPage() {
                   key={item.id}
                   className={`overflow-hidden border transition-all ${
                     isApproved
-                      ? "border-emerald-300 bg-emerald-50/15"
-                      : "border-slate-200/90 bg-white hover:border-slate-300 shadow-2xs"
+                      ? "border-emerald-200 bg-white"
+                      : "border-[#EFECE6] bg-white hover:border-[#18181B]/30"
                   }`}
                 >
                   {/* Cabeçalho do Card */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-50/80 border-b border-slate-100 px-4 sm:px-5 py-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-[#FAF8F5]/80 border-b border-[#EFECE6] px-4 sm:px-6 py-3">
                     <div className="flex items-center gap-3">
                       <div className="flex items-baseline gap-2">
-                        <span className="font-mono font-bold text-base text-slate-900 tracking-wider">
+                        <span className="font-mono font-bold text-base text-[#18181B] tracking-wider">
                           {item.patient_code}
                         </span>
                         {item.patient_name && (
-                          <span className="text-xs text-slate-500 font-medium">
+                          <span className="text-xs text-[#716D66] font-medium">
                             &bull; {item.patient_name}
                           </span>
                         )}
                       </div>
 
-                      <Badge
-                        variant="secondary"
-                        className={
-                          item.origin === "IMPRESSAO"
-                            ? "bg-blue-50 text-blue-700 border-blue-200 text-[10px]"
-                            : "bg-purple-50 text-purple-700 border-purple-200 text-[10px]"
-                        }
-                      >
-                        {item.origin === "IMPRESSAO" ? "Impressão 3D (Resina)" : "Fresagem CNC (Zircônia/PMMA)"}
+                      <Badge variant="secondary" className="text-[10px]">
+                        {item.origin === "IMPRESSAO" ? "Impressão 3D" : "Fresagem CNC"}
                       </Badge>
                     </div>
 
                     <div className="flex items-center gap-2">
                       <Badge
-                        className={
-                          isApproved
-                            ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                            : item.status === "EM_MAQUIAGEM"
-                            ? "bg-blue-100 text-blue-800 border-blue-300"
-                            : "bg-amber-100 text-amber-800 border-amber-300"
-                        }
+                        variant={isApproved ? "default" : "secondary"}
                       >
                         {isApproved
                           ? "Aprovado no CQ"
                           : item.status === "EM_MAQUIAGEM"
-                          ? "Em Maquiagem & Glaze"
+                          ? "Em Maquiagem"
                           : "Aguardando Montagem"}
                       </Badge>
                     </div>
@@ -307,60 +300,47 @@ export default function AcabamentoPage() {
                   {/* Conteúdo do Card */}
                   <CardContent className="p-4 sm:p-5">
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-center">
-                      {/* Descrição do Modelo / Peça */}
                       <div className="space-y-1.5">
-                        <div className="text-xs font-bold text-slate-900 flex items-center gap-2">
-                          <Layers className="w-4 h-4 text-brand-500 shrink-0" />
+                        <div className="text-xs font-bold text-[#18181B] flex items-center gap-2">
+                          <Layers className="w-4 h-4 text-[#DE5A35] shrink-0" />
                           <span>{FILE_TYPE_LABELS[item.file_type] || item.file_type}</span>
                         </div>
 
                         {item.has_sockets && (
-                          <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-800 font-medium">
-                            &bull; Modelo com alvéolos/furos para assentamento de dentes/troqueis.
+                          <div className="p-2 rounded-2xl bg-amber-50 border border-amber-200 text-[11px] text-amber-800 font-medium">
+                            Modelo com alvéolos/furos para assentamento.
                           </div>
                         )}
 
-                        <div className="text-[11px] text-slate-400">
-                          Entrada na bancada: {formatDate(item.created_at)}
+                        <div className="text-[11px] text-[#716D66]">
+                          Entrada: {formatDate(item.created_at)}
                         </div>
                       </div>
 
                       {/* Checklist da Bancada Protética */}
                       <div className="lg:col-span-2 space-y-2">
-                        <div className="text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
-                          <span>Checklist de Montagem & Acabamento:</span>
-                          {item.assigned_technician && (
-                            <span className="text-[10px] text-slate-400">
-                              Técnico: {item.assigned_technician}
-                            </span>
-                          )}
-                        </div>
-
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                           {/* Passo 1: Encaixe nos Furos */}
                           <div
                             onClick={() => handleToggleCheck(item, "teeth_inserted")}
-                            className={`p-2.5 rounded-xl border cursor-pointer transition-all flex items-start gap-2.5 ${
+                            className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-2.5 ${
                               item.teeth_inserted
-                                ? "border-emerald-500 bg-emerald-50/70 shadow-2xs"
-                                : "border-slate-200 bg-white hover:border-slate-300"
+                                ? "border-[#18181B] bg-[#FAF8F5]"
+                                : "border-[#EFECE6] bg-white hover:border-[#E2DDD5]"
                             }`}
                           >
                             <div
-                              className={`h-5 w-5 rounded border flex items-center justify-center shrink-0 mt-0.5 ${
+                              className={`h-4.5 w-4.5 rounded-full border flex items-center justify-center shrink-0 mt-0.5 ${
                                 item.teeth_inserted
-                                  ? "border-emerald-600 bg-emerald-500 text-white"
-                                  : "border-slate-300 bg-white"
+                                  ? "border-[#18181B] bg-[#18181B] text-white"
+                                  : "border-[#D1CCC4] bg-white"
                               }`}
                             >
-                              {item.teeth_inserted && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                              {item.teeth_inserted && <Check className="w-3 h-3 stroke-[3]" />}
                             </div>
                             <div className="leading-tight">
-                              <span className="text-xs font-bold text-slate-900 block">
+                              <span className="text-xs font-bold text-[#18181B] block">
                                 1. Encaixe nos Furos
-                              </span>
-                              <span className="text-[10px] text-slate-500">
-                                Dentes assentados nos alvéolos do modelo
                               </span>
                             </div>
                           </div>
@@ -368,27 +348,24 @@ export default function AcabamentoPage() {
                           {/* Passo 2: Oclusão */}
                           <div
                             onClick={() => handleToggleCheck(item, "occlusion_checked")}
-                            className={`p-2.5 rounded-xl border cursor-pointer transition-all flex items-start gap-2.5 ${
+                            className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-2.5 ${
                               item.occlusion_checked
-                                ? "border-emerald-500 bg-emerald-50/70 shadow-2xs"
-                                : "border-slate-200 bg-white hover:border-slate-300"
+                                ? "border-[#18181B] bg-[#FAF8F5]"
+                                : "border-[#EFECE6] bg-white hover:border-[#E2DDD5]"
                             }`}
                           >
                             <div
-                              className={`h-5 w-5 rounded border flex items-center justify-center shrink-0 mt-0.5 ${
+                              className={`h-4.5 w-4.5 rounded-full border flex items-center justify-center shrink-0 mt-0.5 ${
                                 item.occlusion_checked
-                                  ? "border-emerald-600 bg-emerald-500 text-white"
-                                  : "border-slate-300 bg-white"
+                                  ? "border-[#18181B] bg-[#18181B] text-white"
+                                  : "border-[#D1CCC4] bg-white"
                               }`}
                             >
-                              {item.occlusion_checked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                              {item.occlusion_checked && <Check className="w-3 h-3 stroke-[3]" />}
                             </div>
                             <div className="leading-tight">
-                              <span className="text-xs font-bold text-slate-900 block">
+                              <span className="text-xs font-bold text-[#18181B] block">
                                 2. Oclusão Antagonista
-                              </span>
-                              <span className="text-[10px] text-slate-500">
-                                Contatos e alinhamento conferidos
                               </span>
                             </div>
                           </div>
@@ -396,27 +373,24 @@ export default function AcabamentoPage() {
                           {/* Passo 3: Maquiagem & Glaze */}
                           <div
                             onClick={() => handleToggleCheck(item, "glaze_applied")}
-                            className={`p-2.5 rounded-xl border cursor-pointer transition-all flex items-start gap-2.5 ${
+                            className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-2.5 ${
                               item.glaze_applied
-                                ? "border-emerald-500 bg-emerald-50/70 shadow-2xs"
-                                : "border-slate-200 bg-white hover:border-slate-300"
+                                ? "border-[#18181B] bg-[#FAF8F5]"
+                                : "border-[#EFECE6] bg-white hover:border-[#E2DDD5]"
                             }`}
                           >
                             <div
-                              className={`h-5 w-5 rounded border flex items-center justify-center shrink-0 mt-0.5 ${
+                              className={`h-4.5 w-4.5 rounded-full border flex items-center justify-center shrink-0 mt-0.5 ${
                                 item.glaze_applied
-                                  ? "border-emerald-600 bg-emerald-500 text-white"
-                                  : "border-slate-300 bg-white"
+                                  ? "border-[#18181B] bg-[#18181B] text-white"
+                                  : "border-[#D1CCC4] bg-white"
                               }`}
                             >
-                              {item.glaze_applied && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                              {item.glaze_applied && <Check className="w-3 h-3 stroke-[3]" />}
                             </div>
                             <div className="leading-tight">
-                              <span className="text-xs font-bold text-slate-900 block">
+                              <span className="text-xs font-bold text-[#18181B] block">
                                 3. Maquiagem & Glaze
-                              </span>
-                              <span className="text-[10px] text-slate-500">
-                                Caracterização estética e queima
                               </span>
                             </div>
                           </div>
@@ -427,12 +401,12 @@ export default function AcabamentoPage() {
                           <Button
                             onClick={() => handleApproveCase(item.id, item.patient_code)}
                             disabled={isApproved || (!item.teeth_inserted && !item.glaze_applied)}
-                            variant={isApproved ? "secondary" : "lime"}
+                            variant={isApproved ? "outline" : "default"}
                             size="sm"
                             className="gap-2 font-bold w-full sm:w-auto"
                           >
                             <ShieldCheck className="w-4 h-4" />
-                            {isApproved ? "Caso Aprovado no CQ" : "Aprovar Controle de Qualidade & Liberar"}
+                            {isApproved ? "Caso Aprovado no CQ" : "Aprovar CQ & Liberar"}
                           </Button>
                         </div>
                       </div>

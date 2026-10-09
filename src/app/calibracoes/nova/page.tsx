@@ -232,23 +232,23 @@ function NovaCalibracaoContent() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[#EFECE6] pb-4">
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => router.push("/calibracoes")}
-            className="text-slate-500 hover:text-slate-900 gap-1 pl-0"
+            className="text-[#716D66] hover:text-[#18181B] gap-1 pl-0"
           >
             <ArrowLeft className="w-4 h-4" />
             Voltar
           </Button>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-              Bancada de Calibração de Resina
+            <h1 className="text-xl sm:text-2xl font-bold text-[#18181B] tracking-tight">
+              Calibração de Resina
             </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Protocolo técnico de validação de peça de teste e precisão dimensional.
+            <p className="text-xs text-[#716D66] mt-0.5">
+              Protocolo técnico e validação dimensional.
             </p>
           </div>
         </div>
@@ -258,12 +258,11 @@ function NovaCalibracaoContent() {
         </Badge>
       </div>
 
-      {/* Strict Rules Banner */}
-      <div className="p-4 rounded-xl bg-brand-50/70 border border-brand-200 text-xs text-brand-900 flex items-start gap-3">
-        <Info className="w-5 h-5 text-brand-600 shrink-0 mt-0.5" />
-        <div>
-          <span className="font-bold block mb-0.5">Critérios Rígidos de Aprovação:</span>
-          O hexágono da peça de teste deve medir rigorosamente entre <strong>9,99 mm e 10,01 mm</strong>. Linhas, números e detalhes finos devem estar 100% visíveis. Caso algum parâmetro falhe, a tentativa é registrada e o botão &quot;Nova Calibração&quot; é acionado para o próximo ciclo de ajuste.
+      {/* Rules Banner */}
+      <div className="p-3.5 rounded-2xl bg-[#FAF8F5] border border-[#EFECE6] text-xs text-[#2D2A26] flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <Info className="w-4 h-4 text-[#DE5A35] shrink-0" />
+          <span>Hexágono alvo: <strong>9,99 mm a 10,01 mm</strong> com linhas e números visíveis.</span>
         </div>
       </div>
 
@@ -271,24 +270,21 @@ function NovaCalibracaoContent() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Coluna 1: Parâmetros Digitáveis */}
         <Card>
-          <CardHeader className="pb-3">
+          <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
-              <FlaskConical className="w-4 h-4 text-brand-500" />
-              1. Combinação & Parâmetros Fatiados
+              <FlaskConical className="w-4 h-4 text-[#DE5A35]" />
+              Resina & Impressora
             </CardTitle>
-            <CardDescription>
-              A calibração é vinculada ao par Resina + Impressora.
-            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-semibold text-[#18181B] mb-1.5">
                 Lote de Resina
               </label>
               <select
                 value={selectedBatchId}
                 onChange={(e) => setSelectedBatchId(e.target.value)}
-                className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 bg-white font-medium text-slate-900"
+                className="w-full px-4 py-2.5 text-xs rounded-full border border-[#EFECE6] bg-[#FAF8F5]/60 font-medium text-[#18181B]"
               >
                 {batches.map((b) => (
                   <option key={b.id} value={b.id}>
@@ -299,13 +295,13 @@ function NovaCalibracaoContent() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Impressora Utilizada
+              <label className="block text-xs font-semibold text-[#18181B] mb-1.5">
+                Impressora
               </label>
               <select
                 value={selectedPrinterId}
                 onChange={(e) => setSelectedPrinterId(e.target.value)}
-                className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 bg-white font-medium text-slate-900"
+                className="w-full px-4 py-2.5 text-xs rounded-full border border-[#EFECE6] bg-[#FAF8F5]/60 font-medium text-[#18181B]"
               >
                 {printers.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -322,17 +318,17 @@ function NovaCalibracaoContent() {
                 variant="outline"
                 onClick={handleAskAiCalibration}
                 disabled={isAiLoading || !selectedBatchId || !selectedPrinterId}
-                className="w-full bg-gradient-to-r from-indigo-50/80 via-brand-50/80 to-purple-50/80 hover:from-indigo-100 hover:to-purple-100 border-indigo-200 text-indigo-900 font-bold text-xs gap-2 py-2 shadow-sm transition-all"
+                className="w-full font-bold text-xs gap-2 py-2"
               >
                 {isAiLoading ? (
                   <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-brand-600" />
-                    Consultando IA (Gemini / Groq)...
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    Consultando IA...
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-3.5 h-3.5 text-brand-600" />
-                    ✨ Sugerir Parâmetros por IA (Gemini / Groq)
+                    <Sparkles className="w-3.5 h-3.5 text-[#DE5A35]" />
+                    Sugerir Parâmetros por IA
                   </>
                 )}
               </Button>
@@ -340,44 +336,37 @@ function NovaCalibracaoContent() {
 
             {/* Painel de Parecer Técnico da IA */}
             {aiRecommendation && (
-              <div className="p-3 rounded-lg bg-indigo-50/60 border border-indigo-200 text-xs text-indigo-950 space-y-1.5 animate-in fade-in-50 duration-200">
-                <div className="flex items-center justify-between font-bold text-indigo-900">
+              <div className="p-3.5 rounded-2xl bg-[#FAF8F5] border border-[#EFECE6] text-xs text-[#18181B] space-y-1.5">
+                <div className="flex items-center justify-between font-bold">
                   <span className="flex items-center gap-1.5 text-xs">
-                    <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                    Parecer da IA ({aiRecommendation.confidenceScore ? `${Math.round(aiRecommendation.confidenceScore * 100)}% confiança` : "Recomendado"})
+                    <Sparkles className="w-3.5 h-3.5 text-[#DE5A35]" />
+                    Sugestão da IA
                   </span>
-                  <Badge variant="outline" className="text-[10px] bg-white border-indigo-300 text-indigo-700 font-mono">
+                  <Badge variant="outline" className="text-[10px] font-mono">
                     Alvo: {aiRecommendation.targetHexagonMm} mm
                   </Badge>
                 </div>
-                <p className="text-[11px] leading-relaxed text-indigo-900/90">{aiRecommendation.notes}</p>
-                {aiRecommendation.tips && aiRecommendation.tips.length > 0 && (
-                  <ul className="text-[10px] text-indigo-800 list-disc list-inside space-y-0.5 pt-1 border-t border-indigo-200/50">
-                    {aiRecommendation.tips.map((tip, idx) => (
-                      <li key={idx}>{tip}</li>
-                    ))}
-                  </ul>
-                )}
+                <p className="text-[11px] leading-relaxed text-[#716D66]">{aiRecommendation.notes}</p>
               </div>
             )}
 
-            <div className="pt-2 border-t border-slate-100 grid grid-cols-2 gap-3">
+            <div className="pt-2 border-t border-[#EFECE6] grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                  Tempo Exposição Inicial (s)
+                <label className="block text-[11px] font-semibold text-[#716D66] mb-1">
+                  Exposição Inicial (s)
                 </label>
                 <input
                   type="number"
                   step="0.1"
                   value={initialExposure}
                   onChange={(e) => setInitialExposure(Number(e.target.value))}
-                  className="w-full px-2.5 py-1.5 text-xs rounded border border-slate-200 font-mono font-bold"
+                  className="w-full px-3 py-2 text-xs rounded-full border border-[#EFECE6] bg-[#FAF8F5]/60 font-mono font-bold text-[#18181B]"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                  Tempo Exposição Normal (s)
+                <label className="block text-[11px] font-semibold text-[#716D66] mb-1">
+                  Exposição Normal (s)
                 </label>
                 <input
                   type="number"
@@ -424,19 +413,16 @@ function NovaCalibracaoContent() {
               <Compass className="w-4 h-4 text-brand-500" />
               2. Medições & Validação Visual
             </CardTitle>
-            <CardDescription>
-              Valores obtidos no paquímetro digital e inspeção óptica.
-            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Hexágono */}
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-semibold text-slate-700">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-semibold text-[#18181B]">
                   Tamanho do Hexágono (mm) *
                 </label>
-                <span className="text-[10px] text-slate-400 font-mono">
-                  Aceitável: 9.99 a 10.01 mm
+                <span className="text-[10px] text-[#716D66] font-mono">
+                  Alvo: 9.99 a 10.01 mm
                 </span>
               </div>
               <input
@@ -445,26 +431,26 @@ function NovaCalibracaoContent() {
                 required
                 value={hexagonSize}
                 onChange={(e) => setHexagonSize(Number(e.target.value))}
-                className={`w-full px-3.5 py-2 text-sm rounded-lg border-2 font-mono font-bold text-center ${
+                className={`w-full px-4 py-2.5 text-base rounded-full border-2 font-mono font-bold text-center transition ${
                   hexagonSize >= 9.99 && hexagonSize <= 10.01
-                    ? "border-approvedGreen-500 bg-approvedGreen-50/50 text-slate-950"
-                    : "border-rose-400 bg-rose-50/50 text-rose-700"
+                    ? "border-[#18181B] bg-[#FAF8F5] text-[#18181B]"
+                    : "border-[#DE3535] bg-rose-50/50 text-[#DE3535]"
                 }`}
               />
             </div>
 
-            {/* 3 Perguntas Visuais da Imagem 2 */}
+            {/* 3 Perguntas Visuais */}
             <div className="space-y-2 pt-1">
-              <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200 text-xs">
-                <span className="font-medium text-slate-800">Linhas estão visíveis?</span>
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-[#FAF8F5] border border-[#EFECE6] text-xs">
+                <span className="font-medium text-[#18181B]">Linhas visíveis?</span>
                 <div className="flex gap-1.5">
                   <button
                     type="button"
                     onClick={() => setLinesVisible(true)}
-                    className={`px-3 py-1 rounded text-xs font-bold transition-all ${
+                    className={`px-4 py-1 rounded-full text-xs font-bold transition ${
                       linesVisible === true
-                        ? "bg-approvedGreen-500 text-slate-950"
-                        : "bg-white border border-slate-300 text-slate-600"
+                        ? "bg-[#18181B] text-white shadow-xs"
+                        : "bg-white border border-[#E2DDD5] text-[#716D66] hover:bg-[#FAF8F5]"
                     }`}
                   >
                     SIM
@@ -472,10 +458,10 @@ function NovaCalibracaoContent() {
                   <button
                     type="button"
                     onClick={() => setLinesVisible(false)}
-                    className={`px-3 py-1 rounded text-xs font-bold transition-all ${
+                    className={`px-4 py-1 rounded-full text-xs font-bold transition ${
                       linesVisible === false
-                        ? "bg-rose-500 text-white"
-                        : "bg-white border border-slate-300 text-slate-600"
+                        ? "bg-[#DE3535] text-white shadow-xs"
+                        : "bg-white border border-[#E2DDD5] text-[#716D66] hover:bg-[#FAF8F5]"
                     }`}
                   >
                     NÃO
@@ -483,16 +469,16 @@ function NovaCalibracaoContent() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200 text-xs">
-                <span className="font-medium text-slate-800">Números estão visíveis?</span>
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-[#FAF8F5] border border-[#EFECE6] text-xs">
+                <span className="font-medium text-[#18181B]">Números visíveis?</span>
                 <div className="flex gap-1.5">
                   <button
                     type="button"
                     onClick={() => setNumbersVisible(true)}
-                    className={`px-3 py-1 rounded text-xs font-bold transition-all ${
+                    className={`px-4 py-1 rounded-full text-xs font-bold transition ${
                       numbersVisible === true
-                        ? "bg-approvedGreen-500 text-slate-950"
-                        : "bg-white border border-slate-300 text-slate-600"
+                        ? "bg-[#18181B] text-white shadow-xs"
+                        : "bg-white border border-[#E2DDD5] text-[#716D66] hover:bg-[#FAF8F5]"
                     }`}
                   >
                     SIM
@@ -500,10 +486,10 @@ function NovaCalibracaoContent() {
                   <button
                     type="button"
                     onClick={() => setNumbersVisible(false)}
-                    className={`px-3 py-1 rounded text-xs font-bold transition-all ${
+                    className={`px-4 py-1 rounded-full text-xs font-bold transition ${
                       numbersVisible === false
-                        ? "bg-rose-500 text-white"
-                        : "bg-white border border-slate-300 text-slate-600"
+                        ? "bg-[#DE3535] text-white shadow-xs"
+                        : "bg-white border border-[#E2DDD5] text-[#716D66] hover:bg-[#FAF8F5]"
                     }`}
                   >
                     NÃO
@@ -511,16 +497,16 @@ function NovaCalibracaoContent() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200 text-xs">
-                <span className="font-medium text-slate-800">Detalhes estão visíveis?</span>
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-[#FAF8F5] border border-[#EFECE6] text-xs">
+                <span className="font-medium text-[#18181B]">Detalhes visíveis?</span>
                 <div className="flex gap-1.5">
                   <button
                     type="button"
                     onClick={() => setDetailsVisible(true)}
-                    className={`px-3 py-1 rounded text-xs font-bold transition-all ${
+                    className={`px-4 py-1 rounded-full text-xs font-bold transition ${
                       detailsVisible === true
-                        ? "bg-approvedGreen-500 text-slate-950"
-                        : "bg-white border border-slate-300 text-slate-600"
+                        ? "bg-[#18181B] text-white shadow-xs"
+                        : "bg-white border border-[#E2DDD5] text-[#716D66] hover:bg-[#FAF8F5]"
                     }`}
                   >
                     SIM
@@ -528,10 +514,10 @@ function NovaCalibracaoContent() {
                   <button
                     type="button"
                     onClick={() => setDetailsVisible(false)}
-                    className={`px-3 py-1 rounded text-xs font-bold transition-all ${
+                    className={`px-4 py-1 rounded-full text-xs font-bold transition ${
                       detailsVisible === false
-                        ? "bg-rose-500 text-white"
-                        : "bg-white border border-slate-300 text-slate-600"
+                        ? "bg-[#DE3535] text-white shadow-xs"
+                        : "bg-white border border-[#E2DDD5] text-[#716D66] hover:bg-[#FAF8F5]"
                     }`}
                   >
                     NÃO
@@ -541,30 +527,30 @@ function NovaCalibracaoContent() {
             </div>
 
             {/* Pós-cura */}
-            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-[#EFECE6]">
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                  Tempo Lavagem (min)
+                <label className="block text-[11px] font-semibold text-[#716D66] mb-1">
+                  Lavagem (min)
                 </label>
                 <input
                   type="number"
                   step="0.5"
                   value={washTime}
                   onChange={(e) => setWashTime(Number(e.target.value))}
-                  className="w-full px-2.5 py-1.5 text-xs rounded border border-slate-200 font-mono"
+                  className="w-full px-3 py-2 text-xs rounded-full border border-[#EFECE6] bg-[#FAF8F5]/60 font-mono text-[#18181B]"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                  Tempo Cura (min)
+                <label className="block text-[11px] font-semibold text-[#716D66] mb-1">
+                  Cura (min)
                 </label>
                 <input
                   type="number"
                   step="0.5"
                   value={cureTime}
                   onChange={(e) => setCureTime(Number(e.target.value))}
-                  className="w-full px-2.5 py-1.5 text-xs rounded border border-slate-200 font-mono"
+                  className="w-full px-3 py-2 text-xs rounded-full border border-[#EFECE6] bg-[#FAF8F5]/60 font-mono text-[#18181B]"
                 />
               </div>
             </div>
@@ -575,23 +561,23 @@ function NovaCalibracaoContent() {
       {/* Feedback Banner & Action Buttons */}
       {allQuestionsAnswered && (
         <div
-          className={`p-4 rounded-xl border-2 transition-all ${
+          className={`p-4 rounded-2xl border transition-all ${
             validation.approved
-              ? "border-approvedGreen-500 bg-approvedGreen-50 text-approvedGreen-900"
-              : "border-rose-300 bg-rose-50 text-rose-900"
+              ? "border-[#18181B] bg-[#FAF8F5] text-[#18181B]"
+              : "border-[#DE3535] bg-rose-50 text-[#DE3535]"
           }`}
         >
-          <div className="flex items-center gap-2 font-bold text-sm">
+          <div className="flex items-center gap-2 font-bold text-xs sm:text-sm">
             {validation.approved ? (
               <>
-                <CheckCircle2 className="w-5 h-5 text-approvedGreen-600 shrink-0" />
-                <span>Calibração dentro de todos os parâmetros técnicos! Habilitado para finalizar.</span>
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                <span>Calibração aprovada com precisão técnica. Pronto para finalizar.</span>
               </>
             ) : (
               <>
-                <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+                <AlertTriangle className="w-5 h-5 text-[#DE3535] shrink-0" />
                 <span>
-                  Calibração fora dos parâmetros. {validation.errorReason} Realize uma nova calibração.
+                  Calibração fora dos limites. {validation.errorReason} Grave uma nova tentativa.
                 </span>
               </>
             )}
@@ -606,6 +592,7 @@ function NovaCalibracaoContent() {
           variant="ghost"
           size="sm"
           onClick={() => router.push("/calibracoes")}
+          className="text-[#716D66] hover:text-[#18181B]"
         >
           Cancelar
         </Button>
@@ -618,25 +605,25 @@ function NovaCalibracaoContent() {
               onClick={handleNewAttempt}
               disabled={isSubmitting}
               variant="destructive"
-              size="lg"
+              size="default"
               className="font-bold gap-2"
             >
               <RefreshCw className="w-4 h-4" />
-              NOVA CALIBRAÇÃO (Gravar Tentativa {calibrationNumber})
+              Gravar Tentativa
             </Button>
           )}
 
-          {/* Botão FINALIZAR CALIBRAÇÃO (somente habilitado se tudo OK) */}
+          {/* Botão FINALIZAR CALIBRAÇÃO */}
           <Button
             type="button"
             onClick={handleFinalize}
             disabled={!validation.approved || !allQuestionsAnswered || isSubmitting}
-            variant="lime"
-            size="lg"
-            className="font-black px-8 text-slate-950 shadow-elevated"
+            variant="default"
+            size="default"
+            className="font-bold px-8"
           >
-            <CheckCircle2 className="w-5 h-5" />
-            FINALIZAR CALIBRAÇÃO
+            <CheckCircle2 className="w-4 h-4" />
+            Finalizar Calibração
           </Button>
         </div>
       </div>

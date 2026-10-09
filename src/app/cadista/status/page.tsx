@@ -112,38 +112,35 @@ export default function CadistaStatusPage() {
     <AppShell>
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[#EFECE6] pb-4">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-              Novo Trabalho (Cadastrar Caso)
+            <h1 className="text-xl sm:text-2xl font-bold text-[#18181B] tracking-tight">
+              Novo Trabalho
             </h1>
-            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-              Informe a identificação do paciente e selecione quais modelos 3D devem ser produzidos.
+            <p className="text-xs sm:text-sm text-[#716D66] mt-0.5">
+              Cadastro de caso para produção 3D.
             </p>
           </div>
 
-          <div className="text-xs text-slate-500 font-medium bg-slate-100/80 px-3 py-1.5 rounded-full w-fit">
-            Cadista: <span className="font-semibold text-slate-800">{user?.full_name || "Operador"}</span>
+          <div className="text-xs text-[#716D66] font-medium bg-[#EFEAE2] px-3.5 py-1.5 rounded-full w-fit">
+            Cadista: <span className="font-semibold text-[#18181B]">{user?.full_name || "Operador"}</span>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Card 1: Identificação do Paciente / Caso */}
           <Card>
-            <CardHeader className="pb-3">
+            <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center gap-2">
-                <FileCheck2 className="w-4 h-4 text-brand-500" />
-                1. Identificação do Paciente
+                <FileCheck2 className="w-4 h-4 text-[#DE5A35]" />
+                Identificação do Caso
               </CardTitle>
-              <CardDescription>
-                O código (ex: PAC-100) é a referência principal para rastrear a ordem do início ao fim.
-              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Código do Paciente / Trabalho <span className="text-rose-500">*</span>
+                  <label className="block text-xs font-semibold text-[#18181B] mb-1.5">
+                    Código do Paciente / Trabalho <span className="text-[#DE3535]">*</span>
                   </label>
                   <input
                     type="text"
@@ -154,62 +151,53 @@ export default function CadistaStatusPage() {
                       if (validationError) setValidationError(null);
                     }}
                     placeholder="Ex: PAC-100"
-                    className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white font-mono uppercase font-bold text-slate-900 placeholder:normal-case placeholder:font-normal"
+                    className="w-full px-4 py-2.5 text-sm rounded-full border border-[#EFECE6] bg-[#FAF8F5]/60 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#18181B] font-mono uppercase font-bold text-[#18181B] placeholder:normal-case placeholder:font-normal"
                   />
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Identificador único no fluxo de bancada e caixas de produção.
-                  </p>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Nome ou Identificação do Paciente <span className="text-slate-400 font-normal">(Opcional)</span>
+                  <label className="block text-xs font-semibold text-[#18181B] mb-1.5">
+                    Nome do Paciente <span className="text-[#716D66] font-normal">(Opcional)</span>
                   </label>
                   <input
                     type="text"
                     value={patientName}
                     onChange={(e) => setPatientName(e.target.value)}
                     placeholder="Ex: Maria dos Santos"
-                    className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+                    className="w-full px-4 py-2.5 text-sm rounded-full border border-[#EFECE6] bg-[#FAF8F5]/60 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#18181B] text-[#18181B]"
                   />
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Opcional conforme política de privacidade e LGPD clínica.
-                  </p>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Observações Clínicas / Instruções de Encaixe <span className="text-slate-400 font-normal">(Opcional)</span>
+                <label className="block text-xs font-semibold text-[#18181B] mb-1.5">
+                  Observações Clínicas <span className="text-[#716D66] font-normal">(Opcional)</span>
                 </label>
                 <textarea
                   rows={2}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Ex: Aliviar retenções cervicais no troquel ou espaçamento de cimento 40 micras..."
-                  className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+                  placeholder="Instruções de encaixe ou detalhes do caso..."
+                  className="w-full px-4 py-2.5 text-sm rounded-2xl border border-[#EFECE6] bg-[#FAF8F5]/60 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#18181B] text-[#18181B]"
                 />
               </div>
             </CardContent>
           </Card>
 
           {/* Card 2: ARQUIVOS A SEREM IMPRESSOS */}
-          <Card className={validationError ? "border-rose-300 ring-2 ring-rose-100" : ""}>
-            <CardHeader className="pb-3 flex flex-row items-center justify-between gap-2">
+          <Card className={validationError ? "border-[#DE3535]/50 ring-2 ring-[#DE3535]/10" : ""}>
+            <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2">
               <div className="min-w-0">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-brand-500 shrink-0" />
-                  <span>2. Modelos 3D para Impressão</span>
+                  <Layers className="w-4 h-4 text-[#DE5A35] shrink-0" />
+                  <span>Modelos 3D para Produção</span>
                 </CardTitle>
-                <CardDescription className="text-xs">
-                  Selecione exatamente quais modelos anatômicos compõem este trabalho.
-                </CardDescription>
               </div>
 
               <button
                 type="button"
                 onClick={handleSelectAll}
-                className="text-xs font-semibold text-brand-600 hover:text-brand-700 hover:underline shrink-0 whitespace-nowrap"
+                className="text-xs font-semibold px-3 py-1 rounded-full bg-[#EFEAE2] text-[#2D2A26] hover:bg-[#E2DDD5] transition shrink-0"
               >
                 {selectedFiles.length === DENTAL_FILE_TYPES.length
                   ? "Desmarcar Todos"
@@ -217,15 +205,14 @@ export default function CadistaStatusPage() {
               </button>
             </CardHeader>
             <CardContent className="space-y-3">
-              {/* Alerta de regra fundamental */}
               {validationError && (
-                <div className="flex items-center gap-2.5 p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium animate-in fade-in">
+                <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium">
                   <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
                   <span>{validationError}</span>
                 </div>
               )}
 
-              <div className="grid grid-cols-1 gap-2.5">
+              <div className="grid grid-cols-1 gap-2">
                 {DENTAL_FILE_TYPES.map((file) => {
                   const isSelected = selectedFiles.includes(file.id);
 
@@ -233,28 +220,27 @@ export default function CadistaStatusPage() {
                     <div
                       key={file.id}
                       onClick={() => toggleFile(file.id)}
-                      className={`flex items-center justify-between p-3.5 rounded-xl border cursor-pointer transition-all ${
+                      className={`flex items-center justify-between p-3.5 rounded-2xl border cursor-pointer transition-all ${
                         isSelected
-                          ? "border-approvedGreen-500/80 bg-approvedGreen-50/60 shadow-sm"
-                          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/60"
+                          ? "border-[#18181B] bg-[#FAF8F5] shadow-xs"
+                          : "border-[#EFECE6] bg-white hover:border-[#E2DDD5] hover:bg-[#FAF8F5]/40"
                       }`}
                     >
                       <div className="flex items-center gap-3">
-                        {/* Círculo de seleção visual como desenhado no fluxograma */}
                         <div
-                          className={`h-6 w-6 rounded-full border-2 flex items-center justify-center transition-all shrink-0 ${
+                          className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all shrink-0 ${
                             isSelected
-                              ? "border-approvedGreen-600 bg-approvedGreen-500 text-white shadow-sm"
-                              : "border-slate-300 bg-white"
+                              ? "border-[#18181B] bg-[#18181B] text-white"
+                              : "border-[#D1CCC4] bg-white"
                           }`}
                         >
-                          {isSelected && <CheckCircle2 className="w-4 h-4" />}
+                          {isSelected && <CheckCircle2 className="w-3.5 h-3.5" />}
                         </div>
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
                             <span
                               className={`text-sm font-semibold ${
-                                isSelected ? "text-slate-900" : "text-slate-700"
+                                isSelected ? "text-[#18181B]" : "text-[#4A4742]"
                               }`}
                             >
                               {file.label}
@@ -262,28 +248,21 @@ export default function CadistaStatusPage() {
                             {"category" in file && (
                               <Badge
                                 variant="secondary"
-                                className={`text-[10px] py-0 px-1.5 ${
-                                  (file as any).category === "FRESAGEM"
-                                    ? "bg-purple-50 text-purple-700 border-purple-200"
-                                    : (file as any).category === "MISTO"
-                                    ? "bg-slate-100 text-slate-700 border-slate-200"
-                                    : "bg-blue-50 text-blue-700 border-blue-200"
-                                }`}
+                                className="text-[10px] py-0 px-2"
                               >
                                 {(file as any).category === "FRESAGEM"
                                   ? "Fresadora CNC"
                                   : (file as any).category === "MISTO"
-                                  ? "Impressora ou Fresadora"
+                                  ? "Impressora / Fresadora"
                                   : "Impressora 3D"}
                               </Badge>
                             )}
                           </div>
-                          <p className="text-[11px] text-slate-400">{file.description}</p>
                         </div>
                       </div>
 
                       {isSelected && (
-                        <Badge variant="lime" className="text-[10px] uppercase font-bold shrink-0">
+                        <Badge variant="default" className="text-[10px] uppercase font-bold shrink-0">
                           Selecionado
                         </Badge>
                       )}
@@ -291,20 +270,13 @@ export default function CadistaStatusPage() {
                   );
                 })}
               </div>
-
-              <div className="pt-2 flex items-center gap-2 text-xs text-slate-400">
-                <Info className="w-3.5 h-3.5 shrink-0 text-brand-500" />
-                <span>
-                  Modelos impressos (com furos) e dentes fresados serão reunidos na Bancada de Acabamento & Maquiagem para montagem e glaze.
-                </span>
-              </div>
             </CardContent>
           </Card>
 
           {/* Action Bar */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
-            <div className="text-xs text-slate-500 text-center sm:text-left">
-              <span className="font-semibold text-slate-800">{selectedFiles.length}</span> de{" "}
+            <div className="text-xs text-[#716D66] text-center sm:text-left">
+              <span className="font-semibold text-[#18181B]">{selectedFiles.length}</span> de{" "}
               {DENTAL_FILE_TYPES.length} arquivos selecionados
             </div>
 
@@ -312,13 +284,13 @@ export default function CadistaStatusPage() {
               type="submit"
               size="lg"
               disabled={isSubmitting}
-              className="gap-2 px-6 sm:px-8 font-bold w-full sm:w-auto justify-center"
+              className="gap-2 px-8 font-bold w-full sm:w-auto justify-center"
             >
               {isSubmitting ? (
-                "Cadastrando Trabalho..."
+                "Cadastrando..."
               ) : (
                 <>
-                  Confirmar e Enviar para Fila
+                  Enviar para Fila
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}

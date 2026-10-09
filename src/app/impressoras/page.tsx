@@ -111,13 +111,13 @@ export default function ImpressorasPage() {
     <AppShell>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[#EFECE6] pb-4">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            <h1 className="text-xl sm:text-2xl font-bold text-[#18181B] tracking-tight">
               Impressoras 3D
             </h1>
-            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-              Gerencie suas impressoras, acompanhe o status de manutenção e cadastre novas máquinas.
+            <p className="text-xs sm:text-sm text-[#716D66] mt-0.5">
+              Parque tecnológico e controle de manutenção preventiva.
             </p>
           </div>
 
@@ -125,10 +125,10 @@ export default function ImpressorasPage() {
             onClick={() => setModalOpen(true)}
             variant="default"
             size="sm"
-            className="gap-1.5 font-semibold h-9 w-full sm:w-auto justify-center"
+            className="gap-1.5 font-semibold w-full sm:w-auto justify-center"
           >
             <Plus className="w-4 h-4" />
-            + Cadastrar Nova Impressora
+            Nova Impressora
           </Button>
         </div>
 
@@ -136,7 +136,7 @@ export default function ImpressorasPage() {
         {isLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
             {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-56 w-full rounded-2xl" />
+              <Skeleton key={i} className="h-56 w-full rounded-3xl" />
             ))}
           </div>
         ) : (
@@ -148,22 +148,22 @@ export default function ImpressorasPage() {
               return (
                 <Card
                   key={p.id}
-                  className="flex flex-col justify-between overflow-hidden border border-slate-200/90 bg-white rounded-xl sm:rounded-2xl transition-all hover:border-slate-300 hover:shadow-xs"
+                  className="flex flex-col justify-between overflow-hidden border border-[#EFECE6] bg-white transition hover:border-[#18181B]/30"
                 >
                   <CardHeader className="p-4 sm:p-5 pb-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <CardTitle className="text-base text-slate-900 font-bold truncate">{p.name}</CardTitle>
-                        <CardDescription className="text-xs text-slate-500 mt-0.5 truncate">
+                        <CardTitle className="text-base text-[#18181B] font-bold truncate">{p.name}</CardTitle>
+                        <p className="text-xs text-[#716D66] mt-0.5 truncate">
                           {p.brand} &bull; {p.model}
-                        </CardDescription>
+                        </p>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
-                        <Badge className={statusCfg.color}>{statusCfg.label}</Badge>
+                        <Badge variant={isAvailable ? "default" : "destructive"}>{statusCfg.label}</Badge>
                         <button
                           type="button"
                           onClick={() => setPrinterToDelete(p)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                          className="p-1.5 rounded-full text-[#716D66] hover:text-[#DE3535] hover:bg-rose-50 transition"
                           title="Excluir impressora"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -173,23 +173,23 @@ export default function ImpressorasPage() {
                   </CardHeader>
 
                   <CardContent className="p-4 sm:p-5 pt-0 space-y-3 text-xs">
-                    <div className="divide-y divide-slate-100 rounded-xl bg-slate-50/70 p-3 border border-slate-100 space-y-1.5">
+                    <div className="divide-y divide-[#EFECE6] rounded-2xl bg-[#FAF8F5] p-3.5 border border-[#EFECE6] space-y-1.5">
                       <div className="flex justify-between items-center">
-                        <span className="text-slate-400">Nº de Série:</span>
-                        <span className="font-mono font-medium text-slate-800">{p.serial_number}</span>
+                        <span className="text-[#716D66]">Série:</span>
+                        <span className="font-mono font-medium text-[#18181B]">{p.serial_number}</span>
                       </div>
                       <div className="flex justify-between items-center pt-1.5">
-                        <span className="text-slate-400">Última Manutenção:</span>
-                        <span className="font-medium text-slate-800">
-                          {p.latest_maintenance ? formatDate(p.latest_maintenance.performed_at) : "Nenhuma"}
+                        <span className="text-[#716D66]">Última Manutenção:</span>
+                        <span className="font-medium text-[#18181B]">
+                          {p.latest_maintenance ? formatDate(p.latest_maintenance.performed_at) : "Pendente"}
                         </span>
                       </div>
                       <div className="flex justify-between items-center pt-1.5">
-                        <span className="text-slate-400">Ciclo Operacional:</span>
+                        <span className="text-[#716D66]">Ciclo:</span>
                         <span
                           className={`font-semibold ${
                             (p.days_since_maintenance || 0) > 7
-                              ? "text-rose-600"
+                              ? "text-[#DE3535]"
                               : "text-emerald-700"
                           }`}
                         >
@@ -201,14 +201,12 @@ export default function ImpressorasPage() {
                     </div>
 
                     {!isAvailable && (
-                      <div className="p-2.5 rounded-lg bg-amber-50/70 border border-amber-200/80 text-[11px] text-amber-900 flex items-start gap-2">
+                      <div className="p-2.5 rounded-2xl bg-amber-50 border border-amber-200/80 text-[11px] text-amber-900 flex items-start gap-2">
                         <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-600 mt-0.5" />
                         <div className="leading-tight">
                           {p.calculated_status === "MANUTENCAO_VENCIDA"
-                            ? `Bloqueada para novas impressões (manutenção venceu há ${p.days_since_maintenance} dias).`
-                            : p.calculated_status === "REPROVADA"
-                            ? "Bloqueada por reprovação no último checklist."
-                            : "Equipamento desativado."}
+                            ? `Manutenção pendente há ${p.days_since_maintenance} dias.`
+                            : "Bloqueada no checklist."}
                         </div>
                       </div>
                     )}
@@ -219,9 +217,7 @@ export default function ImpressorasPage() {
                       <Button
                         variant={isAvailable ? "outline" : "default"}
                         size="sm"
-                        className={`w-full text-xs font-semibold gap-1.5 h-8.5 ${
-                          !isAvailable ? "bg-amber-600 hover:bg-amber-700 text-white" : ""
-                        }`}
+                        className="w-full text-xs font-semibold gap-1.5"
                       >
                         <Wrench className="w-3.5 h-3.5" />
                         Manutenção
@@ -229,7 +225,7 @@ export default function ImpressorasPage() {
                     </Link>
 
                     <Link href={`/impressoras/${p.id}`}>
-                      <Button variant="ghost" size="sm" className="text-xs h-8.5 px-3 text-slate-600 hover:text-slate-900">
+                      <Button variant="ghost" size="sm" className="text-xs px-3 text-[#716D66] hover:text-[#18181B]">
                         Histórico
                       </Button>
                     </Link>
