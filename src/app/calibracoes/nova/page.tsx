@@ -232,22 +232,22 @@ function NovaCalibracaoContent() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[#EFECE6] pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800 pb-4">
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => router.push("/calibracoes")}
-            className="text-[#716D66] hover:text-[#18181B] gap-1 pl-0"
+            className="text-slate-400 hover:text-white gap-1 pl-0"
           >
             <ArrowLeft className="w-4 h-4" />
             Voltar
           </Button>
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-[#18181B] tracking-tight">
+            <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
               Calibração de Resina
             </h1>
-            <p className="text-xs text-[#716D66] mt-0.5">
+            <p className="text-xs text-slate-400 mt-0.5">
               Protocolo técnico e validação dimensional.
             </p>
           </div>
@@ -259,10 +259,10 @@ function NovaCalibracaoContent() {
       </div>
 
       {/* Rules Banner */}
-      <div className="p-3.5 rounded-2xl bg-[#FAF8F5] border border-[#EFECE6] text-xs text-[#2D2A26] flex items-center justify-between gap-3">
+      <div className="p-3.5 rounded-2xl bg-[#0F172A] border border-slate-800 text-xs text-slate-300 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <Info className="w-4 h-4 text-[#DE5A35] shrink-0" />
-          <span>Hexágono alvo: <strong>9,99 mm a 10,01 mm</strong> com linhas e números visíveis.</span>
+          <Info className="w-4 h-4 text-cyan-400 shrink-0" />
+          <span>Hexágono alvo: <strong className="text-white">9,99 mm a 10,01 mm</strong> com linhas e números visíveis.</span>
         </div>
       </div>
 
@@ -271,20 +271,20 @@ function NovaCalibracaoContent() {
         {/* Coluna 1: Parâmetros Digitáveis */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <FlaskConical className="w-4 h-4 text-[#DE5A35]" />
+            <CardTitle className="text-base flex items-center gap-2 text-white">
+              <FlaskConical className="w-4 h-4 text-cyan-400" />
               Resina & Impressora
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-[#18181B] mb-1.5">
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                 Lote de Resina
               </label>
               <select
                 value={selectedBatchId}
                 onChange={(e) => setSelectedBatchId(e.target.value)}
-                className="w-full px-4 py-2.5 text-xs rounded-full border border-[#EFECE6] bg-[#FAF8F5]/60 font-medium text-[#18181B]"
+                className="w-full px-4 py-2.5 text-xs rounded-full border border-slate-800 bg-[#0B0F19] font-medium text-white focus:outline-none focus:border-cyan-500"
               >
                 {batches.map((b) => (
                   <option key={b.id} value={b.id}>
@@ -295,13 +295,13 @@ function NovaCalibracaoContent() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-[#18181B] mb-1.5">
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                 Impressora
               </label>
               <select
                 value={selectedPrinterId}
                 onChange={(e) => setSelectedPrinterId(e.target.value)}
-                className="w-full px-4 py-2.5 text-xs rounded-full border border-[#EFECE6] bg-[#FAF8F5]/60 font-medium text-[#18181B]"
+                className="w-full px-4 py-2.5 text-xs rounded-full border border-slate-800 bg-[#0B0F19] font-medium text-white focus:outline-none focus:border-cyan-500"
               >
                 {printers.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -327,7 +327,7 @@ function NovaCalibracaoContent() {
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-3.5 h-3.5 text-[#DE5A35]" />
+                    <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
                     Sugerir Parâmetros por IA
                   </>
                 )}
@@ -336,23 +336,23 @@ function NovaCalibracaoContent() {
 
             {/* Painel de Parecer Técnico da IA */}
             {aiRecommendation && (
-              <div className="p-3.5 rounded-2xl bg-[#FAF8F5] border border-[#EFECE6] text-xs text-[#18181B] space-y-1.5">
+              <div className="p-3.5 rounded-2xl bg-[#0B0F19] border border-slate-800 text-xs text-white space-y-1.5">
                 <div className="flex items-center justify-between font-bold">
                   <span className="flex items-center gap-1.5 text-xs">
-                    <Sparkles className="w-3.5 h-3.5 text-[#DE5A35]" />
+                    <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
                     Sugestão da IA
                   </span>
-                  <Badge variant="outline" className="text-[10px] font-mono">
+                  <Badge variant="outline" className="text-[10px] font-mono border-slate-700 text-slate-300">
                     Alvo: {aiRecommendation.targetHexagonMm} mm
                   </Badge>
                 </div>
-                <p className="text-[11px] leading-relaxed text-[#716D66]">{aiRecommendation.notes}</p>
+                <p className="text-[11px] leading-relaxed text-slate-400">{aiRecommendation.notes}</p>
               </div>
             )}
 
-            <div className="pt-2 border-t border-[#EFECE6] grid grid-cols-2 gap-3">
+            <div className="pt-2 border-t border-slate-800 grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] font-semibold text-[#716D66] mb-1">
+                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
                   Exposição Inicial (s)
                 </label>
                 <input
@@ -360,12 +360,12 @@ function NovaCalibracaoContent() {
                   step="0.1"
                   value={initialExposure}
                   onChange={(e) => setInitialExposure(Number(e.target.value))}
-                  className="w-full px-3 py-2 text-xs rounded-full border border-[#EFECE6] bg-[#FAF8F5]/60 font-mono font-bold text-[#18181B]"
+                  className="w-full px-3 py-2 text-xs rounded-full border border-slate-800 bg-[#0B0F19] font-mono font-bold text-white focus:outline-none focus:border-cyan-500"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-[#716D66] mb-1">
+                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
                   Exposição Normal (s)
                 </label>
                 <input
@@ -373,12 +373,12 @@ function NovaCalibracaoContent() {
                   step="0.05"
                   value={exposureTime}
                   onChange={(e) => setExposureTime(Number(e.target.value))}
-                  className="w-full px-2.5 py-1.5 text-xs rounded border border-slate-200 font-mono font-bold text-brand-600"
+                  className="w-full px-3 py-2 text-xs rounded-full border border-slate-800 bg-[#0B0F19] font-mono font-bold text-cyan-400 focus:outline-none focus:border-cyan-500"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
                   Velocidade Elevação (mm/min)
                 </label>
                 <input
@@ -386,12 +386,12 @@ function NovaCalibracaoContent() {
                   step="1"
                   value={liftSpeed}
                   onChange={(e) => setLiftSpeed(Number(e.target.value))}
-                  className="w-full px-2.5 py-1.5 text-xs rounded border border-slate-200 font-mono"
+                  className="w-full px-3 py-2 text-xs rounded-full border border-slate-800 bg-[#0B0F19] font-mono text-white focus:outline-none focus:border-cyan-500"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
                   Altura de Camada (mm)
                 </label>
                 <input
@@ -399,7 +399,7 @@ function NovaCalibracaoContent() {
                   step="0.005"
                   value={layerHeight}
                   onChange={(e) => setLayerHeight(Number(e.target.value))}
-                  className="w-full px-2.5 py-1.5 text-xs rounded border border-slate-200 font-mono"
+                  className="w-full px-3 py-2 text-xs rounded-full border border-slate-800 bg-[#0B0F19] font-mono text-white focus:outline-none focus:border-cyan-500"
                 />
               </div>
             </div>
@@ -409,8 +409,8 @@ function NovaCalibracaoContent() {
         {/* Coluna 2: Resultados da Calibração */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Compass className="w-4 h-4 text-brand-500" />
+            <CardTitle className="text-base flex items-center gap-2 text-white">
+              <Compass className="w-4 h-4 text-cyan-400" />
               2. Medições & Validação Visual
             </CardTitle>
           </CardHeader>
@@ -418,10 +418,10 @@ function NovaCalibracaoContent() {
             {/* Hexágono */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-semibold text-[#18181B]">
+                <label className="text-xs font-semibold text-slate-300">
                   Tamanho do Hexágono (mm) *
                 </label>
-                <span className="text-[10px] text-[#716D66] font-mono">
+                <span className="text-[10px] text-slate-400 font-mono">
                   Alvo: 9.99 a 10.01 mm
                 </span>
               </div>
@@ -433,24 +433,24 @@ function NovaCalibracaoContent() {
                 onChange={(e) => setHexagonSize(Number(e.target.value))}
                 className={`w-full px-4 py-2.5 text-base rounded-full border-2 font-mono font-bold text-center transition ${
                   hexagonSize >= 9.99 && hexagonSize <= 10.01
-                    ? "border-[#18181B] bg-[#FAF8F5] text-[#18181B]"
-                    : "border-[#DE3535] bg-rose-50/50 text-[#DE3535]"
+                    ? "border-emerald-500 bg-[#0B0F19] text-emerald-400"
+                    : "border-rose-500/50 bg-[#0B0F19] text-rose-400"
                 }`}
               />
             </div>
 
             {/* 3 Perguntas Visuais */}
             <div className="space-y-2 pt-1">
-              <div className="flex items-center justify-between p-3 rounded-2xl bg-[#FAF8F5] border border-[#EFECE6] text-xs">
-                <span className="font-medium text-[#18181B]">Linhas visíveis?</span>
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-[#0B0F19] border border-slate-800 text-xs">
+                <span className="font-medium text-white">Linhas visíveis?</span>
                 <div className="flex gap-1.5">
                   <button
                     type="button"
                     onClick={() => setLinesVisible(true)}
                     className={`px-4 py-1 rounded-full text-xs font-bold transition ${
                       linesVisible === true
-                        ? "bg-[#18181B] text-white shadow-xs"
-                        : "bg-white border border-[#E2DDD5] text-[#716D66] hover:bg-[#FAF8F5]"
+                        ? "bg-white text-slate-950 shadow-xs"
+                        : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800"
                     }`}
                   >
                     SIM
@@ -460,8 +460,8 @@ function NovaCalibracaoContent() {
                     onClick={() => setLinesVisible(false)}
                     className={`px-4 py-1 rounded-full text-xs font-bold transition ${
                       linesVisible === false
-                        ? "bg-[#DE3535] text-white shadow-xs"
-                        : "bg-white border border-[#E2DDD5] text-[#716D66] hover:bg-[#FAF8F5]"
+                        ? "bg-rose-500 text-white shadow-xs"
+                        : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800"
                     }`}
                   >
                     NÃO
@@ -469,16 +469,16 @@ function NovaCalibracaoContent() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between p-3 rounded-2xl bg-[#FAF8F5] border border-[#EFECE6] text-xs">
-                <span className="font-medium text-[#18181B]">Números visíveis?</span>
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-[#0B0F19] border border-slate-800 text-xs">
+                <span className="font-medium text-white">Números visíveis?</span>
                 <div className="flex gap-1.5">
                   <button
                     type="button"
                     onClick={() => setNumbersVisible(true)}
                     className={`px-4 py-1 rounded-full text-xs font-bold transition ${
                       numbersVisible === true
-                        ? "bg-[#18181B] text-white shadow-xs"
-                        : "bg-white border border-[#E2DDD5] text-[#716D66] hover:bg-[#FAF8F5]"
+                        ? "bg-white text-slate-950 shadow-xs"
+                        : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800"
                     }`}
                   >
                     SIM
@@ -488,8 +488,8 @@ function NovaCalibracaoContent() {
                     onClick={() => setNumbersVisible(false)}
                     className={`px-4 py-1 rounded-full text-xs font-bold transition ${
                       numbersVisible === false
-                        ? "bg-[#DE3535] text-white shadow-xs"
-                        : "bg-white border border-[#E2DDD5] text-[#716D66] hover:bg-[#FAF8F5]"
+                        ? "bg-rose-500 text-white shadow-xs"
+                        : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800"
                     }`}
                   >
                     NÃO
@@ -497,16 +497,16 @@ function NovaCalibracaoContent() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between p-3 rounded-2xl bg-[#FAF8F5] border border-[#EFECE6] text-xs">
-                <span className="font-medium text-[#18181B]">Detalhes visíveis?</span>
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-[#0B0F19] border border-slate-800 text-xs">
+                <span className="font-medium text-white">Detalhes visíveis?</span>
                 <div className="flex gap-1.5">
                   <button
                     type="button"
                     onClick={() => setDetailsVisible(true)}
                     className={`px-4 py-1 rounded-full text-xs font-bold transition ${
                       detailsVisible === true
-                        ? "bg-[#18181B] text-white shadow-xs"
-                        : "bg-white border border-[#E2DDD5] text-[#716D66] hover:bg-[#FAF8F5]"
+                        ? "bg-white text-slate-950 shadow-xs"
+                        : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800"
                     }`}
                   >
                     SIM
@@ -516,8 +516,8 @@ function NovaCalibracaoContent() {
                     onClick={() => setDetailsVisible(false)}
                     className={`px-4 py-1 rounded-full text-xs font-bold transition ${
                       detailsVisible === false
-                        ? "bg-[#DE3535] text-white shadow-xs"
-                        : "bg-white border border-[#E2DDD5] text-[#716D66] hover:bg-[#FAF8F5]"
+                        ? "bg-rose-500 text-white shadow-xs"
+                        : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800"
                     }`}
                   >
                     NÃO
@@ -527,9 +527,9 @@ function NovaCalibracaoContent() {
             </div>
 
             {/* Pós-cura */}
-            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-[#EFECE6]">
+            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-800">
               <div>
-                <label className="block text-[11px] font-semibold text-[#716D66] mb-1">
+                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
                   Lavagem (min)
                 </label>
                 <input
@@ -537,12 +537,12 @@ function NovaCalibracaoContent() {
                   step="0.5"
                   value={washTime}
                   onChange={(e) => setWashTime(Number(e.target.value))}
-                  className="w-full px-3 py-2 text-xs rounded-full border border-[#EFECE6] bg-[#FAF8F5]/60 font-mono text-[#18181B]"
+                  className="w-full px-3 py-2 text-xs rounded-full border border-slate-800 bg-[#0B0F19] font-mono text-white focus:outline-none focus:border-cyan-500"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-[#716D66] mb-1">
+                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
                   Cura (min)
                 </label>
                 <input
@@ -550,7 +550,7 @@ function NovaCalibracaoContent() {
                   step="0.5"
                   value={cureTime}
                   onChange={(e) => setCureTime(Number(e.target.value))}
-                  className="w-full px-3 py-2 text-xs rounded-full border border-[#EFECE6] bg-[#FAF8F5]/60 font-mono text-[#18181B]"
+                  className="w-full px-3 py-2 text-xs rounded-full border border-slate-800 bg-[#0B0F19] font-mono text-white focus:outline-none focus:border-cyan-500"
                 />
               </div>
             </div>
@@ -563,19 +563,19 @@ function NovaCalibracaoContent() {
         <div
           className={`p-4 rounded-2xl border transition-all ${
             validation.approved
-              ? "border-[#18181B] bg-[#FAF8F5] text-[#18181B]"
-              : "border-[#DE3535] bg-rose-50 text-[#DE3535]"
+              ? "border-emerald-500/40 bg-emerald-950/20 text-emerald-300"
+              : "border-rose-500/40 bg-rose-950/20 text-rose-300"
           }`}
         >
           <div className="flex items-center gap-2 font-bold text-xs sm:text-sm">
             {validation.approved ? (
               <>
-                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
                 <span>Calibração aprovada com precisão técnica. Pronto para finalizar.</span>
               </>
             ) : (
               <>
-                <AlertTriangle className="w-5 h-5 text-[#DE3535] shrink-0" />
+                <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
                 <span>
                   Calibração fora dos limites. {validation.errorReason} Grave uma nova tentativa.
                 </span>
@@ -592,7 +592,7 @@ function NovaCalibracaoContent() {
           variant="ghost"
           size="sm"
           onClick={() => router.push("/calibracoes")}
-          className="text-[#716D66] hover:text-[#18181B]"
+          className="text-slate-400 hover:text-white"
         >
           Cancelar
         </Button>

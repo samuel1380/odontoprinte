@@ -69,56 +69,56 @@ export default function RecebimentoResinaPage() {
     <AppShell>
       <div className="max-w-3xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800 pb-4">
           <div className="flex items-center gap-3">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => router.push("/resinas")}
-              className="text-slate-500 hover:text-slate-900 gap-1 pl-0"
+              className="text-slate-400 hover:text-white gap-1 pl-0"
             >
               <ArrowLeft className="w-4 h-4" />
               Voltar
             </Button>
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+              <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center gap-2">
                 Cadastrar Nova Resina
               </h1>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-slate-400 mt-0.5">
                 Preencha os dados do frasco ou lote de resina para disponibilizá-lo para calibração e impressão.
               </p>
             </div>
           </div>
 
-          <div className="text-xs text-slate-500">
-            Responsável: <span className="font-semibold text-slate-800">{user?.full_name || "Operador"}</span>
+          <div className="text-xs text-slate-400">
+            Responsável: <span className="font-semibold text-white">{user?.full_name || "Operador"}</span>
           </div>
         </div>
 
         {/* Info Banner */}
-        <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 flex items-start gap-2.5">
-          <Info className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+        <div className="p-3.5 rounded-2xl bg-[#0F172A] border border-slate-800 text-xs text-slate-300 flex items-start gap-2.5">
+          <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
           <p className="leading-relaxed">
-            O status inicial do lote será sempre <strong>Aguardando Calibração</strong>. A resina só poderá ser selecionada no Fatiador após calibração aprovada para a impressora.
+            O status inicial do lote será sempre <strong className="text-white">Aguardando Calibração</strong>. A resina só poderá ser selecionada no Fatiador após calibração aprovada para a impressora.
           </p>
         </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
-          <Card>
+          <Card className="bg-[#0F172A] border-slate-800">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <FlaskConical className="w-4 h-4 text-brand-500" />
+              <CardTitle className="text-base flex items-center gap-2 text-white">
+                <FlaskConical className="w-4 h-4 text-cyan-400" />
                 Dados do Frasco / Embalagem
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-slate-400">
                 Informações extraídas do rótulo do fabricante e nota fiscal.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
                     Marca do Fabricante *
                   </label>
                   <input
@@ -127,12 +127,12 @@ export default function RecebimentoResinaPage() {
                     value={brand}
                     onChange={(e) => setBrand(e.target.value)}
                     placeholder="Ex: PriZma 3D Bio, Smart Print, Cosmos..."
-                    className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full px-3.5 py-2 text-sm rounded-full border border-slate-800 bg-[#0B0F19] text-white focus:outline-none focus:border-cyan-500 placeholder:text-slate-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
                     Tipo de Aplicação da Resina *
                   </label>
                   <input
@@ -141,14 +141,14 @@ export default function RecebimentoResinaPage() {
                     value={resinType}
                     onChange={(e) => setResinType(e.target.value)}
                     placeholder="Ex: Model Precision Beige, Placa Miorrelaxante..."
-                    className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full px-3.5 py-2 text-sm rounded-full border border-slate-800 bg-[#0B0F19] text-white focus:outline-none focus:border-cyan-500 placeholder:text-slate-500"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
                     Número do Lote (Batch) *
                   </label>
                   <input
@@ -157,12 +157,12 @@ export default function RecebimentoResinaPage() {
                     value={lot}
                     onChange={(e) => setLot(e.target.value)}
                     placeholder="Ex: BIO-2026-X1"
-                    className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500 font-mono font-bold uppercase"
+                    className="w-full px-3.5 py-2 text-sm rounded-full border border-slate-800 bg-[#0B0F19] text-white focus:outline-none focus:border-cyan-500 font-mono font-bold uppercase placeholder:text-slate-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
                     Volume & Unidade *
                   </label>
                   <div className="flex gap-2">
@@ -172,12 +172,12 @@ export default function RecebimentoResinaPage() {
                       min={1}
                       value={volume}
                       onChange={(e) => setVolume(Number(e.target.value))}
-                      className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      className="w-full px-3 py-2 text-sm rounded-full border border-slate-800 bg-[#0B0F19] text-white focus:outline-none focus:border-cyan-500"
                     />
                     <select
                       value={volumeUnit}
                       onChange={(e) => setVolumeUnit(e.target.value)}
-                      className="px-3 py-2 text-sm rounded-lg border border-slate-200 bg-slate-50 font-bold"
+                      className="px-3 py-2 text-sm rounded-full border border-slate-800 bg-[#0B0F19] text-white font-bold focus:outline-none focus:border-cyan-500"
                     >
                       <option value="ml">ml</option>
                       <option value="g">g</option>
@@ -188,7 +188,7 @@ export default function RecebimentoResinaPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
                   Observações de Armazenamento / Validade
                 </label>
                 <textarea
@@ -196,7 +196,7 @@ export default function RecebimentoResinaPage() {
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Ex: Armazenar em local escuro entre 18°C e 25°C. Validade do lote até 12/2027..."
-                  className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="w-full px-3.5 py-2 text-sm rounded-2xl border border-slate-800 bg-[#0B0F19] text-white focus:outline-none focus:border-cyan-500 placeholder:text-slate-500"
                 />
               </div>
             </CardContent>
@@ -209,6 +209,7 @@ export default function RecebimentoResinaPage() {
               variant="ghost"
               size="sm"
               onClick={() => router.push("/resinas")}
+              className="text-slate-400 hover:text-white"
             >
               Cancelar
             </Button>
@@ -217,7 +218,7 @@ export default function RecebimentoResinaPage() {
               type="submit"
               size="lg"
               disabled={isSubmitting}
-              className="font-bold px-8"
+              className="font-bold px-8 rounded-full bg-white text-slate-950 hover:bg-slate-200"
             >
               {isSubmitting ? "Salvando..." : "Registrar Recebimento"}
             </Button>

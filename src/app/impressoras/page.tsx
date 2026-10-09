@@ -6,35 +6,27 @@ import { AppShell } from "@/components/layout/shell";
 import { OdontoPrintService } from "@/services/odontoprint-service";
 import { PrinterWithStatus } from "@/types/domain";
 import { PRINTER_STATUS } from "@/lib/constants";
-import { formatDate } from "@/lib/utils";
 import {
   Printer,
-  Wrench,
-  AlertTriangle,
-  CheckCircle2,
-  XCircle,
   Plus,
-  Layers,
-  ArrowRight,
-  Sparkles,
+  Wrench,
+  History,
+  AlertTriangle,
   Trash2,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog } from "@/components/ui/dialog";
+import { formatDate } from "@/lib/utils";
 import { toast } from "sonner";
 
 export default function ImpressorasPage() {
   const [printers, setPrinters] = useState<PrinterWithStatus[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Excluir Impressora State
-  const [printerToDelete, setPrinterToDelete] = useState<PrinterWithStatus | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  // New Printer Modal State
+  // Modal State
   const [modalOpen, setModalOpen] = useState(false);
   const [name, setName] = useState("");
   const [brand, setBrand] = useState("");
@@ -43,13 +35,17 @@ export default function ImpressorasPage() {
   const [maintenanceContact, setMaintenanceContact] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
+  // Delete State
+  const [printerToDelete, setPrinterToDelete] = useState<PrinterWithStatus | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const loadPrinters = async () => {
     setIsLoading(true);
     try {
       const data = await OdontoPrintService.getPrinters();
       setPrinters(data);
     } catch {
-      toast.error("Erro ao listar impressoras.");
+      toast.error("Erro ao carregar impressoras.");
     } finally {
       setIsLoading(false);
     }
@@ -68,16 +64,21 @@ export default function ImpressorasPage() {
 
     setIsSaving(true);
     try {
-      await OdontoPrintService.createPrinter({
-        name,
-        brand,
-        model,
-        serial_number: serialNumber,
-        maintenance_contact: maintenanceContact,
+      const created = await OdontoPrintService.createPrinter({
+        name: name.trim(),
+        brand: brand.trim(),
+        model: model.trim(),
+        serial_number: serialNumber.trim(),
+        maintenance_contact: maintenanceContact.trim() || undefined,
         active: true,
       });
 
-      toast.success("Impressora cadastrada com sucesso! Realize a primeira manutenção para liberá-la.");
+      if (!created) {
+        toast.error("Não foi possível cadastrar a impressora.");
+        return;
+      }
+
+      toast.success(`Impressora ${name} cadastrada com sucesso!`);
       setModalOpen(false);
       setName("");
       setBrand("");
@@ -86,7 +87,7 @@ export default function ImpressorasPage() {
       setMaintenanceContact("");
       loadPrinters();
     } catch {
-      toast.error("Erro ao cadastrar impressora.");
+      toast.error("Erro ao salvar impressora.");
     } finally {
       setIsSaving(false);
     }
@@ -94,14 +95,19 @@ export default function ImpressorasPage() {
 
   const handleDeletePrinter = async () => {
     if (!printerToDelete) return;
+
     setIsDeleting(true);
     try {
-      await OdontoPrintService.deletePrinter(printerToDelete.id);
-      toast.success(`Impressora "${printerToDelete.name}" apagada com sucesso.`);
-      setPrinterToDelete(null);
-      await loadPrinters();
-    } catch {
-      toast.error("Erro ao apagar impressora.");
+      const res = await OdontoPrintService.deletePrinter(printerToDelete.id);
+      if (res.success) {
+        toast.success(`Impressora "${printerToDelete.name}" removida com sucesso!`);
+        setPrinterToDelete(null);
+        await loadPrinters();
+      } else {
+        toast.error(res.error || "Não foi possível excluir a impressora.");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Erro inesperado ao excluir impressora.");
     } finally {
       setIsDeleting(false);
     }
@@ -111,12 +117,12 @@ export default function ImpressorasPage() {
     <AppShell>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[#EFECE6] pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800 pb-4">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-[#18181B] tracking-tight">
+            <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
               Impressoras 3D
             </h1>
-            <p className="text-xs sm:text-sm text-[#716D66] mt-0.5">
+            <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
               Parque tecnológico e controle de manutenção preventiva.
             </p>
           </div>
@@ -125,7 +131,7 @@ export default function ImpressorasPage() {
             onClick={() => setModalOpen(true)}
             variant="default"
             size="sm"
-            className="gap-1.5 font-semibold w-full sm:w-auto justify-center"
+            className="gap-1.5 font-semibold w-full sm:w-auto justify-center rounded-full bg-white hover:bg-slate-200 text-slate-950"
           >
             <Plus className="w-4 h-4" />
             Nova Impressora
@@ -136,7 +142,7 @@ export default function ImpressorasPage() {
         {isLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
             {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-56 w-full rounded-3xl" />
+              <Skeleton key={i} className="h-56 w-full rounded-3xl bg-slate-800" />
             ))}
           </div>
         ) : (
@@ -148,13 +154,13 @@ export default function ImpressorasPage() {
               return (
                 <Card
                   key={p.id}
-                  className="flex flex-col justify-between overflow-hidden border border-[#EFECE6] bg-white transition hover:border-[#18181B]/30"
+                  className="flex flex-col justify-between overflow-hidden border border-slate-800 bg-[#0F172A] transition hover:border-slate-700"
                 >
                   <CardHeader className="p-4 sm:p-5 pb-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <CardTitle className="text-base text-[#18181B] font-bold truncate">{p.name}</CardTitle>
-                        <p className="text-xs text-[#716D66] mt-0.5 truncate">
+                        <CardTitle className="text-base text-white font-bold truncate">{p.name}</CardTitle>
+                        <p className="text-xs text-slate-400 mt-0.5 truncate">
                           {p.brand} &bull; {p.model}
                         </p>
                       </div>
@@ -163,7 +169,7 @@ export default function ImpressorasPage() {
                         <button
                           type="button"
                           onClick={() => setPrinterToDelete(p)}
-                          className="p-1.5 rounded-full text-[#716D66] hover:text-[#DE3535] hover:bg-rose-50 transition"
+                          className="p-1.5 rounded-full text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition"
                           title="Excluir impressora"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -173,24 +179,24 @@ export default function ImpressorasPage() {
                   </CardHeader>
 
                   <CardContent className="p-4 sm:p-5 pt-0 space-y-3 text-xs">
-                    <div className="divide-y divide-[#EFECE6] rounded-2xl bg-[#FAF8F5] p-3.5 border border-[#EFECE6] space-y-1.5">
+                    <div className="divide-y divide-slate-800 rounded-2xl bg-slate-900 p-3.5 border border-slate-800 space-y-1.5">
                       <div className="flex justify-between items-center">
-                        <span className="text-[#716D66]">Série:</span>
-                        <span className="font-mono font-medium text-[#18181B]">{p.serial_number}</span>
+                        <span className="text-slate-400">Série:</span>
+                        <span className="font-mono font-medium text-white">{p.serial_number}</span>
                       </div>
                       <div className="flex justify-between items-center pt-1.5">
-                        <span className="text-[#716D66]">Última Manutenção:</span>
-                        <span className="font-medium text-[#18181B]">
+                        <span className="text-slate-400">Última Manutenção:</span>
+                        <span className="font-medium text-white">
                           {p.latest_maintenance ? formatDate(p.latest_maintenance.performed_at) : "Pendente"}
                         </span>
                       </div>
                       <div className="flex justify-between items-center pt-1.5">
-                        <span className="text-[#716D66]">Ciclo:</span>
+                        <span className="text-slate-400">Ciclo:</span>
                         <span
                           className={`font-semibold ${
                             (p.days_since_maintenance || 0) > 7
-                              ? "text-[#DE3535]"
-                              : "text-emerald-700"
+                              ? "text-rose-400"
+                              : "text-emerald-400"
                           }`}
                         >
                           {p.days_since_maintenance !== null
@@ -201,8 +207,8 @@ export default function ImpressorasPage() {
                     </div>
 
                     {!isAvailable && (
-                      <div className="p-2.5 rounded-2xl bg-amber-50 border border-amber-200/80 text-[11px] text-amber-900 flex items-start gap-2">
-                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-600 mt-0.5" />
+                      <div className="p-2.5 rounded-2xl bg-amber-950/60 border border-amber-800/60 text-[11px] text-amber-300 flex items-start gap-2">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-400 mt-0.5" />
                         <div className="leading-tight">
                           {p.calculated_status === "MANUTENCAO_VENCIDA"
                             ? `Manutenção pendente há ${p.days_since_maintenance} dias.`
@@ -217,15 +223,19 @@ export default function ImpressorasPage() {
                       <Button
                         variant={isAvailable ? "outline" : "default"}
                         size="sm"
-                        className="w-full text-xs font-semibold gap-1.5"
+                        className="w-full text-xs font-semibold gap-1.5 rounded-full"
                       >
                         <Wrench className="w-3.5 h-3.5" />
                         Manutenção
                       </Button>
                     </Link>
-
-                    <Link href={`/impressoras/${p.id}`}>
-                      <Button variant="ghost" size="sm" className="text-xs px-3 text-[#716D66] hover:text-[#18181B]">
+                    <Link href={`/impressoras/${p.id}`} className="flex-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full text-xs font-semibold gap-1.5 rounded-full border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 hover:text-white"
+                      >
+                        <History className="w-3.5 h-3.5" />
                         Histórico
                       </Button>
                     </Link>
@@ -245,7 +255,7 @@ export default function ImpressorasPage() {
         >
           <form onSubmit={handleCreatePrinter} className="space-y-4 pt-2">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-semibold text-slate-200 mb-1">
                 Nome da Impressora *
               </label>
               <input
@@ -254,13 +264,13 @@ export default function ImpressorasPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Ex: Odonto Printer 04"
-                className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="w-full px-3.5 py-2 text-xs rounded-full border border-slate-800 bg-slate-900 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label className="block text-xs font-semibold text-slate-200 mb-1">
                   Marca *
                 </label>
                 <input
@@ -269,12 +279,12 @@ export default function ImpressorasPage() {
                   value={brand}
                   onChange={(e) => setBrand(e.target.value)}
                   placeholder="Ex: Elegoo"
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="w-full px-3.5 py-2 text-xs rounded-full border border-slate-800 bg-slate-900 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label className="block text-xs font-semibold text-slate-200 mb-1">
                   Modelo *
                 </label>
                 <input
@@ -283,13 +293,13 @@ export default function ImpressorasPage() {
                   value={model}
                   onChange={(e) => setModel(e.target.value)}
                   placeholder="Ex: Saturn 4 Ultra"
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="w-full px-3.5 py-2 text-xs rounded-full border border-slate-800 bg-slate-900 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-semibold text-slate-200 mb-1">
                 Número de Série *
               </label>
               <input
@@ -298,33 +308,34 @@ export default function ImpressorasPage() {
                 value={serialNumber}
                 onChange={(e) => setSerialNumber(e.target.value)}
                 placeholder="Ex: SN-ELG-8812-BR"
-                className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500 font-mono"
+                className="w-full px-3.5 py-2 text-xs rounded-full border border-slate-800 bg-slate-900 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400 font-mono"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-semibold text-slate-200 mb-1">
                 Contato de Manutenção / Assistência
               </label>
               <input
                 type="text"
                 value={maintenanceContact}
                 onChange={(e) => setMaintenanceContact(e.target.value)}
-                placeholder="Ex: assistencia@elegoo.com / (11) 98888-7777"
-                className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                placeholder="Ex: assistencia@elegoo.com"
+                className="w-full px-3.5 py-2 text-xs rounded-full border border-slate-800 bg-slate-900 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
               />
             </div>
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 onClick={() => setModalOpen(false)}
+                className="rounded-full text-slate-400 hover:text-white"
               >
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isSaving} size="sm" className="font-bold">
+              <Button type="submit" disabled={isSaving} size="sm" className="font-bold rounded-full bg-white hover:bg-slate-200 text-slate-950">
                 {isSaving ? "Salvando..." : "Salvar Impressora"}
               </Button>
             </div>
@@ -341,8 +352,8 @@ export default function ImpressorasPage() {
           description={`Tem certeza que deseja apagar a impressora "${printerToDelete?.name}"? Esta ação removerá o equipamento e seu histórico de manutenções.`}
         >
           <div className="space-y-4 pt-2">
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+            <div className="p-3 bg-rose-950/60 border border-rose-800/60 rounded-2xl text-xs text-rose-300 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
               <div>
                 <span className="font-semibold block mb-0.5">Atenção: Ação Irreversível</span>
                 O equipamento <strong>{printerToDelete?.name}</strong> ({printerToDelete?.brand} - {printerToDelete?.model}, Série: {printerToDelete?.serial_number}) será permanentemente removido do parque de impressoras.
@@ -355,6 +366,7 @@ export default function ImpressorasPage() {
                 size="sm"
                 onClick={() => setPrinterToDelete(null)}
                 disabled={isDeleting}
+                className="rounded-full border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800"
               >
                 Cancelar
               </Button>
@@ -363,7 +375,7 @@ export default function ImpressorasPage() {
                 size="sm"
                 onClick={handleDeletePrinter}
                 disabled={isDeleting}
-                className="gap-1.5 font-bold"
+                className="gap-1.5 font-bold rounded-full bg-rose-600 hover:bg-rose-700"
               >
                 <Trash2 className="w-4 h-4" />
                 {isDeleting ? "Excluindo..." : "Confirmar Exclusão"}

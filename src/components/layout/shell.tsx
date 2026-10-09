@@ -24,7 +24,7 @@ export function AppShell({ children }: AppShellProps) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white p-4">
+      <div className="min-h-screen bg-[#0B0F19] flex flex-col items-center justify-center text-white p-4">
         <div className="relative mb-5">
           <img
             src="/logo.jpg"
@@ -43,7 +43,7 @@ export function AppShell({ children }: AppShellProps) {
   }
 
   return (
-    <div className="min-h-screen bg-[#FBF9F5] text-[#1E1C1A] flex overflow-x-hidden">
+    <div className="min-h-screen bg-[#0B0F19] text-slate-100 flex overflow-x-hidden">
       {/* Sidebar com gaveta responsiva para mobile/tablet e fixo em desktop */}
       <Sidebar
         isOpen={mobileMenuOpen}
@@ -58,7 +58,7 @@ export function AppShell({ children }: AppShellProps) {
         </main>
       </div>
 
-      {/* Assistente IA Copiloto OdontoPrint (Gemini / Groq) acessível em todo o sistema */}
+      {/* Assistente IA Copiloto OdontoPrint acessível em todo o sistema */}
       <AICopilotDrawer />
     </div>
   );

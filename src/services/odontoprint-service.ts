@@ -316,6 +316,31 @@ export class OdontoPrintService {
     return { success: true, case_id: caseId, job_id: jobId };
   }
 
+  static async createCaseWithItems(params: {
+    patient_code: string;
+    patient_name?: string;
+    clinical_notes?: string;
+    files: Array<{
+      file_type: DentalFileType | string;
+      file_name?: string;
+      label?: string;
+      category?: string;
+    }>;
+    user_id?: string;
+  }): Promise<{ id: string; patient_code: string; success: boolean } | null> {
+    const selectedFiles = params.files.map((f) => f.file_type as DentalFileType);
+    const res = await this.createCadistaCase({
+      patient_code: params.patient_code,
+      patient_name: params.patient_name,
+      notes: params.clinical_notes,
+      process_type: "IMPRESSAO",
+      selected_files: selectedFiles,
+      user_id: params.user_id,
+    });
+    if (!res.success) return null;
+    return { id: res.case_id, patient_code: params.patient_code, success: true };
+  }
+
   // --- CASOS / PACIENTES ---
   static async getCases(): Promise<Case[]> {
     mockCases = loadLocal("odontoprint_cases", mockCases);
@@ -423,6 +448,11 @@ export class OdontoPrintService {
     return { items: enriched, cards };
   }
 
+  static async getQueueItems(): Promise<QueueItem[]> {
+    const res = await this.getQueue();
+    return res.items;
+  }
+
   // --- IMPRESSORAS E MANUTENÇÕES ---
   static async getPrinters(): Promise<PrinterWithStatus[]> {
     const settings = await this.getSettings();
@@ -491,10 +521,11 @@ export class OdontoPrintService {
     return { printer, maintenances };
   }
 
-  static async createPrinter(params: Omit<Printer, "id" | "created_at" | "updated_at">): Promise<Printer> {
+  static async createPrinter(params: Omit<Printer, "id" | "created_at" | "updated_at" | "active"> & { active?: boolean }): Promise<Printer> {
     const now = new Date().toISOString();
     const newPrinter: Printer = {
       id: crypto.randomUUID(),
+      active: params.active ?? true,
       ...params,
       created_at: now,
       updated_at: now,
@@ -1681,6 +1712,10 @@ export class OdontoPrintService {
     return mockMillingItems;
   }
 
+  static async getMillingQueue(): Promise<MillingItem[]> {
+    return this.getMillingItems();
+  }
+
   static async startMilling(id: string, block_lot: string, user_id?: string): Promise<{ success: boolean; error?: string }> {
     mockMillingItems = loadLocal<MillingItem[]>("odontoprint_milling_items", mockMillingItems);
     const item = mockMillingItems.find((m) => m.id === id);
@@ -1823,6 +1858,10 @@ export class OdontoPrintService {
     return mockFinishingItems;
   }
 
+  static async getFinishingQueue(): Promise<FinishingCaseItem[]> {
+    return this.getFinishingItems();
+  }
+
   static async updateFinishingChecklist(params: {
     id: string;
     teeth_inserted?: boolean;
@@ -1845,6 +1884,19 @@ export class OdontoPrintService {
 
     saveLocal("odontoprint_finishing_items", mockFinishingItems);
     return { success: true, item };
+  }
+
+  static async updateFinishingCheck(
+    id: string,
+    field: "teeth_inserted" | "occlusion_checked" | "glaze_applied",
+    value: boolean,
+    user_id?: string
+  ): Promise<{ success: boolean; item?: FinishingCaseItem; error?: string }> {
+    return this.updateFinishingChecklist({
+      id,
+      [field]: value,
+      technician_name: user_id,
+    });
   }
 
   static async approveFinishingCase(

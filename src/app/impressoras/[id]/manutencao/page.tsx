@@ -130,65 +130,65 @@ export default function PrinterManutencaoPage() {
     <AppShell>
       <div className="max-w-3xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800 pb-4">
           <div className="flex items-center gap-3">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => router.push("/impressoras")}
-              className="text-slate-500 hover:text-slate-900 gap-1 pl-0"
+              className="text-slate-400 hover:text-white gap-1 pl-0"
             >
               <ArrowLeft className="w-4 h-4" />
               Voltar
             </Button>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+              <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
                 Checklist de Manutenção Periódica
               </h1>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Equipamento: <span className="font-bold text-slate-800">{printerData?.name}</span> ({printerData?.brand} {printerData?.model})
+              <p className="text-xs text-slate-400 mt-0.5">
+                Equipamento: <span className="font-bold text-white">{printerData?.name}</span> ({printerData?.brand} {printerData?.model})
               </p>
             </div>
           </div>
 
-          <div className="text-xs text-slate-500">
-            Técnico: <span className="font-semibold text-slate-800">{user?.full_name || "Técnico"}</span>
+          <div className="text-xs text-slate-400">
+            Técnico: <span className="font-semibold text-white">{user?.full_name || "Técnico"}</span>
           </div>
         </div>
 
         {/* 7-Days Rule Info Box */}
-        <div className="p-4 rounded-xl bg-brand-50/70 border border-brand-200 text-xs text-brand-900 flex items-start gap-3 shadow-subtle">
-          <Info className="w-5 h-5 text-brand-600 shrink-0 mt-0.5" />
+        <div className="p-4 rounded-2xl bg-[#0F172A] border border-slate-800 text-xs text-slate-300 flex items-start gap-3">
+          <Info className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
           <div>
-            <span className="font-bold block mb-0.5">Regra Operacional de 7 Dias:</span>
+            <span className="font-bold block mb-0.5 text-white">Regra Operacional de 7 Dias:</span>
             A impressora é automaticamente bloqueada caso passem mais de 7 dias desde a última manutenção aprovada. Para ser aprovada, todos os itens de nivelamento, limpeza, FEP, LED e película devem estar 100% íntegros e NÃO podem haver pontos pretos ou baixa luminosidade no painel.
           </div>
         </div>
 
         {/* Checklist Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Wrench className="w-4 h-4 text-brand-500" />
+          <Card className="bg-[#0F172A] border-slate-800">
+            <CardHeader className="pb-3 border-b border-slate-800">
+              <CardTitle className="text-base flex items-center gap-2 text-white">
+                <Wrench className="w-4 h-4 text-cyan-400" />
                 Itens de Inspeção Visual e Óptica
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-slate-400">
                 Responda a cada critério após testar a impressora em bancada.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3.5">
+            <CardContent className="space-y-3.5 pt-4">
               {/* 1. Nivelamento */}
-              <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50/50">
-                <span className="text-xs font-semibold text-slate-800">1. Nivelamento do Prato</span>
+              <div className="flex items-center justify-between p-3 rounded-2xl border border-slate-800 bg-[#0B0F19]">
+                <span className="text-xs font-semibold text-white">1. Nivelamento do Prato</span>
                 <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => setLevelingOk(true)}
-                    className={`px-3.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                    className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all ${
                       levelingOk === true
-                        ? "bg-approvedGreen-500 text-slate-950 shadow-sm"
-                        : "bg-white border border-slate-300 text-slate-600"
+                        ? "bg-emerald-500 text-slate-950 shadow-sm"
+                        : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white"
                     }`}
                   >
                     OK
@@ -196,10 +196,10 @@ export default function PrinterManutencaoPage() {
                   <button
                     type="button"
                     onClick={() => setLevelingOk(false)}
-                    className={`px-3.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                    className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all ${
                       levelingOk === false
                         ? "bg-rose-500 text-white shadow-sm"
-                        : "bg-white border border-slate-300 text-slate-600"
+                        : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white"
                     }`}
                   >
                     NÃO OK
@@ -208,16 +208,16 @@ export default function PrinterManutencaoPage() {
               </div>
 
               {/* 2. Limpeza */}
-              <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50/50">
-                <span className="text-xs font-semibold text-slate-800">2. Limpeza Geral da Cuba e Eixos</span>
+              <div className="flex items-center justify-between p-3 rounded-2xl border border-slate-800 bg-[#0B0F19]">
+                <span className="text-xs font-semibold text-white">2. Limpeza Geral da Cuba e Eixos</span>
                 <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => setCleaningOk(true)}
-                    className={`px-3.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                    className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all ${
                       cleaningOk === true
-                        ? "bg-approvedGreen-500 text-slate-950 shadow-sm"
-                        : "bg-white border border-slate-300 text-slate-600"
+                        ? "bg-emerald-500 text-slate-950 shadow-sm"
+                        : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white"
                     }`}
                   >
                     OK
@@ -225,10 +225,10 @@ export default function PrinterManutencaoPage() {
                   <button
                     type="button"
                     onClick={() => setCleaningOk(false)}
-                    className={`px-3.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                    className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all ${
                       cleaningOk === false
                         ? "bg-rose-500 text-white shadow-sm"
-                        : "bg-white border border-slate-300 text-slate-600"
+                        : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white"
                     }`}
                   >
                     NÃO OK
@@ -237,16 +237,16 @@ export default function PrinterManutencaoPage() {
               </div>
 
               {/* 3. Integridade do FEP */}
-              <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50/50">
-                <span className="text-xs font-semibold text-slate-800">3. Integridade do Filme FEP (sem furos ou riscos)</span>
+              <div className="flex items-center justify-between p-3 rounded-2xl border border-slate-800 bg-[#0B0F19]">
+                <span className="text-xs font-semibold text-white">3. Integridade do Filme FEP (sem furos ou riscos)</span>
                 <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => setFepIntegrityOk(true)}
-                    className={`px-3.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                    className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all ${
                       fepIntegrityOk === true
-                        ? "bg-approvedGreen-500 text-slate-950 shadow-sm"
-                        : "bg-white border border-slate-300 text-slate-600"
+                        ? "bg-emerald-500 text-slate-950 shadow-sm"
+                        : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white"
                     }`}
                   >
                     OK
@@ -254,10 +254,10 @@ export default function PrinterManutencaoPage() {
                   <button
                     type="button"
                     onClick={() => setFepIntegrityOk(false)}
-                    className={`px-3.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                    className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all ${
                       fepIntegrityOk === false
                         ? "bg-rose-500 text-white shadow-sm"
-                        : "bg-white border border-slate-300 text-slate-600"
+                        : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white"
                     }`}
                   >
                     NÃO OK
@@ -266,16 +266,16 @@ export default function PrinterManutencaoPage() {
               </div>
 
               {/* 4. Integridade do LED */}
-              <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50/50">
-                <span className="text-xs font-semibold text-slate-800">4. Integridade Geral do Painel LED UV</span>
+              <div className="flex items-center justify-between p-3 rounded-2xl border border-slate-800 bg-[#0B0F19]">
+                <span className="text-xs font-semibold text-white">4. Integridade Geral do Painel LED UV</span>
                 <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => setLedIntegrityOk(true)}
-                    className={`px-3.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                    className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all ${
                       ledIntegrityOk === true
-                        ? "bg-approvedGreen-500 text-slate-950 shadow-sm"
-                        : "bg-white border border-slate-300 text-slate-600"
+                        ? "bg-emerald-500 text-slate-950 shadow-sm"
+                        : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white"
                     }`}
                   >
                     OK
@@ -283,10 +283,10 @@ export default function PrinterManutencaoPage() {
                   <button
                     type="button"
                     onClick={() => setLedIntegrityOk(false)}
-                    className={`px-3.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                    className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all ${
                       ledIntegrityOk === false
                         ? "bg-rose-500 text-white shadow-sm"
-                        : "bg-white border border-slate-300 text-slate-600"
+                        : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white"
                     }`}
                   >
                     NÃO OK
@@ -295,9 +295,9 @@ export default function PrinterManutencaoPage() {
               </div>
 
               {/* 5. Pontos Pretos no LED? (SIM / NÃO) */}
-              <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50/50">
+              <div className="flex items-center justify-between p-3 rounded-2xl border border-slate-800 bg-[#0B0F19]">
                 <div>
-                  <span className="text-xs font-semibold text-slate-800 block">
+                  <span className="text-xs font-semibold text-white block">
                     5. Existem pontos pretos (dead pixels) no LED?
                   </span>
                   <span className="text-[10px] text-slate-400">Deve ser &apos;NÃO&apos; para aprovar</span>
@@ -306,10 +306,10 @@ export default function PrinterManutencaoPage() {
                   <button
                     type="button"
                     onClick={() => setBlackPointsLed(true)}
-                    className={`px-3.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                    className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all ${
                       blackPointsLed === true
                         ? "bg-rose-500 text-white shadow-sm"
-                        : "bg-white border border-slate-300 text-slate-600"
+                        : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white"
                     }`}
                   >
                     SIM (Defeito)
@@ -317,10 +317,10 @@ export default function PrinterManutencaoPage() {
                   <button
                     type="button"
                     onClick={() => setBlackPointsLed(false)}
-                    className={`px-3.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                    className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all ${
                       blackPointsLed === false
-                        ? "bg-approvedGreen-500 text-slate-950 shadow-sm"
-                        : "bg-white border border-slate-300 text-slate-600"
+                        ? "bg-emerald-500 text-slate-950 shadow-sm"
+                        : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white"
                     }`}
                   >
                     NÃO (Perfeito)
@@ -329,9 +329,9 @@ export default function PrinterManutencaoPage() {
               </div>
 
               {/* 6. Baixa Luminosidade do LED? (SIM / NÃO) */}
-              <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50/50">
+              <div className="flex items-center justify-between p-3 rounded-2xl border border-slate-800 bg-[#0B0F19]">
                 <div>
-                  <span className="text-xs font-semibold text-slate-800 block">
+                  <span className="text-xs font-semibold text-white block">
                     6. Existe baixa luminosidade ou oscilação do LED?
                   </span>
                   <span className="text-[10px] text-slate-400">Deve ser &apos;NÃO&apos; para aprovar</span>
@@ -340,10 +340,10 @@ export default function PrinterManutencaoPage() {
                   <button
                     type="button"
                     onClick={() => setLowLedLuminosity(true)}
-                    className={`px-3.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                    className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all ${
                       lowLedLuminosity === true
                         ? "bg-rose-500 text-white shadow-sm"
-                        : "bg-white border border-slate-300 text-slate-600"
+                        : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white"
                     }`}
                   >
                     SIM (Defeito)
@@ -351,10 +351,10 @@ export default function PrinterManutencaoPage() {
                   <button
                     type="button"
                     onClick={() => setLowLedLuminosity(false)}
-                    className={`px-3.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                    className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all ${
                       lowLedLuminosity === false
-                        ? "bg-approvedGreen-500 text-slate-950 shadow-sm"
-                        : "bg-white border border-slate-300 text-slate-600"
+                        ? "bg-emerald-500 text-slate-950 shadow-sm"
+                        : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white"
                     }`}
                   >
                     NÃO (Perfeito)
@@ -363,18 +363,18 @@ export default function PrinterManutencaoPage() {
               </div>
 
               {/* 7. Película Protetora */}
-              <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50/50">
-                <span className="text-xs font-semibold text-slate-800">
+              <div className="flex items-center justify-between p-3 rounded-2xl border border-slate-800 bg-[#0B0F19]">
+                <span className="text-xs font-semibold text-white">
                   7. Integridade da Película Protetora da Tela LCD
                 </span>
                 <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => setProtectiveFilmOk(true)}
-                    className={`px-3.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                    className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all ${
                       protectiveFilmOk === true
-                        ? "bg-approvedGreen-500 text-slate-950 shadow-sm"
-                        : "bg-white border border-slate-300 text-slate-600"
+                        ? "bg-emerald-500 text-slate-950 shadow-sm"
+                        : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white"
                     }`}
                   >
                     OK
@@ -382,10 +382,10 @@ export default function PrinterManutencaoPage() {
                   <button
                     type="button"
                     onClick={() => setProtectiveFilmOk(false)}
-                    className={`px-3.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                    className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all ${
                       protectiveFilmOk === false
                         ? "bg-rose-500 text-white shadow-sm"
-                        : "bg-white border border-slate-300 text-slate-600"
+                        : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white"
                     }`}
                   >
                     NÃO OK
@@ -395,7 +395,7 @@ export default function PrinterManutencaoPage() {
 
               {/* Observações */}
               <div className="pt-2">
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
                   Comentários / Observações do Técnico
                 </label>
                 <textarea
@@ -403,7 +403,7 @@ export default function PrinterManutencaoPage() {
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Ex: Troca de FEP realizada, lubrificação do fuso Z efetuada..."
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="w-full px-3 py-2 text-xs rounded-2xl border border-slate-800 bg-[#0B0F19] text-white focus:outline-none focus:border-cyan-500 placeholder:text-slate-500"
                 />
               </div>
             </CardContent>
@@ -412,21 +412,21 @@ export default function PrinterManutencaoPage() {
           {/* Result Status Preview Card */}
           {allAnswered && (
             <div
-              className={`p-4 rounded-xl border-2 transition-all animate-in fade-in ${
+              className={`p-4 rounded-2xl border transition-all animate-in fade-in ${
                 isApproved
-                  ? "border-approvedGreen-500 bg-approvedGreen-50/80 text-approvedGreen-900"
-                  : "border-rose-300 bg-rose-50 text-rose-900"
+                  ? "border-emerald-500/40 bg-emerald-950/20 text-emerald-300"
+                  : "border-rose-500/40 bg-rose-950/20 text-rose-300"
               }`}
             >
               <div className="flex items-center gap-2 font-bold text-sm">
                 {isApproved ? (
                   <>
-                    <CheckCircle2 className="w-5 h-5 text-approvedGreen-600" />
+                    <CheckCircle2 className="w-5 h-5 text-emerald-400" />
                     Manutenção Aprovada! A impressora será liberada para produção.
                   </>
                 ) : (
                   <>
-                    <AlertTriangle className="w-5 h-5 text-rose-600" />
+                    <AlertTriangle className="w-5 h-5 text-rose-400" />
                     Manutenção Reprovada! A impressora receberá status REPROVADA e ficará bloqueada.
                   </>
                 )}
@@ -441,6 +441,7 @@ export default function PrinterManutencaoPage() {
               variant="ghost"
               size="sm"
               onClick={() => router.push("/impressoras")}
+              className="text-slate-400 hover:text-white"
             >
               Cancelar
             </Button>
@@ -449,8 +450,8 @@ export default function PrinterManutencaoPage() {
               type="submit"
               size="lg"
               disabled={!allAnswered || isSubmitting}
-              className={`font-bold px-8 ${
-                isApproved ? "bg-approvedGreen-500 hover:bg-approvedGreen-600 text-slate-950" : ""
+              className={`font-bold px-8 rounded-full ${
+                isApproved ? "bg-white text-slate-950 hover:bg-slate-200" : "bg-rose-600 hover:bg-rose-500 text-white"
               }`}
             >
               {isSubmitting ? "Gravando Manutenção..." : "Salvar e Atualizar Status"}

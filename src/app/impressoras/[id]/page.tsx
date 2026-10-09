@@ -95,26 +95,26 @@ export default function ImpressoraDetalhesPage() {
     <AppShell>
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200/80 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-800 pb-4">
           <div className="flex items-center gap-3">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => router.push("/impressoras")}
-              className="text-slate-500 hover:text-slate-900 gap-1 pl-0"
+              className="text-slate-400 hover:text-white gap-1 pl-0"
             >
               <ArrowLeft className="w-4 h-4" />
               Voltar
             </Button>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+                <h1 className="text-2xl font-bold text-white tracking-tight">
                   {p.name}
                 </h1>
                 <Badge className={statusCfg.color}>{statusCfg.label}</Badge>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                {p.brand} &bull; {p.model} &bull; Série: <span className="font-mono">{p.serial_number}</span>
+                {p.brand} &bull; {p.model} &bull; Série: <span className="font-mono text-cyan-400">{p.serial_number}</span>
               </p>
             </div>
           </div>
@@ -124,14 +124,14 @@ export default function ImpressoraDetalhesPage() {
               variant="outline"
               size="sm"
               onClick={() => setDeleteDialogOpen(true)}
-              className="text-rose-600 border-rose-200 hover:bg-rose-50 gap-1.5 font-bold w-full sm:w-auto justify-center"
+              className="text-rose-400 border-rose-500/40 bg-rose-950/20 hover:bg-rose-950/40 gap-1.5 font-bold w-full sm:w-auto justify-center"
             >
               <Trash2 className="w-4 h-4" />
               Excluir Impressora
             </Button>
 
             <Link href={`/impressoras/${p.id}/manutencao`} className="w-full sm:w-auto">
-              <Button variant="default" size="sm" className="gap-1.5 font-bold w-full sm:w-auto justify-center">
+              <Button variant="default" size="sm" className="gap-1.5 font-bold w-full sm:w-auto justify-center bg-white text-slate-950 hover:bg-slate-200">
                 <Wrench className="w-4 h-4" />
                 Realizar Nova Manutenção
               </Button>
@@ -140,23 +140,23 @@ export default function ImpressoraDetalhesPage() {
         </div>
 
         {/* Maintenance History */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-brand-500" />
+        <Card className="bg-[#0F172A] border-slate-800">
+          <CardHeader className="pb-3 border-b border-slate-800">
+            <CardTitle className="text-base flex items-center gap-2 text-white">
+              <Calendar className="w-4 h-4 text-cyan-400" />
               Histórico Completo de Manutenções Preventivas ({data.maintenances.length})
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-slate-400">
               Registro auditável de cada inspeção realizada nesta impressora
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-2">
             {data.maintenances.length === 0 ? (
               <div className="text-center py-8 text-xs text-slate-400">
                 Nenhuma manutenção registrada até o momento.
               </div>
             ) : (
-              <div className="divide-y divide-slate-100">
+              <div className="divide-y divide-slate-800">
                 {data.maintenances.map((m: any) => (
                   <div key={m.id} className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                     <div>
@@ -164,23 +164,23 @@ export default function ImpressoraDetalhesPage() {
                         <Badge variant={m.approved ? "success" : "destructive"}>
                           {m.approved ? "Aprovada" : "Reprovada"}
                         </Badge>
-                        <span className="font-semibold text-slate-800">
+                        <span className="font-semibold text-white">
                           {formatDate(m.performed_at)}
                         </span>
                       </div>
                       {m.notes && (
-                        <p className="text-slate-500 mt-1 italic">
+                        <p className="text-slate-400 mt-1 italic">
                           &ldquo;{m.notes}&rdquo;
                         </p>
                       )}
-                      <div className="flex flex-wrap gap-2 text-[10px] text-slate-400 mt-1.5">
-                        <span>Nivelamento: {m.leveling_ok ? "OK" : "Falhou"}</span>
+                      <div className="flex flex-wrap gap-2 text-[10px] text-slate-500 mt-1.5">
+                        <span>Nivelamento: <strong className="text-slate-300">{m.leveling_ok ? "OK" : "Falhou"}</strong></span>
                         <span>&bull;</span>
-                        <span>FEP: {m.fep_integrity_ok ? "Íntegro" : "Danificado"}</span>
+                        <span>FEP: <strong className="text-slate-300">{m.fep_integrity_ok ? "Íntegro" : "Danificado"}</strong></span>
                         <span>&bull;</span>
-                        <span>LED: {m.led_integrity_ok ? "OK" : "Defeito"}</span>
+                        <span>LED: <strong className="text-slate-300">{m.led_integrity_ok ? "OK" : "Defeito"}</strong></span>
                         <span>&bull;</span>
-                        <span>Pontos Pretos: {m.black_points_led ? "SIM (Falha)" : "Nenhum"}</span>
+                        <span>Pontos Pretos: <strong className="text-slate-300">{m.black_points_led ? "SIM (Falha)" : "Nenhum"}</strong></span>
                       </div>
                     </div>
                   </div>
@@ -196,22 +196,24 @@ export default function ImpressoraDetalhesPage() {
           onOpenChange={setDeleteDialogOpen}
           title="Excluir Impressora"
           description={`Tem certeza que deseja apagar a impressora "${p.name}"? Esta ação removerá o equipamento e seu histórico de manutenções.`}
+          className="bg-[#0F172A] border-slate-800 text-white"
         >
           <div className="space-y-4 pt-2">
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+            <div className="p-3 bg-rose-950/25 border border-rose-500/30 rounded-xl text-xs text-rose-300 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
               <div>
-                <span className="font-semibold block mb-0.5">Atenção: Ação Irreversível</span>
+                <span className="font-semibold block mb-0.5 text-rose-200">Atenção: Ação Irreversível</span>
                 O equipamento <strong>{p.name}</strong> ({p.brand} - {p.model}, Série: {p.serial_number}) será permanentemente removido do parque de impressoras.
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setDeleteDialogOpen(false)}
                 disabled={isDeleting}
+                className="border-slate-700 bg-slate-800 text-slate-300 hover:text-white"
               >
                 Cancelar
               </Button>

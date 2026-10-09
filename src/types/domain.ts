@@ -1,5 +1,12 @@
 import { Case, PrintJob, PrintJobItem, Printer, PrinterMaintenance, ResinBatch, ResinCalibration, PrintRun, DentalFileType } from "./database.types";
 
+export type ResinCalibrationDetail = ResinCalibration & {
+  resin_brand: string;
+  resin_lot: string;
+  printer_name: string;
+  calibrated_at?: string;
+};
+
 export interface QueueItem {
   id: string; // print_job_item_id
   print_job_id: string;
@@ -89,6 +96,8 @@ export interface FinishingCaseItem {
   created_at: string;
 }
 
+export type FinishingQueueItem = FinishingCaseItem;
+
 export interface MillingItem {
   id: string;
   case_id: string;
@@ -102,3 +111,6 @@ export interface MillingItem {
   finished_at?: string | null;
   created_at: string;
 }
+
+export type MillingQueueItem = MillingItem;
+

@@ -9,7 +9,7 @@ import {
   Printer, 
   Lock, 
   Mail, 
-  User,
+  User, 
   Eye, 
   EyeOff, 
   ShieldCheck, 
@@ -95,7 +95,7 @@ export default function LoginPage() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white">
+      <div className="min-h-[100dvh] bg-[#0B0F19] flex flex-col items-center justify-center text-white p-4">
         <img
           src="/logo.jpg"
           alt="OdontoPrint"
@@ -108,9 +108,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen w-full flex flex-col lg:flex-row bg-white selection:bg-brand-500 selection:text-white">
-      {/* Coluna Esquerda: Apresentação da Plataforma e Autoridade Técnica */}
-      <div className="relative hidden lg:flex lg:w-1/2 flex-col justify-between p-12 bg-slate-950 text-white overflow-hidden border-r border-slate-800">
+    <div className="min-h-[100dvh] w-full flex flex-col lg:flex-row bg-[#0B0F19] selection:bg-brand-500 selection:text-white overflow-x-hidden">
+      {/* Coluna Esquerda: Apresentação da Plataforma (Desktop PC) */}
+      <div className="relative hidden lg:flex lg:w-1/2 flex-col justify-between p-12 bg-slate-950 text-white overflow-hidden border-r border-slate-850">
         {/* Glow de fundo e padrão de malha médica */}
         <div className="absolute inset-0 opacity-15 pointer-events-none bg-[radial-gradient(#38bdf8_1px,transparent_1px)] [background-size:24px_24px]" />
         <div className="absolute -top-40 -left-40 w-96 h-96 bg-brand-500/20 rounded-full blur-3xl pointer-events-none" />
@@ -189,7 +189,7 @@ export default function LoginPage() {
         </div>
 
         {/* Rodapé da Coluna Esquerda */}
-        <div className="relative z-10 flex items-center justify-between text-xs text-slate-500 pt-6 border-t border-slate-850">
+        <div className="relative z-10 flex items-center justify-between text-xs text-slate-500 pt-6 border-t border-slate-800">
           <span>&copy; {new Date().getFullYear()} OdontoPrint Inc.</span>
           <span className="flex items-center gap-1.5 text-slate-400">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
@@ -198,44 +198,44 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Coluna Direita: Formulário de Autenticação */}
-      {/* Coluna Direita: Formulário de Autenticação */}
-      <div className="w-full lg:w-1/2 flex flex-col justify-center px-4 sm:px-12 xl:px-24 py-12 relative overflow-hidden bg-[#0B0F19] lg:bg-white text-white lg:text-[#1E1C1A]">
-        {/* Efeito de Fundo Exclusivo para Celular */}
-        <div className="absolute inset-0 lg:hidden pointer-events-none">
-          <div className="absolute -top-32 -left-32 w-80 h-80 bg-cyan-500/25 rounded-full blur-3xl animate-pulse" />
-          <div className="absolute -bottom-32 -right-32 w-80 h-80 bg-blue-600/25 rounded-full blur-3xl" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-brand-500/20 rounded-full blur-3xl" />
-          <div className="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.08)_1px,transparent_1px)] [background-size:24px_24px] opacity-40" />
+      {/* Coluna Direita: Formulário de Autenticação (Mobile + Desktop) */}
+      <div className="w-full lg:w-1/2 flex flex-col justify-center items-center px-4 sm:px-8 xl:px-20 py-8 sm:py-12 relative overflow-hidden bg-[#0B0F19] text-white">
+        {/* Efeito de Fundo com Orbes Difusos (Mobile + Desktop) */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-32 -left-32 w-80 h-80 bg-cyan-500/20 rounded-full blur-3xl animate-pulse" />
+          <div className="absolute -bottom-32 -right-32 w-80 h-80 bg-brand-500/20 rounded-full blur-3xl" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-brand-600/15 rounded-full blur-3xl" />
+          <div className="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.06)_1px,transparent_1px)] [background-size:24px_24px] opacity-40" />
         </div>
 
-        <div className="relative z-10 mx-auto w-full max-w-sm bg-white/10 backdrop-blur-xl border border-white/15 p-6 sm:p-8 rounded-3xl shadow-2xl lg:bg-transparent lg:backdrop-blur-none lg:border-0 lg:p-0 lg:shadow-none">
+        {/* Card de Login com Vidro Fosco */}
+        <div className="relative z-10 w-full max-w-sm sm:max-w-md mx-auto bg-[#0F172A]/85 backdrop-blur-xl border border-white/10 p-5 sm:p-8 rounded-3xl shadow-2xl">
           {/* Logo visível em telas menores */}
           <div className="flex lg:hidden items-center gap-3 mb-6">
             <img
               src="/logo.jpg"
               alt="Logo OdontoPrint"
-              className="h-10 w-10 rounded-full object-contain border border-white/20 p-0.5 bg-white shrink-0 shadow-md"
+              className="h-11 w-11 rounded-2xl object-contain border border-white/20 p-1 bg-white shrink-0 shadow-md"
             />
             <div>
               <span className="text-base font-black tracking-tight text-white">
                 ODONTO<span className="text-cyan-400">PRINT</span>
               </span>
-              <span className="block text-[8px] uppercase tracking-wider text-slate-300 font-bold">
+              <span className="block text-[9px] uppercase tracking-wider text-slate-300 font-bold">
                 Dental 3D Laboratory
               </span>
             </div>
           </div>
 
           {/* Abas: Acessar Conta vs Solicitar Acesso */}
-          <div className="flex p-1 bg-white/10 lg:bg-[#EFEAE2] rounded-full mb-6">
+          <div className="flex p-1 bg-slate-950/70 border border-slate-800 rounded-full mb-6">
             <button
               type="button"
               onClick={() => setIsRegisterMode(false)}
               className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-semibold rounded-full transition ${
                 !isRegisterMode
-                  ? "bg-white text-slate-900 shadow-xs"
-                  : "text-slate-300 lg:text-slate-600 hover:text-white lg:hover:text-slate-900"
+                  ? "bg-white text-slate-950 shadow-xs"
+                  : "text-slate-400 hover:text-white"
               }`}
             >
               <LogIn className="w-3.5 h-3.5" />
@@ -246,8 +246,8 @@ export default function LoginPage() {
               onClick={() => setIsRegisterMode(true)}
               className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-semibold rounded-full transition ${
                 isRegisterMode
-                  ? "bg-white text-slate-900 shadow-xs"
-                  : "text-slate-300 lg:text-slate-600 hover:text-white lg:hover:text-slate-900"
+                  ? "bg-white text-slate-950 shadow-xs"
+                  : "text-slate-400 hover:text-white"
               }`}
             >
               <UserPlus className="w-3.5 h-3.5" />
@@ -256,10 +256,10 @@ export default function LoginPage() {
           </div>
 
           <div className="mb-6">
-            <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white lg:text-slate-900">
+            <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
               {isRegisterMode ? "Solicitar Acesso" : "Entrar na Plataforma"}
             </h2>
-            <p className="text-xs text-slate-300 lg:text-slate-500 mt-1 leading-relaxed">
+            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
               {isRegisterMode
                 ? "Preencha seus dados para autorização no laboratório."
                 : "Insira suas credenciais corporativas."}
@@ -269,29 +269,29 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {isRegisterMode && (
               <div>
-                <label className="block text-xs font-medium text-slate-200 lg:text-slate-700 mb-1.5">
+                <label className="block text-xs font-medium text-slate-200 mb-1.5">
                   Nome Completo
                 </label>
                 <div className="relative">
-                  <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
+                  <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" />
                   <input
                     type="text"
                     required
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     placeholder="Ex: Dra. Camila Soares"
-                    className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm rounded-full border border-white/20 lg:border-[#E2DDD5] bg-white/10 lg:bg-[#FAF8F5] text-white lg:text-[#1E1C1A] placeholder:text-white/40 lg:placeholder:text-[#9E988F] focus:outline-none focus:ring-2 focus:ring-brand-500 transition"
+                    className="w-full pl-10 pr-4 py-2.5 text-base sm:text-sm rounded-full border border-slate-700/80 bg-slate-900/90 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400 transition"
                   />
                 </div>
               </div>
             )}
 
             <div>
-              <label className="block text-xs font-medium text-slate-200 lg:text-slate-700 mb-1.5">
+              <label className="block text-xs font-medium text-slate-200 mb-1.5">
                 E-mail Corporativo
               </label>
               <div className="relative">
-                <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
+                <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" />
                 <input
                   type="email"
                   required
@@ -299,30 +299,30 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="seu.nome@odontoprint.com.br"
-                  className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm rounded-full border border-white/20 lg:border-[#E2DDD5] bg-white/10 lg:bg-[#FAF8F5] text-white lg:text-[#1E1C1A] placeholder:text-white/40 lg:placeholder:text-[#9E988F] focus:outline-none focus:ring-2 focus:ring-brand-500 transition"
+                  className="w-full pl-10 pr-4 py-2.5 text-base sm:text-sm rounded-full border border-slate-700/80 bg-slate-900/90 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400 transition"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-200 lg:text-slate-700 mb-1.5">
+              <label className="block text-xs font-medium text-slate-200 mb-1.5">
                 Senha
               </label>
 
               <div className="relative">
-                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" />
                 <input
                   type={showPassword ? "text" : "password"}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
-                  className="w-full pl-10 pr-10 py-2.5 text-xs sm:text-sm rounded-full border border-white/20 lg:border-[#E2DDD5] bg-white/10 lg:bg-[#FAF8F5] text-white lg:text-[#1E1C1A] placeholder:text-white/40 lg:placeholder:text-[#9E988F] focus:outline-none focus:ring-2 focus:ring-brand-500 transition"
+                  className="w-full pl-10 pr-10 py-2.5 text-base sm:text-sm rounded-full border border-slate-700/80 bg-slate-900/90 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400 transition"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-2.5 text-slate-400 hover:text-white lg:hover:text-slate-700 p-0.5"
+                  className="absolute right-3.5 top-3 text-slate-400 hover:text-white p-0.5 transition"
                   title={showPassword ? "Ocultar senha" : "Exibir senha"}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -332,17 +332,17 @@ export default function LoginPage() {
 
             {isRegisterMode && (
               <div>
-                <label className="block text-xs font-medium text-slate-200 lg:text-slate-700 mb-1.5 flex items-center gap-1.5">
+                <label className="block text-xs font-medium text-slate-200 mb-1.5 flex items-center gap-1.5">
                   <Briefcase className="w-3.5 h-3.5 text-slate-400" />
                   Função / Setor
                 </label>
                 <select
                   value={requestedRole}
                   onChange={(e) => setRequestedRole(e.target.value as UserRole)}
-                  className="w-full px-4 py-2.5 text-xs sm:text-sm rounded-full border border-white/20 lg:border-[#E2DDD5] bg-white/10 lg:bg-[#FAF8F5] text-white lg:text-[#1E1C1A] focus:outline-none focus:ring-2 focus:ring-brand-500 transition font-medium"
+                  className="w-full px-4 py-2.5 text-base sm:text-sm rounded-full border border-slate-700/80 bg-slate-900 text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 transition font-medium"
                 >
-                  <option value="CADISTA" className="text-slate-900">Cadista (Design CAD)</option>
-                  <option value="OPERADOR_IMPRESSAO" className="text-slate-900">Operador de Impressão 3D & Resinas</option>
+                  <option value="CADISTA">Cadista (Design CAD)</option>
+                  <option value="OPERADOR_IMPRESSAO">Operador de Impressão 3D & Resinas</option>
                 </select>
               </div>
             )}
@@ -354,9 +354,9 @@ export default function LoginPage() {
                     type="checkbox"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                    className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-cyan-500 focus:ring-cyan-400"
                   />
-                  <span className="text-xs text-slate-300 lg:text-slate-600">Lembrar neste navegador</span>
+                  <span className="text-xs text-slate-300">Lembrar neste navegador</span>
                 </label>
               </div>
             )}
@@ -364,11 +364,11 @@ export default function LoginPage() {
             <Button
               type="submit"
               disabled={isSubmitting}
-              className="w-full mt-4 h-11 text-xs sm:text-sm font-semibold rounded-full bg-[#18181B] hover:bg-black text-white shadow-md gap-2"
+              className="w-full mt-4 h-11 text-sm font-semibold rounded-full bg-white hover:bg-slate-200 text-slate-950 shadow-md gap-2"
             >
               {isSubmitting ? (
                 <>
-                  <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                  <div className="h-4 w-4 rounded-full border-2 border-slate-950/30 border-t-slate-950 animate-spin" />
                   <span>Aguarde...</span>
                 </>
               ) : (
@@ -380,8 +380,8 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <div className="mt-6 pt-4 border-t border-white/10 lg:border-slate-100 flex items-center justify-center gap-2 text-[10px] text-slate-400">
-            <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
+          <div className="mt-6 pt-4 border-t border-white/10 flex items-center justify-center gap-2 text-[10px] text-slate-400">
+            <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
             <span>Ambiente Seguro Criptografado &bull; TLS 1.3</span>
           </div>
         </div>

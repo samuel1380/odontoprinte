@@ -165,23 +165,23 @@ export default function ImpressaoDetalhePage() {
     <AppShell>
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200/80 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-800 pb-4">
           <div className="flex items-center gap-3">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => router.push("/impressoes")}
-              className="text-slate-500 hover:text-slate-900 gap-1 pl-0"
+              className="text-slate-400 hover:text-white gap-1 pl-0"
             >
               <ArrowLeft className="w-4 h-4" />
               Voltar
             </Button>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-mono text-2xl font-black text-brand-600">
+                <span className="font-mono text-2xl font-black text-cyan-400">
                   {run.run_code}
                 </span>
-                <Badge variant={isCompleted ? "success" : "lime"}>
+                <Badge variant={isCompleted ? "success" : "secondary"}>
                   {isCompleted ? "Finalizada" : "Em Impressão"}
                 </Badge>
               </div>
@@ -197,9 +197,9 @@ export default function ImpressaoDetalhePage() {
               onClick={handleOpenFinalizeModal}
               variant="default"
               size="lg"
-              className="gap-2 font-bold shadow-elevated bg-brand-500 hover:bg-brand-600"
+              className="gap-2 font-bold shadow-elevated bg-white text-slate-950 hover:bg-slate-200 rounded-full"
             >
-              <StopCircle className="w-5 h-5 text-white" />
+              <StopCircle className="w-5 h-5 text-slate-950" />
               IMPRESSÃO FINALIZADA
             </Button>
           )}
@@ -207,48 +207,48 @@ export default function ImpressaoDetalhePage() {
 
         {/* Specs Overview */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Card>
+          <Card className="bg-[#0F172A] border-slate-800">
             <CardHeader className="pb-1">
               <CardTitle className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
-                <Printer className="w-3.5 h-3.5 text-brand-500" />
+                <Printer className="w-3.5 h-3.5 text-cyan-400" />
                 Impressora
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="font-bold text-sm text-slate-900">{run.printer?.name}</div>
-              <div className="text-xs text-slate-500 mt-0.5">
+              <div className="font-bold text-sm text-white">{run.printer?.name}</div>
+              <div className="text-xs text-slate-400 mt-0.5">
                 {run.printer?.brand} {run.printer?.model}
               </div>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="bg-[#0F172A] border-slate-800">
             <CardHeader className="pb-1">
               <CardTitle className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
-                <FlaskConical className="w-3.5 h-3.5 text-brand-500" />
+                <FlaskConical className="w-3.5 h-3.5 text-cyan-400" />
                 Resina & Lote
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="font-bold text-sm text-slate-900">{run.batch?.brand}</div>
-              <div className="text-xs text-slate-500 mt-0.5">
-                Tipo: {run.batch?.resin_type} • Lote: <span className="font-mono font-bold">{run.batch?.lot}</span>
+              <div className="font-bold text-sm text-white">{run.batch?.brand}</div>
+              <div className="text-xs text-slate-400 mt-0.5">
+                Tipo: {run.batch?.resin_type} • Lote: <span className="font-mono font-bold text-cyan-400">{run.batch?.lot}</span>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="bg-[#0F172A] border-slate-800">
             <CardHeader className="pb-1">
               <CardTitle className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-brand-500" />
+                <Clock className="w-3.5 h-3.5 text-cyan-400" />
                 Parâmetros Fatiados
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="font-bold text-sm text-slate-900">
+              <div className="font-bold text-sm text-white">
                 Calibração #{run.calibration?.calibration_number || 1}
               </div>
-              <div className="text-xs text-slate-500 mt-0.5">
+              <div className="text-xs text-slate-400 mt-0.5">
                 Camada: {run.calibration?.layer_height}mm • Exposição: {run.calibration?.exposure_time}s
               </div>
             </CardContent>
@@ -256,17 +256,17 @@ export default function ImpressaoDetalhePage() {
         </div>
 
         {/* Models List in this Print Run */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center justify-between">
+        <Card className="bg-[#0F172A] border-slate-800">
+          <CardHeader className="pb-3 border-b border-slate-800">
+            <CardTitle className="text-base flex items-center justify-between text-white">
               <span>Modelos Alocados nesta Impressão ({run.items?.length || 0})</span>
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-slate-400">
               Inspeção visual e status individualizado de cada modelo odontológico
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="divide-y divide-slate-100">
+          <CardContent className="pt-2">
+            <div className="divide-y divide-slate-800">
               {run.items?.map((item: any) => {
                 const isFailed = item.result === "FALHOU";
                 const isDone = item.result === "CONCLUIDO";
@@ -280,19 +280,19 @@ export default function ImpressaoDetalhePage() {
                       <div
                         className={`h-8 w-8 rounded-lg flex items-center justify-center font-mono font-bold ${
                           isFailed
-                            ? "bg-rose-100 text-rose-700"
+                            ? "bg-rose-950/40 text-rose-300 border border-rose-500/30"
                             : isDone
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-blue-100 text-blue-700"
+                            ? "bg-emerald-950/40 text-emerald-300 border border-emerald-500/30"
+                            : "bg-cyan-950/40 text-cyan-300 border border-cyan-500/30"
                         }`}
                       >
                         {item.patient_code.replace("PAC-", "")}
                       </div>
 
                       <div>
-                        <div className="font-bold text-slate-900 flex items-center gap-2">
+                        <div className="font-bold text-white flex items-center gap-2">
                           <span>{item.patient_code}</span>
-                          <span className="text-slate-400">&bull;</span>
+                          <span className="text-slate-500">&bull;</span>
                           <span>{FILE_TYPE_LABELS[item.file_type]}</span>
                         </div>
                         {item.patient_name && (
@@ -301,7 +301,7 @@ export default function ImpressaoDetalhePage() {
                           </div>
                         )}
                         {item.failure_reason && (
-                          <div className="text-[11px] text-rose-600 font-semibold mt-0.5">
+                          <div className="text-[11px] text-rose-400 font-semibold mt-0.5">
                             Motivo da Falha: {item.failure_reason}
                           </div>
                         )}
@@ -315,7 +315,7 @@ export default function ImpressaoDetalhePage() {
                             ? "reprint"
                             : isDone
                             ? "success"
-                            : "lime"
+                            : "secondary"
                         }
                       >
                         {isFailed ? "Falhou (Retornou à Fila)" : isDone ? "Concluído" : "Em Impressão"}
@@ -334,15 +334,16 @@ export default function ImpressaoDetalhePage() {
           onOpenChange={setModalOpen}
           title="Conclusão da Impressão 3D"
           description={`Verificação de qualidade e inspeção das peças na ordem ${run.run_code}.`}
+          className="bg-[#0F172A] border-slate-800 text-white"
         >
           {step === "QUESTION" ? (
             <div className="space-y-6 pt-2">
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-center">
-                <HelpCircle className="w-10 h-10 text-brand-500 mx-auto mb-2" />
-                <h3 className="text-base font-bold text-slate-900">
+              <div className="p-4 rounded-2xl bg-[#0B0F19] border border-slate-800 text-center">
+                <HelpCircle className="w-10 h-10 text-cyan-400 mx-auto mb-2" />
+                <h3 className="text-base font-bold text-white">
                   Falhou algum modelo durante a impressão?
                 </h3>
-                <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
                   Examine a mesa de impressão. Houve descolamento de suporte, perda de geometria ou ausência de polimerização em alguma peça?
                 </p>
               </div>
@@ -351,9 +352,9 @@ export default function ImpressaoDetalhePage() {
                 <Button
                   onClick={handleAnswerNoFailures}
                   disabled={isFinalizing}
-                  variant="lime"
+                  variant="default"
                   size="lg"
-                  className="font-bold text-sm"
+                  className="font-bold text-sm bg-emerald-600 hover:bg-emerald-500 text-white rounded-full"
                 >
                   <CheckCircle2 className="w-4 h-4 mr-1.5" />
                   NÃO (Todos OK)
@@ -363,7 +364,7 @@ export default function ImpressaoDetalhePage() {
                   onClick={() => setStep("CHECK_FAILURES")}
                   variant="destructive"
                   size="lg"
-                  className="font-bold text-sm"
+                  className="font-bold text-sm rounded-full"
                 >
                   <AlertTriangle className="w-4 h-4 mr-1.5" />
                   SIM (Houve Falha)
@@ -372,8 +373,8 @@ export default function ImpressaoDetalhePage() {
             </div>
           ) : (
             <div className="space-y-5 pt-2">
-              <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-800">
-                <span className="font-bold block">Marque quais modelos falharam:</span>
+              <div className="p-3 rounded-2xl bg-rose-950/25 border border-rose-500/30 text-xs text-rose-300">
+                <span className="font-bold block text-rose-200">Marque quais modelos falharam:</span>
                 Modelos marcados retornarão automaticamente à Fila de Impressão destacados em vermelho com contagem incremental de retentativas. Modelos não marcados serão concluídos.
               </div>
 
@@ -384,10 +385,10 @@ export default function ImpressaoDetalhePage() {
                   return (
                     <div
                       key={item.id}
-                      className={`p-3 rounded-xl border-2 transition-all ${
+                      className={`p-3 rounded-2xl border transition-all ${
                         isChecked
-                          ? "border-rose-500 bg-rose-50/80"
-                          : "border-slate-200 bg-white"
+                          ? "border-rose-500 bg-rose-950/30"
+                          : "border-slate-800 bg-[#0B0F19]"
                       }`}
                     >
                       <label className="flex items-start gap-3 cursor-pointer">
@@ -395,10 +396,10 @@ export default function ImpressaoDetalhePage() {
                           type="checkbox"
                           checked={isChecked}
                           onChange={() => handleToggleFailedItem(item.print_job_item_id)}
-                          className="mt-1 h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                          className="mt-1 h-4 w-4 rounded border-slate-700 bg-slate-900 text-rose-500 focus:ring-rose-500"
                         />
                         <div className="flex-1">
-                          <div className="text-xs font-bold text-slate-900">
+                          <div className="text-xs font-bold text-white">
                             {item.patient_code} &bull; {FILE_TYPE_LABELS[item.file_type]}
                           </div>
                           {isChecked && (
@@ -413,7 +414,7 @@ export default function ImpressaoDetalhePage() {
                                     [item.print_job_item_id]: e.target.value,
                                   })
                                 }
-                                className="w-full px-2.5 py-1.5 text-xs rounded border border-rose-300 bg-white focus:outline-none focus:ring-1 focus:ring-rose-500"
+                                className="w-full px-3 py-1.5 text-xs rounded-full border border-rose-500/50 bg-[#0B0F19] text-white focus:outline-none focus:ring-1 focus:ring-rose-500 placeholder:text-slate-500"
                               />
                             </div>
                           )}
@@ -424,11 +425,12 @@ export default function ImpressaoDetalhePage() {
                 })}
               </div>
 
-              <div className="flex items-center justify-between pt-3 border-t border-slate-200">
+              <div className="flex items-center justify-between pt-3 border-t border-slate-800">
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setStep("QUESTION")}
+                  className="text-slate-400 hover:text-white"
                 >
                   Voltar
                 </Button>
@@ -438,7 +440,7 @@ export default function ImpressaoDetalhePage() {
                   disabled={isFinalizing || failedItemIds.length === 0}
                   variant="destructive"
                   size="default"
-                  className="font-bold"
+                  className="font-bold rounded-full"
                 >
                   {isFinalizing ? "Processando..." : "Confirmar Falhas e Concluir Ordem"}
                 </Button>

@@ -32,19 +32,19 @@ export function Breadcrumbs() {
 
   if (segments.length === 0 || pathname === "/dashboard") {
     return (
-      <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-slate-400">
         <Home className="h-3.5 w-3.5 text-slate-400" />
-        <span>/</span>
-        <span className="font-semibold text-slate-800">Dashboard</span>
+        <span className="text-slate-600">/</span>
+        <span className="font-semibold text-white">Dashboard</span>
       </div>
     );
   }
 
   return (
-    <nav className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+    <nav className="flex items-center gap-1.5 text-xs font-medium text-slate-400">
       <Link
         href="/dashboard"
-        className="flex items-center gap-1 text-slate-400 hover:text-slate-700 transition"
+        className="flex items-center gap-1 text-slate-400 hover:text-white transition"
       >
         <Home className="h-3.5 w-3.5" />
       </Link>
@@ -56,15 +56,15 @@ export function Breadcrumbs() {
 
         return (
           <React.Fragment key={path}>
-            <ChevronRight className="h-3 w-3 text-slate-400" />
+            <ChevronRight className="h-3 w-3 text-slate-600" />
             {isLast ? (
-              <span className="font-semibold text-slate-900 capitalize truncate max-w-[120px] sm:max-w-[220px]">
+              <span className="font-semibold text-white capitalize truncate max-w-[120px] sm:max-w-[220px]">
                 {label}
               </span>
             ) : (
               <Link
                 href={path}
-                className="text-slate-500 hover:text-slate-800 transition capitalize truncate max-w-[80px] sm:max-w-none hidden xs:inline"
+                className="text-slate-400 hover:text-white transition capitalize truncate max-w-[80px] sm:max-w-none hidden xs:inline"
               >
                 {label}
               </Link>

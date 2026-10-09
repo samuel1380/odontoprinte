@@ -3,18 +3,18 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap rounded-full text-xs sm:text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98]",
+  "inline-flex items-center justify-center whitespace-nowrap rounded-full text-xs sm:text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98]",
   {
     variants: {
       variant: {
-        default: "bg-[#18181B] text-white hover:bg-black shadow-xs",
-        outline: "border border-[#E2DDD5] bg-white text-[#1E1C1A] hover:bg-[#FAF8F5] shadow-xs",
-        secondary: "bg-[#EFEAE2] text-[#2D2A26] hover:bg-[#E5DFD5]",
-        accent: "bg-[#DE5A35] text-white hover:bg-[#C94E2B] shadow-xs",
-        destructive: "bg-[#DE3535] text-white hover:bg-[#C52A2A] shadow-xs",
-        ghost: "hover:bg-[#EFEAE2]/60 text-[#2D2A26]",
-        link: "text-[#18181B] underline-offset-4 hover:underline",
-        lime: "bg-[#18181B] text-white shadow-xs hover:bg-black",
+        default: "bg-white text-slate-950 hover:bg-slate-200 font-semibold shadow-xs",
+        outline: "border border-slate-700 bg-slate-900/60 text-slate-200 hover:bg-slate-800 hover:text-white shadow-xs",
+        secondary: "bg-slate-800 text-slate-200 hover:bg-slate-700 hover:text-white border border-slate-700/60",
+        accent: "bg-cyan-500 text-slate-950 font-bold hover:bg-cyan-400 shadow-xs",
+        destructive: "bg-rose-600 text-white hover:bg-rose-700 shadow-xs",
+        ghost: "hover:bg-slate-800/80 text-slate-300 hover:text-white",
+        link: "text-cyan-400 underline-offset-4 hover:underline",
+        lime: "bg-cyan-500 text-slate-950 font-bold hover:bg-cyan-400 shadow-xs",
       },
       size: {
         default: "h-9 sm:h-10 px-4 sm:px-5 py-2",

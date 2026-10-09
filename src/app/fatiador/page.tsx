@@ -8,20 +8,16 @@ import { PrinterWithStatus, EligibleResinOption, QueueItem } from "@/types/domai
 import { FILE_TYPE_LABELS } from "@/lib/constants";
 import { useAuth } from "@/lib/auth-context";
 import {
-  Scissors,
   Printer,
   FlaskConical,
   CheckCircle2,
   AlertTriangle,
   Play,
   Layers,
-  Sparkles,
   Barcode,
-  Info,
   ArrowLeft,
-  XCircle,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -39,7 +35,7 @@ function FatiadorContent() {
   const [eligibleResins, setEligibleResins] = useState<EligibleResinOption[]>([]);
 
   const [selectedPrinterId, setSelectedPrinterId] = useState<string>("");
-  const [selectedResinId, setSelectedResinId] = useState<string>(""); // calibration_id
+  const [selectedResinId, setSelectedResinId] = useState<string>("");
   const [supportsConfirmed, setSupportsConfirmed] = useState<boolean | null>(null);
   const [resinManipulated, setResinManipulated] = useState<boolean | null>(null);
 
@@ -63,22 +59,18 @@ function FatiadorContent() {
         setAllPrinters(printersList);
         setEligibleResins(options.resins);
 
-        // Preenche itens selecionados a partir da URL
         const itemsParam = searchParams.get("items");
         if (itemsParam) {
           const ids = itemsParam.split(",").filter(Boolean);
           setSelectedItemIds(ids);
         } else if (queueData.items.length > 0) {
-          // Seleciona os 2 primeiros por conveniência
           setSelectedItemIds(queueData.items.slice(0, 2).map((i) => i.id));
         }
 
-        // Auto-seleciona a primeira impressora elegível se houver
         if (options.printers.length > 0) {
           const firstPrinter = options.printers[0];
           setSelectedPrinterId(firstPrinter.id);
 
-          // Auto-seleciona resina calibrada para essa impressora
           const matchingResin = options.resins.find((r) => r.printer_id === firstPrinter.id);
           if (matchingResin) {
             setSelectedResinId(matchingResin.calibration_id);
@@ -93,10 +85,9 @@ function FatiadorContent() {
     loadData();
   }, [searchParams]);
 
-  // Atualiza resinas disponíveis ao mudar impressora
   const handlePrinterChange = (printerId: string) => {
     setSelectedPrinterId(printerId);
-    setGeneratedCode(null); // Reseta código se trocar configuração
+    setGeneratedCode(null);
 
     const matchingResins = eligibleResins.filter((r) => r.printer_id === printerId);
     if (matchingResins.length > 0) {
@@ -106,19 +97,15 @@ function FatiadorContent() {
     }
   };
 
-  // Itens selecionados detalhados
   const selectedModels = queueItems.filter((item) => selectedItemIds.includes(item.id));
   const hasRetryItem = selectedModels.some((item) => item.is_retry);
 
-  // Resinas compatíveis com a impressora selecionada
   const resinsForSelectedPrinter = eligibleResins.filter(
     (r) => r.printer_id === selectedPrinterId
   );
 
   const selectedResinOption = eligibleResins.find((r) => r.calibration_id === selectedResinId);
-  const selectedPrinterOption = eligiblePrinters.find((p) => p.id === selectedPrinterId);
 
-  // GERAÇÃO ATÔMICA DA NOMENCLATURA
   const handleGenerateNomenclature = async () => {
     if (!selectedPrinterId) {
       toast.error("Selecione uma impressora elegível.");
@@ -141,11 +128,7 @@ function FatiadorContent() {
     try {
       const code = await OdontoPrintService.generatePrintCode(hasRetryItem);
       setGeneratedCode(code);
-      toast.success(`Nomenclatura gerada com sucesso: ${code}`, {
-        description: hasRetryItem
-          ? "Prefixo especial de retentativa aplicado devido a item com falha anterior."
-          : "Código sequencial atômico normal registrado.",
-      });
+      toast.success(`Nomenclatura gerada com sucesso: ${code}`);
     } catch {
       toast.error("Falha ao gerar nomenclatura.");
     } finally {
@@ -153,7 +136,6 @@ function FatiadorContent() {
     }
   };
 
-  // INICIAR IMPRESSÃO
   const handleStartPrint = async () => {
     if (!generatedCode) {
       toast.error("Gere a nomenclatura da impressão antes de iniciar.");
@@ -194,33 +176,33 @@ function FatiadorContent() {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800 pb-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => router.push("/fila")}
-              className="text-[#716D66] hover:text-[#18181B] gap-1 pl-0 h-auto py-1 text-xs"
+              className="text-slate-400 hover:text-white gap-1 pl-0 h-auto py-1 text-xs"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               Voltar à Fila
             </Button>
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold text-[#18181B] tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
             Preparar Impressão
           </h1>
         </div>
 
-        <div className="text-xs text-[#716D66] bg-[#EFEAE2] px-3.5 py-1.5 rounded-full w-fit">
-          Operador: <span className="font-semibold text-[#18181B]">{user?.full_name || "Operador"}</span>
+        <div className="text-xs text-slate-400 bg-[#0F172A] border border-slate-800 px-3.5 py-1.5 rounded-full w-fit">
+          Operador: <span className="font-semibold text-white">{user?.full_name || "Operador"}</span>
         </div>
       </div>
 
       {isLoading ? (
         <div className="space-y-4">
-          <Skeleton className="h-48 w-full rounded-3xl" />
-          <Skeleton className="h-64 w-full rounded-3xl" />
+          <Skeleton className="h-48 w-full rounded-3xl bg-slate-800" />
+          <Skeleton className="h-64 w-full rounded-3xl bg-slate-800" />
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -230,28 +212,28 @@ function FatiadorContent() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Printer className="w-4 h-4 text-[#DE5A35]" />
+                  <Printer className="w-4 h-4 text-cyan-400" />
                   Impressora
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {eligiblePrinters.length === 0 ? (
-                  <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs">
+                  <div className="p-3.5 rounded-2xl bg-amber-950/60 border border-amber-800/60 text-amber-300 text-xs">
                     <div className="font-bold flex items-center gap-1.5 mb-0.5">
-                      <AlertTriangle className="w-4 h-4 text-amber-600" />
+                      <AlertTriangle className="w-4 h-4 text-amber-400" />
                       Nenhuma impressora liberada
                     </div>
                     As impressoras estão com manutenção pendente ou reprovadas. Realize a manutenção para liberar.
                   </div>
                 ) : (
                   <div>
-                    <label className="block text-xs font-semibold text-[#18181B] mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-200 mb-1.5">
                       Impressora Liberada
                     </label>
                     <select
                       value={selectedPrinterId}
                       onChange={(e) => handlePrinterChange(e.target.value)}
-                      className="w-full px-4 py-2.5 text-sm rounded-full border border-[#EFECE6] bg-[#FAF8F5]/60 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#18181B] font-medium text-[#18181B]"
+                      className="w-full px-4 py-2.5 text-sm rounded-full border border-slate-800 bg-slate-900 focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-cyan-400 font-medium text-white"
                     >
                       {eligiblePrinters.map((p) => (
                         <option key={p.id} value={p.id}>
@@ -268,22 +250,22 @@ function FatiadorContent() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <FlaskConical className="w-4 h-4 text-[#DE5A35]" />
+                  <FlaskConical className="w-4 h-4 text-cyan-400" />
                   Resina Calibrada
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {resinsForSelectedPrinter.length === 0 ? (
-                  <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs">
+                  <div className="p-3.5 rounded-2xl bg-amber-950/60 border border-amber-800/60 text-amber-300 text-xs">
                     <div className="font-bold flex items-center gap-1.5 mb-0.5">
-                      <AlertTriangle className="w-4 h-4 text-amber-600" />
+                      <AlertTriangle className="w-4 h-4 text-amber-400" />
                       Nenhuma resina calibrada
                     </div>
                     Esta impressora não possui resina com calibração aprovada. Acesse o módulo de calibrações.
                   </div>
                 ) : (
                   <div>
-                    <label className="block text-xs font-semibold text-[#18181B] mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-200 mb-1.5">
                       Lote de Resina
                     </label>
                     <select
@@ -292,7 +274,7 @@ function FatiadorContent() {
                         setSelectedResinId(e.target.value);
                         setGeneratedCode(null);
                       }}
-                      className="w-full px-4 py-2.5 text-sm rounded-full border border-[#EFECE6] bg-[#FAF8F5]/60 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#18181B] font-medium text-[#18181B]"
+                      className="w-full px-4 py-2.5 text-sm rounded-full border border-slate-800 bg-slate-900 focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-cyan-400 font-medium text-white"
                     >
                       {resinsForSelectedPrinter.map((r) => (
                         <option key={r.calibration_id} value={r.calibration_id}>
@@ -302,22 +284,22 @@ function FatiadorContent() {
                     </select>
 
                     {selectedResinOption && (
-                      <div className="mt-3 p-3 rounded-2xl bg-[#FAF8F5] border border-[#EFECE6] grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                      <div className="mt-3 p-3 rounded-2xl bg-slate-900 border border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                         <div>
-                          <span className="text-[#716D66] block text-[10px]">Marca</span>
-                          <span className="font-bold text-[#18181B]">{selectedResinOption.brand}</span>
+                          <span className="text-slate-400 block text-[10px]">Marca</span>
+                          <span className="font-bold text-white">{selectedResinOption.brand}</span>
                         </div>
                         <div>
-                          <span className="text-[#716D66] block text-[10px]">Lote</span>
-                          <span className="font-mono font-bold text-[#18181B]">{selectedResinOption.lot}</span>
+                          <span className="text-slate-400 block text-[10px]">Lote</span>
+                          <span className="font-mono font-bold text-white">{selectedResinOption.lot}</span>
                         </div>
                         <div>
-                          <span className="text-[#716D66] block text-[10px]">Camada</span>
-                          <span className="font-bold text-[#18181B]">{selectedResinOption.layer_height} mm</span>
+                          <span className="text-slate-400 block text-[10px]">Camada</span>
+                          <span className="font-bold text-white">{selectedResinOption.layer_height} mm</span>
                         </div>
                         <div>
-                          <span className="text-[#716D66] block text-[10px]">Exposição</span>
-                          <span className="font-bold text-[#18181B]">{selectedResinOption.exposure_time} s</span>
+                          <span className="text-slate-400 block text-[10px]">Exposição</span>
+                          <span className="font-bold text-white">{selectedResinOption.exposure_time} s</span>
                         </div>
                       </div>
                     )}
@@ -326,18 +308,18 @@ function FatiadorContent() {
               </CardContent>
             </Card>
 
-            {/* 3. VERIFICAÇÕES OBRIGATÓRIAS PRÉ-IMPRESSÃO */}
+            {/* 3. CONFERÊNCIA TÉCNICA PRÉ-IMPRESSÃO */}
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-[#DE5A35]" />
+                  <CheckCircle2 className="w-4 h-4 text-cyan-400" />
                   Conferência Pré-Impressão
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {/* Pergunta 1 */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-2xl border border-[#EFECE6] bg-[#FAF8F5]/50 gap-3">
-                  <div className="text-xs font-semibold text-[#18181B]">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-2xl border border-slate-800 bg-[#0B0F19]/60 gap-3">
+                  <div className="text-xs font-semibold text-slate-200">
                     Suportes posicionados corretamente?
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -346,8 +328,8 @@ function FatiadorContent() {
                       onClick={() => setSupportsConfirmed(true)}
                       className={`px-4 py-1.5 rounded-full text-xs font-bold transition ${
                         supportsConfirmed === true
-                          ? "bg-[#18181B] text-white shadow-xs"
-                          : "bg-white border border-[#E2DDD5] text-[#716D66] hover:bg-[#FAF8F5]"
+                          ? "bg-white text-slate-950 shadow-xs"
+                          : "bg-slate-900 border border-slate-700 text-slate-400 hover:text-white"
                       }`}
                     >
                       SIM
@@ -357,8 +339,8 @@ function FatiadorContent() {
                       onClick={() => setSupportsConfirmed(false)}
                       className={`px-4 py-1.5 rounded-full text-xs font-bold transition ${
                         supportsConfirmed === false
-                          ? "bg-[#DE3535] text-white shadow-xs"
-                          : "bg-white border border-[#E2DDD5] text-[#716D66] hover:bg-[#FAF8F5]"
+                          ? "bg-rose-600 text-white shadow-xs"
+                          : "bg-slate-900 border border-slate-700 text-slate-400 hover:text-white"
                       }`}
                     >
                       NÃO
@@ -367,8 +349,8 @@ function FatiadorContent() {
                 </div>
 
                 {/* Pergunta 2 */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-2xl border border-[#EFECE6] bg-[#FAF8F5]/50 gap-3">
-                  <div className="text-xs font-semibold text-[#18181B]">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-2xl border border-slate-800 bg-[#0B0F19]/60 gap-3">
+                  <div className="text-xs font-semibold text-slate-200">
                     Resina homogeneizada e sem bolhas?
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -377,8 +359,8 @@ function FatiadorContent() {
                       onClick={() => setResinManipulated(true)}
                       className={`px-4 py-1.5 rounded-full text-xs font-bold transition ${
                         resinManipulated === true
-                          ? "bg-[#18181B] text-white shadow-xs"
-                          : "bg-white border border-[#E2DDD5] text-[#716D66] hover:bg-[#FAF8F5]"
+                          ? "bg-white text-slate-950 shadow-xs"
+                          : "bg-slate-900 border border-slate-700 text-slate-400 hover:text-white"
                       }`}
                     >
                       SIM
@@ -388,8 +370,8 @@ function FatiadorContent() {
                       onClick={() => setResinManipulated(false)}
                       className={`px-4 py-1.5 rounded-full text-xs font-bold transition ${
                         resinManipulated === false
-                          ? "bg-[#DE3535] text-white shadow-xs"
-                          : "bg-white border border-[#E2DDD5] text-[#716D66] hover:bg-[#FAF8F5]"
+                          ? "bg-rose-600 text-white shadow-xs"
+                          : "bg-slate-900 border border-slate-700 text-slate-400 hover:text-white"
                       }`}
                     >
                       NÃO
@@ -416,7 +398,7 @@ function FatiadorContent() {
               </CardHeader>
               <CardContent className="space-y-2.5">
                 {selectedModels.length === 0 ? (
-                  <div className="text-center py-6 text-xs text-[#716D66]">
+                  <div className="text-center py-6 text-xs text-slate-500">
                     Nenhum modelo selecionado na fila.
                   </div>
                 ) : (
@@ -426,15 +408,15 @@ function FatiadorContent() {
                         key={item.id}
                         className={`p-3 rounded-2xl border text-xs flex items-start justify-between ${
                           item.is_retry
-                            ? "bg-rose-50/50 border-[#DE3535]/30 text-[#DE3535] font-medium"
-                            : "bg-[#FAF8F5] border-[#EFECE6] text-[#18181B] font-medium"
+                            ? "bg-rose-950/40 border-rose-800/40 text-rose-300 font-medium"
+                            : "bg-[#0B0F19]/60 border-slate-800 text-white font-medium"
                         }`}
                       >
                         <div>
-                          <div className="font-mono font-bold text-[#18181B]">
+                          <div className="font-mono font-bold text-white">
                             {item.patient_code}
                           </div>
-                          <div className="text-[11px] text-[#716D66]">
+                          <div className="text-[11px] text-slate-400">
                             {FILE_TYPE_LABELS[item.file_type]}
                           </div>
                         </div>
@@ -455,17 +437,17 @@ function FatiadorContent() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Barcode className="w-4 h-4 text-[#DE5A35]" />
+                  <Barcode className="w-4 h-4 text-cyan-400" />
                   Código da Mesa
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {generatedCode ? (
-                  <div className="text-center p-4 rounded-2xl bg-[#FAF8F5] border border-[#EFECE6]">
-                    <span className="text-[11px] font-bold text-[#716D66] uppercase tracking-wider block">
+                  <div className="text-center p-4 rounded-2xl bg-slate-900 border border-slate-800">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
                       Código Gerado
                     </span>
-                    <span className="font-mono text-3xl font-black text-[#18181B] tracking-wider block my-1">
+                    <span className="font-mono text-3xl font-black text-cyan-300 tracking-wider block my-1">
                       {generatedCode}
                     </span>
                   </div>
@@ -474,7 +456,7 @@ function FatiadorContent() {
                     onClick={handleGenerateNomenclature}
                     disabled={isGeneratingCode || !selectedPrinterId || !selectedResinId}
                     variant="outline"
-                    className="w-full gap-2 font-bold py-2.5"
+                    className="w-full gap-2 font-bold py-2.5 rounded-full border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 hover:text-white"
                   >
                     <Barcode className="w-4 h-4" />
                     Gerar Código
@@ -487,9 +469,9 @@ function FatiadorContent() {
                   disabled={!generatedCode || isStartingPrint}
                   variant="default"
                   size="lg"
-                  className="w-full gap-2 font-bold text-sm"
+                  className="w-full gap-2 font-bold text-sm rounded-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-md"
                 >
-                  <Play className="w-4 h-4 fill-white" />
+                  <Play className="w-4 h-4 fill-current" />
                   {isStartingPrint ? "Iniciando..." : "Iniciar Impressão"}
                 </Button>
               </CardContent>
@@ -504,7 +486,7 @@ function FatiadorContent() {
 export default function FatiadorPage() {
   return (
     <AppShell>
-      <Suspense fallback={<Skeleton className="h-96 w-full rounded-2xl" />}>
+      <Suspense fallback={<Skeleton className="h-96 w-full rounded-2xl bg-slate-800" />}>
         <FatiadorContent />
       </Suspense>
     </AppShell>

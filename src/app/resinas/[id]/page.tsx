@@ -96,26 +96,26 @@ export default function ResinaDetalhesPage() {
     <AppShell>
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200/80 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-800 pb-4">
           <div className="flex items-center gap-3">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => router.push("/resinas")}
-              className="text-slate-500 hover:text-slate-900 gap-1 pl-0"
+              className="text-slate-400 hover:text-white gap-1 pl-0"
             >
               <ArrowLeft className="w-4 h-4" />
               Voltar
             </Button>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+                <h1 className="text-2xl font-bold text-white tracking-tight">
                   {b.brand}
                 </h1>
                 <Badge className={statusCfg.color}>{statusCfg.label}</Badge>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                {b.resin_type} &bull; Lote: <span className="font-mono font-bold">{b.lot}</span>
+                {b.resin_type} &bull; Lote: <span className="font-mono font-bold text-cyan-400">{b.lot}</span>
               </p>
             </div>
           </div>
@@ -125,14 +125,14 @@ export default function ResinaDetalhesPage() {
               variant="outline"
               size="sm"
               onClick={() => setDeleteDialogOpen(true)}
-              className="text-rose-600 border-rose-200 hover:bg-rose-50 gap-1.5 font-bold w-full sm:w-auto justify-center"
+              className="text-rose-400 border-rose-500/40 bg-rose-950/20 hover:bg-rose-950/40 gap-1.5 font-bold w-full sm:w-auto justify-center"
             >
               <Trash2 className="w-4 h-4" />
               Excluir Lote
             </Button>
 
             <Link href={`/calibracoes/nova?batch=${b.id}`} className="w-full sm:w-auto">
-              <Button variant="default" size="sm" className="gap-1.5 font-bold w-full sm:w-auto justify-center">
+              <Button variant="default" size="sm" className="gap-1.5 font-bold w-full sm:w-auto justify-center bg-white text-slate-950 hover:bg-slate-200">
                 <Compass className="w-4 h-4" />
                 Nova Calibração com este Lote
               </Button>
@@ -142,34 +142,34 @@ export default function ResinaDetalhesPage() {
 
         {/* Overview */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Card>
+          <Card className="bg-[#0F172A] border-slate-800">
             <CardHeader className="pb-1">
               <CardTitle className="text-xs font-semibold text-slate-400">Volume Total</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="font-bold text-lg text-slate-900">
+              <div className="font-bold text-lg text-white">
                 {b.volume} {b.volume_unit}
               </div>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="bg-[#0F172A] border-slate-800">
             <CardHeader className="pb-1">
               <CardTitle className="text-xs font-semibold text-slate-400">Data de Recebimento</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="font-bold text-lg text-slate-900">
+              <div className="font-bold text-lg text-white">
                 {formatDate(b.received_at)}
               </div>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="bg-[#0F172A] border-slate-800">
             <CardHeader className="pb-1">
               <CardTitle className="text-xs font-semibold text-slate-400">Calibrações Vinculadas</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="font-bold text-lg text-slate-900">
+              <div className="font-bold text-lg text-white">
                 {data.calibrations.length} testes
               </div>
             </CardContent>
@@ -177,23 +177,23 @@ export default function ResinaDetalhesPage() {
         </div>
 
         {/* Calibrations History */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Compass className="w-4 h-4 text-brand-500" />
+        <Card className="bg-[#0F172A] border-slate-800">
+          <CardHeader className="pb-3 border-b border-slate-800">
+            <CardTitle className="text-base flex items-center gap-2 text-white">
+              <Compass className="w-4 h-4 text-cyan-400" />
               Testes de Calibração Realizados com este Lote ({data.calibrations.length})
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-slate-400">
               Uma resina é calibrada especificamente para cada impressora 3D do laboratório.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-2">
             {data.calibrations.length === 0 ? (
               <div className="text-center py-8 text-xs text-slate-400">
                 Nenhum teste de calibração registrado ainda para este lote.
               </div>
             ) : (
-              <div className="divide-y divide-slate-100">
+              <div className="divide-y divide-slate-800">
                 {data.calibrations.map((cal: any) => (
                   <div
                     key={cal.id}
@@ -204,12 +204,12 @@ export default function ResinaDetalhesPage() {
                         <Badge variant={cal.status === "APROVADA" ? "success" : "destructive"}>
                           {cal.status === "APROVADA" ? "Calibração Aprovada" : "Reprovada"}
                         </Badge>
-                        <span className="font-bold text-slate-800">
+                        <span className="font-bold text-white">
                           {cal.printer_name} (Tentativa #{cal.calibration_number})
                         </span>
                       </div>
-                      <div className="flex flex-wrap gap-3 text-[11px] text-slate-500 mt-1.5">
-                        <span>Hexágono Medido: <strong className="text-slate-900">{cal.hexagon_size_mm} mm</strong></span>
+                      <div className="flex flex-wrap gap-3 text-[11px] text-slate-400 mt-1.5">
+                        <span>Hexágono Medido: <strong className="text-white">{cal.hexagon_size_mm} mm</strong></span>
                         <span>&bull;</span>
                         <span>Camada: {cal.layer_height} mm</span>
                         <span>&bull;</span>
@@ -221,7 +221,7 @@ export default function ResinaDetalhesPage() {
                       </div>
                     </div>
 
-                    <div className="text-right text-[11px] text-slate-400">
+                    <div className="text-right text-[11px] text-slate-500 font-mono">
                       {formatDate(cal.created_at)}
                     </div>
                   </div>
@@ -237,22 +237,24 @@ export default function ResinaDetalhesPage() {
           onOpenChange={setDeleteDialogOpen}
           title="Excluir Lote de Resina"
           description={`Tem certeza que deseja apagar o lote ${b.lot} (${b.brand})?`}
+          className="bg-[#0F172A] border-slate-800 text-white"
         >
           <div className="space-y-4 pt-2">
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+            <div className="p-3 bg-rose-950/25 border border-rose-500/30 rounded-xl text-xs text-rose-300 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
               <div>
-                <span className="font-semibold block mb-0.5">Atenção: Ação Irreversível</span>
+                <span className="font-semibold block mb-0.5 text-rose-200">Atenção: Ação Irreversível</span>
                 O lote <strong>{b.lot}</strong> ({b.brand} - {b.resin_type}, Volume: {b.volume} {b.volume_unit}) será removido permanentemente.
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setDeleteDialogOpen(false)}
                 disabled={isDeleting}
+                className="border-slate-700 bg-slate-800 text-slate-300 hover:text-white"
               >
                 Cancelar
               </Button>

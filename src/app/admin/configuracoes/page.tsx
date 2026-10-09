@@ -283,12 +283,12 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
     <AppShell>
       <div className="max-w-3xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[#EFECE6] pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800 pb-4">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-[#18181B] tracking-tight">
+            <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
               Configurações
             </h1>
-            <p className="text-xs text-[#71717A] mt-0.5">
+            <p className="text-xs text-slate-400 mt-0.5">
               Parâmetros operacionais, banco de dados e inteligência artificial
             </p>
           </div>
@@ -298,7 +298,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
             variant="outline"
             size="sm"
             onClick={handleResetDefaults}
-            className="rounded-full gap-1.5 text-xs w-full sm:w-auto border-[#E2DDD5] text-[#2D2A26] hover:bg-[#EFEAE2]"
+            className="rounded-full gap-1.5 text-xs w-full sm:w-auto border-slate-700 bg-slate-800/80 text-slate-300 hover:text-white hover:bg-slate-800"
           >
             <RefreshCcw className="w-3.5 h-3.5" />
             Restaurar Padrões
@@ -307,16 +307,16 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Card 1: Manutenção */}
-          <Card className="rounded-2xl sm:rounded-3xl border border-[#EFECE6] bg-white shadow-xs">
+          <Card className="rounded-2xl sm:rounded-3xl border border-slate-800 bg-[#0F172A] shadow-xs">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base text-[#18181B] flex items-center gap-2">
-                <Sliders className="w-4 h-4 text-[#DE5A35]" />
+              <CardTitle className="text-base text-white flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-cyan-400" />
                 Prazo de Manutenção Preventiva
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="max-w-xs">
-                <label className="block text-xs font-semibold text-[#3F3F46] mb-1.5">
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                   Intervalo Máximo (Dias)
                 </label>
                 <div className="flex items-center gap-2">
@@ -327,26 +327,26 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
                     required
                     value={maintenanceDays}
                     onChange={(e) => setMaintenanceDays(Number(e.target.value))}
-                    className="w-full px-3.5 py-2 text-sm rounded-full border border-[#E2DDD5] font-semibold text-[#18181B] focus:outline-none focus:ring-2 focus:ring-[#18181B]"
+                    className="w-full px-3.5 py-2 text-sm rounded-full border border-slate-800 bg-[#0B0F19] font-semibold text-white focus:outline-none focus:border-cyan-500"
                   />
-                  <span className="text-xs text-[#71717A] font-medium shrink-0">dias</span>
+                  <span className="text-xs text-slate-400 font-medium shrink-0">dias</span>
                 </div>
               </div>
             </CardContent>
           </Card>
 
           {/* Card 2: Tolerância de Calibração */}
-          <Card className="rounded-2xl sm:rounded-3xl border border-[#EFECE6] bg-white shadow-xs">
+          <Card className="rounded-2xl sm:rounded-3xl border border-slate-800 bg-[#0F172A] shadow-xs">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base text-[#18181B] flex items-center gap-2">
-                <Sliders className="w-4 h-4 text-[#DE5A35]" />
+              <CardTitle className="text-base text-white flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-cyan-400" />
                 Tolerância do Hexágono de Calibração
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-md">
                 <div>
-                  <label className="block text-xs font-semibold text-[#3F3F46] mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                     Mínimo (mm)
                   </label>
                   <input
@@ -355,12 +355,12 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
                     required
                     value={hexagonMin}
                     onChange={(e) => setHexagonMin(Number(e.target.value))}
-                    className="w-full px-3.5 py-2 text-sm rounded-full border border-[#E2DDD5] font-mono font-semibold text-[#18181B] focus:outline-none focus:ring-2 focus:ring-[#18181B]"
+                    className="w-full px-3.5 py-2 text-sm rounded-full border border-slate-800 bg-[#0B0F19] font-mono font-semibold text-white focus:outline-none focus:border-cyan-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#3F3F46] mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                     Máximo (mm)
                   </label>
                   <input
@@ -369,7 +369,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
                     required
                     value={hexagonMax}
                     onChange={(e) => setHexagonMax(Number(e.target.value))}
-                    className="w-full px-3.5 py-2 text-sm rounded-full border border-[#E2DDD5] font-mono font-semibold text-[#18181B] focus:outline-none focus:ring-2 focus:ring-[#18181B]"
+                    className="w-full px-3.5 py-2 text-sm rounded-full border border-slate-800 bg-[#0B0F19] font-mono font-semibold text-white focus:outline-none focus:border-cyan-500"
                   />
                 </div>
               </div>
@@ -377,17 +377,17 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
           </Card>
 
           {/* Card 3: Nomenclatura */}
-          <Card className="rounded-2xl sm:rounded-3xl border border-[#EFECE6] bg-white shadow-xs">
+          <Card className="rounded-2xl sm:rounded-3xl border border-slate-800 bg-[#0F172A] shadow-xs">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base text-[#18181B] flex items-center gap-2">
-                <Sliders className="w-4 h-4 text-[#DE5A35]" />
+              <CardTitle className="text-base text-white flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-cyan-400" />
                 Prefixos de Identificação
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-md">
                 <div>
-                  <label className="block text-xs font-semibold text-[#3F3F46] mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                     Prefixo Normal
                   </label>
                   <input
@@ -395,12 +395,12 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
                     required
                     value={normalPrefix}
                     onChange={(e) => setNormalPrefix(e.target.value)}
-                    className="w-full px-3.5 py-2 text-sm rounded-full border border-[#E2DDD5] font-mono font-semibold text-[#18181B] focus:outline-none focus:ring-2 focus:ring-[#18181B] uppercase"
+                    className="w-full px-3.5 py-2 text-sm rounded-full border border-slate-800 bg-[#0B0F19] font-mono font-semibold text-white focus:outline-none focus:border-cyan-500 uppercase"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#3F3F46] mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                     Prefixo Reimpressão
                   </label>
                   <input
@@ -408,7 +408,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
                     required
                     value={retryPrefix}
                     onChange={(e) => setRetryPrefix(e.target.value)}
-                    className="w-full px-3.5 py-2 text-sm rounded-full border border-[#E2DDD5] font-mono font-semibold text-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-500 uppercase"
+                    className="w-full px-3.5 py-2 text-sm rounded-full border border-slate-800 bg-[#0B0F19] font-mono font-semibold text-rose-400 focus:outline-none focus:border-rose-500 uppercase"
                   />
                 </div>
               </div>
@@ -416,11 +416,11 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
           </Card>
 
           {/* Card 4: Status do Banco de Dados & Sincronização em Nuvem (Supabase) */}
-          <Card className="rounded-2xl sm:rounded-3xl border border-[#EFECE6] bg-white shadow-xs">
+          <Card className="rounded-2xl sm:rounded-3xl border border-slate-800 bg-[#0F172A] shadow-xs">
             <CardHeader className="pb-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <CardTitle className="text-base flex items-center gap-2 text-[#18181B]">
-                  <Database className="w-4 h-4 text-[#DE5A35]" />
+                <CardTitle className="text-base flex items-center gap-2 text-white">
+                  <Database className="w-4 h-4 text-cyan-400" />
                   Banco de Dados & Nuvem (Supabase)
                 </CardTitle>
                 <Button
@@ -429,7 +429,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
                   variant="outline"
                   onClick={handleTestDatabase}
                   disabled={isTestingDb}
-                  className="rounded-full h-8 text-xs font-medium gap-1.5 border-[#E2DDD5] text-[#2D2A26] hover:bg-[#EFEAE2]"
+                  className="rounded-full h-8 text-xs font-medium gap-1.5 border-slate-700 bg-slate-800/80 text-slate-300 hover:text-white hover:bg-slate-800"
                 >
                   <RefreshCcw className={`w-3.5 h-3.5 ${isTestingDb ? "animate-spin" : ""}`} />
                   {isTestingDb ? "Testando..." : "Testar Conexão"}
@@ -441,16 +441,16 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
                 <div
                   className={`p-3.5 rounded-2xl border ${
                     dbStatus.connected
-                      ? "bg-emerald-50/80 border-emerald-200 text-emerald-900"
-                      : "bg-rose-50/80 border-rose-200 text-rose-900"
+                      ? "bg-emerald-950/20 border-emerald-500/40 text-emerald-300"
+                      : "bg-rose-950/20 border-rose-500/40 text-rose-300"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       {dbStatus.connected ? (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                       ) : (
-                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                        <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
                       )}
                       <span className="font-semibold text-xs">
                         {dbStatus.connected
@@ -473,15 +473,15 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
                   </div>
                 </div>
               ) : (
-                <div className="p-3.5 rounded-2xl bg-[#FBF9F5] border border-[#EFECE6] flex items-center justify-between">
-                  <span className="text-[#71717A]">Clique em testar para validar o Supabase</span>
+                <div className="p-3.5 rounded-2xl bg-[#0B0F19] border border-slate-800 flex items-center justify-between">
+                  <span className="text-slate-400">Clique em testar para validar o Supabase</span>
                   <Button
                     type="button"
                     size="sm"
                     variant="secondary"
                     onClick={handleTestDatabase}
                     disabled={isTestingDb}
-                    className="rounded-full bg-[#18181B] text-white hover:bg-black h-7 text-xs"
+                    className="rounded-full bg-white text-slate-950 hover:bg-slate-200 h-7 text-xs font-bold"
                   >
                     Testar
                   </Button>
@@ -491,20 +491,20 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
           </Card>
 
           {/* Card 5: Inteligência Artificial (Gemini / Groq) */}
-          <Card className="rounded-2xl sm:rounded-3xl border border-[#EFECE6] bg-white shadow-xs">
+          <Card className="rounded-2xl sm:rounded-3xl border border-slate-800 bg-[#0F172A] shadow-xs">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base flex items-center gap-2 text-[#18181B]">
-                  <Sparkles className="w-4 h-4 text-[#DE5A35]" />
+                <CardTitle className="text-base flex items-center gap-2 text-white">
+                  <Sparkles className="w-4 h-4 text-cyan-400" />
                   Inteligência Artificial
                 </CardTitle>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-[#71717A]">Ativo:</span>
+                  <span className="text-xs text-slate-400">Ativo:</span>
                   <button
                     type="button"
                     onClick={() => setAiEnabled(!aiEnabled)}
                     className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors duration-200 ${
-                      aiEnabled ? "bg-[#18181B]" : "bg-[#E2DDD5]"
+                      aiEnabled ? "bg-cyan-500" : "bg-slate-800 border border-slate-700"
                     }`}
                   >
                     <div
@@ -519,17 +519,17 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
             <CardContent className="space-y-4 pt-1">
               {/* Segmented Controls for Provider */}
               <div>
-                <label className="block text-xs font-semibold text-[#3F3F46] mb-2">
+                <label className="block text-xs font-semibold text-slate-300 mb-2">
                   Provedor
                 </label>
-                <div className="inline-flex p-1 bg-[#F5F2EB] rounded-full border border-[#EFECE6]">
+                <div className="inline-flex p-1 bg-[#0B0F19] rounded-full border border-slate-800">
                   <button
                     type="button"
                     onClick={() => handleProviderChange("GEMINI")}
                     className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
                       aiProvider === "GEMINI"
-                        ? "bg-[#18181B] text-white shadow-xs"
-                        : "text-[#71717A] hover:text-[#18181B]"
+                        ? "bg-white text-slate-950 shadow-xs font-bold"
+                        : "text-slate-400 hover:text-white"
                     }`}
                   >
                     Google Gemini 3.8
@@ -539,8 +539,8 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
                     onClick={() => handleProviderChange("GROQ")}
                     className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
                       aiProvider === "GROQ"
-                        ? "bg-[#18181B] text-white shadow-xs"
-                        : "text-[#71717A] hover:text-[#18181B]"
+                        ? "bg-white text-slate-950 shadow-xs font-bold"
+                        : "text-slate-400 hover:text-white"
                     }`}
                   >
                     Groq Cloud
@@ -551,8 +551,8 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
               {/* Chave de API */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-semibold text-[#3F3F46] flex items-center gap-1.5">
-                    <KeyRound className="w-3.5 h-3.5 text-[#71717A]" />
+                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                    <KeyRound className="w-3.5 h-3.5 text-slate-400" />
                     Chave de API
                   </label>
                   <a
@@ -563,7 +563,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
                     }
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[11px] text-[#DE5A35] font-medium inline-flex items-center gap-1 hover:underline"
+                    className="text-[11px] text-cyan-400 font-medium inline-flex items-center gap-1 hover:underline"
                   >
                     Obter chave <ExternalLink className="w-3 h-3" />
                   </a>
@@ -580,13 +580,13 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
                         ? "gsk_..."
                         : "AIzaSy..."
                     }
-                    className="w-full pl-3.5 pr-24 py-2 text-xs rounded-full border border-[#E2DDD5] font-mono text-[#18181B] focus:outline-none focus:ring-2 focus:ring-[#18181B]"
+                    className="w-full pl-3.5 pr-24 py-2 text-xs rounded-full border border-slate-800 bg-[#0B0F19] font-mono text-white focus:outline-none focus:border-cyan-500"
                   />
                   <div className="absolute right-1.5 top-1 flex items-center gap-1">
                     <button
                       type="button"
                       onClick={() => setShowApiKey(!showApiKey)}
-                      className="p-1.5 text-[#71717A] hover:text-[#18181B] rounded-full text-xs"
+                      className="p-1.5 text-slate-400 hover:text-white rounded-full text-xs"
                     >
                       {showApiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                     </button>
@@ -596,7 +596,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
                       variant="secondary"
                       disabled={isTestingAi || (!aiApiKey.trim() && !hasKeyFromRender)}
                       onClick={handleTestAi}
-                      className="h-7 text-[11px] px-3 rounded-full font-semibold bg-[#EFEAE2] hover:bg-[#E5DFD5] text-[#2D2A26]"
+                      className="h-7 text-[11px] px-3 rounded-full font-semibold bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-200"
                     >
                       {isTestingAi ? (
                         <RefreshCcw className="w-3 h-3 animate-spin" />
@@ -610,14 +610,14 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
 
               {/* Modelo de IA */}
               <div>
-                <label className="block text-xs font-semibold text-[#3F3F46] mb-1.5">
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                   Modelo
                 </label>
                 <input
                   type="text"
                   value={aiModel}
                   onChange={(e) => setAiModel(e.target.value)}
-                  className="w-full px-3.5 py-2 text-xs rounded-full border border-[#E2DDD5] font-mono text-[#18181B] focus:outline-none focus:ring-2 focus:ring-[#18181B]"
+                  className="w-full px-3.5 py-2 text-xs rounded-full border border-slate-800 bg-[#0B0F19] font-mono text-white focus:outline-none focus:border-cyan-500"
                 />
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {aiProvider === "GROQ" ? (
@@ -625,14 +625,14 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
                       <button
                         type="button"
                         onClick={() => setAiModel("openai/gpt-oss-120b")}
-                        className="text-[11px] px-3 py-1 rounded-full bg-[#EFEAE2] text-[#2D2A26] font-mono font-medium hover:bg-[#E5DFD5] transition-colors"
+                        className="text-[11px] px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 font-mono font-medium hover:text-white hover:bg-slate-800 transition-colors"
                       >
                         openai/gpt-oss-120b
                       </button>
                       <button
                         type="button"
                         onClick={() => setAiModel("qwen/qwen3.8-27b")}
-                        className="text-[11px] px-3 py-1 rounded-full bg-[#EFEAE2] text-[#2D2A26] font-mono font-medium hover:bg-[#E5DFD5] transition-colors"
+                        className="text-[11px] px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 font-mono font-medium hover:text-white hover:bg-slate-800 transition-colors"
                       >
                         qwen/qwen3.8-27b
                       </button>
@@ -641,7 +641,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
                     <button
                       type="button"
                       onClick={() => setAiModel("gemini-3.8-flash")}
-                      className="text-[11px] px-3 py-1 rounded-full bg-[#EFEAE2] text-[#2D2A26] font-mono font-medium hover:bg-[#E5DFD5] transition-colors"
+                      className="text-[11px] px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 font-mono font-medium hover:text-white hover:bg-slate-800 transition-colors"
                     >
                       gemini-3.8-flash
                     </button>
@@ -654,20 +654,20 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
                 <div
                   className={`p-3.5 rounded-2xl border text-xs flex items-center justify-between ${
                     testResult.success
-                      ? "bg-emerald-50/90 border-emerald-300 text-emerald-900"
-                      : "bg-rose-50/90 border-rose-300 text-rose-900"
+                      ? "bg-emerald-950/20 border-emerald-500/40 text-emerald-300"
+                      : "bg-rose-950/20 border-rose-500/40 text-rose-300"
                   }`}
                 >
                   <div className="flex items-center gap-2">
                     {testResult.success ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                     ) : (
-                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                      <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
                     )}
                     <span className="font-semibold">{testResult.message}</span>
                   </div>
                   {testResult.latency !== undefined && (
-                    <Badge variant="outline" className="rounded-full bg-white border-[#E2DDD5] text-xs">
+                    <Badge variant="outline" className="rounded-full bg-slate-900 border-slate-700 text-slate-300 text-xs">
                       {testResult.latency}ms
                     </Badge>
                   )}
@@ -682,7 +682,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
               type="submit"
               size="lg"
               disabled={isSaving}
-              className="rounded-full bg-[#18181B] text-white hover:bg-black font-semibold px-8 h-11"
+              className="rounded-full bg-white text-slate-950 hover:bg-slate-200 font-bold px-8 h-11"
             >
               <Save className="w-4 h-4 mr-2" />
               {isSaving ? "Salvando..." : "Salvar Configurações"}
