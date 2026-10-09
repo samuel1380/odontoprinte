@@ -115,7 +115,7 @@ export function Topbar({ onOpenMobileMenu }: TopbarProps) {
                     className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs text-slate-700 hover:bg-slate-100 transition"
                   >
                     <Settings className="w-3.5 h-3.5 text-slate-500" />
-                    <span>Configurações do Laboratório</span>
+                    <span>Configurações</span>
                   </Link>
 
                   <Link
@@ -124,7 +124,7 @@ export function Topbar({ onOpenMobileMenu }: TopbarProps) {
                     className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs text-slate-700 hover:bg-slate-100 transition"
                   >
                     <Users className="w-3.5 h-3.5 text-slate-500" />
-                    <span>Gestão de Usuários & Acessos</span>
+                    <span>Usuários</span>
                   </Link>
 
                   {/* Alternar Permissão (para administradores) */}
@@ -136,7 +136,7 @@ export function Topbar({ onOpenMobileMenu }: TopbarProps) {
                     >
                       <div className="flex items-center gap-2">
                         <Shield className="w-3.5 h-3.5 text-slate-500" />
-                        <span>Alternar Visão de Função</span>
+                        <span>Alternar Visão de Perfil</span>
                       </div>
                       <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${showRoleSwitcher ? "rotate-180" : ""}`} />
                     </button>

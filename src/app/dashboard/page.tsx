@@ -52,14 +52,14 @@ export default function DashboardPage() {
   return (
     <AppShell>
       <div className="space-y-8">
-        {/* Header with Title & Quick Actions */}
+        {/* Header with Title */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-              Painel Geral de Manufatura
+              Painel Principal
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-              Controle central da esteira: Modelagem CAD, Fila FIFO e Parque de Impressão 3D.
+              Acesso direto aos trabalhos, impressoras, resinas e acompanhamento da produção.
             </p>
           </div>
 
@@ -70,32 +70,95 @@ export default function DashboardPage() {
                 Novo Trabalho
               </Button>
             </Link>
-            <Link href="/fila">
-              <Button size="sm" variant="outline" className="text-xs font-medium gap-1.5 h-8">
-                <ListOrdered className="w-3.5 h-3.5" />
-                Fila FIFO
-              </Button>
-            </Link>
             <Link href="/fatiador">
               <Button size="sm" variant="outline" className="text-xs font-medium gap-1.5 h-8">
                 <Scissors className="w-3.5 h-3.5" />
-                Fatiador
-              </Button>
-            </Link>
-            <Link href="/impressoes">
-              <Button size="sm" variant="outline" className="text-xs font-medium gap-1.5 h-8">
-                <Printer className="w-3.5 h-3.5" />
-                Impressões
+                Preparar Impressão
               </Button>
             </Link>
           </div>
         </div>
 
-        {/* Metric Cards - 4 KPIs Essenciais, Limpos e Responsivos */}
+        {/* Atalhos Rápidos Diretos - O que você quer fazer agora? */}
+        <div>
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-brand-500" />
+            Ações Rápidas (Acesso Direto)
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
+            <Link
+              href="/cadista/status"
+              className="p-3.5 rounded-xl border border-slate-200/90 bg-white hover:border-brand-300 hover:shadow-2xs transition-all flex flex-col items-center text-center group"
+            >
+              <div className="h-10 w-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
+                <FileCheck2 className="w-5 h-5" />
+              </div>
+              <span className="text-xs font-bold text-slate-900 leading-tight">Novo Trabalho</span>
+              <span className="text-[10px] text-slate-400 mt-0.5">Cadastrar pedido</span>
+            </Link>
+
+            <Link
+              href="/fila"
+              className="p-3.5 rounded-xl border border-slate-200/90 bg-white hover:border-brand-300 hover:shadow-2xs transition-all flex flex-col items-center text-center group"
+            >
+              <div className="h-10 w-10 rounded-xl bg-cyan-50 text-cyan-600 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
+                <ListOrdered className="w-5 h-5" />
+              </div>
+              <span className="text-xs font-bold text-slate-900 leading-tight">Fila de Espera</span>
+              <span className="text-[10px] text-slate-400 mt-0.5">Ver modelos prontos</span>
+            </Link>
+
+            <Link
+              href="/fatiador"
+              className="p-3.5 rounded-xl border border-slate-200/90 bg-white hover:border-brand-300 hover:shadow-2xs transition-all flex flex-col items-center text-center group"
+            >
+              <div className="h-10 w-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
+                <Scissors className="w-5 h-5" />
+              </div>
+              <span className="text-xs font-bold text-slate-900 leading-tight">Preparar Mesa</span>
+              <span className="text-[10px] text-slate-400 mt-0.5">Fatiar impressão</span>
+            </Link>
+
+            <Link
+              href="/impressoras"
+              className="p-3.5 rounded-xl border border-slate-200/90 bg-white hover:border-brand-300 hover:shadow-2xs transition-all flex flex-col items-center text-center group"
+            >
+              <div className="h-10 w-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
+                <Printer className="w-5 h-5" />
+              </div>
+              <span className="text-xs font-bold text-slate-900 leading-tight">Impressoras</span>
+              <span className="text-[10px] text-slate-400 mt-0.5">Máquinas e status</span>
+            </Link>
+
+            <Link
+              href="/resinas"
+              className="p-3.5 rounded-xl border border-slate-200/90 bg-white hover:border-brand-300 hover:shadow-2xs transition-all flex flex-col items-center text-center group"
+            >
+              <div className="h-10 w-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
+                <FlaskConical className="w-5 h-5" />
+              </div>
+              <span className="text-xs font-bold text-slate-900 leading-tight">Resinas</span>
+              <span className="text-[10px] text-slate-400 mt-0.5">Frascos e lotes</span>
+            </Link>
+
+            <Link
+              href="/acabamento"
+              className="p-3.5 rounded-xl border border-slate-200/90 bg-white hover:border-brand-300 hover:shadow-2xs transition-all flex flex-col items-center text-center group"
+            >
+              <div className="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <span className="text-xs font-bold text-slate-900 leading-tight">Acabamento</span>
+              <span className="text-[10px] text-slate-400 mt-0.5">Montagem e glaze</span>
+            </Link>
+          </div>
+        </div>
+
+        {/* Metric Cards - 4 KPIs Essenciais */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <Card className="p-4 sm:p-5 flex flex-col justify-between hover:border-slate-300 transition-all">
             <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
-              <span>Impressoras 3D</span>
+              <span>Impressoras Prontas</span>
               <Printer className="w-4 h-4 text-slate-400" />
             </div>
             <div className="mt-3">
@@ -103,7 +166,7 @@ export default function DashboardPage() {
                 {isLoading ? <Skeleton className="h-8 w-12" /> : metrics?.printers_available}
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
-                {isLoading ? "Carregando..." : `${(metrics?.printers_available || 0) + (metrics?.printers_blocked || 0)} ativas no laboratório`}
+                {isLoading ? "Carregando..." : `${(metrics?.printers_available || 0) + (metrics?.printers_blocked || 0)} cadastradas no total`}
               </p>
             </div>
           </Card>
@@ -118,7 +181,7 @@ export default function DashboardPage() {
                 {isLoading ? <Skeleton className="h-8 w-12" /> : metrics?.items_in_queue}
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
-                {isLoading ? "Carregando..." : (metrics?.reprints_pending || 0) > 0 ? `${metrics?.reprints_pending} prioridade máxima` : "Modelos na fila FIFO"}
+                {isLoading ? "Carregando..." : (metrics?.reprints_pending || 0) > 0 ? `${metrics?.reprints_pending} reimpressões prioritárias` : "Modelos aguardando mesa"}
               </p>
             </div>
           </Card>
@@ -133,14 +196,14 @@ export default function DashboardPage() {
                 {isLoading ? <Skeleton className="h-8 w-12" /> : metrics?.items_completed_today}
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
-                {isLoading ? "Carregando..." : `${metrics?.items_printing || 0} em impressão agora`}
+                {isLoading ? "Carregando..." : `${metrics?.items_printing || 0} imprimindo agora`}
               </p>
             </div>
           </Card>
 
           <Card className="p-4 sm:p-5 flex flex-col justify-between hover:border-slate-300 transition-all">
             <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
-              <span>Lotes de Resina</span>
+              <span>Resinas Calibradas</span>
               <FlaskConical className="w-4 h-4 text-purple-500" />
             </div>
             <div className="mt-3">
@@ -148,7 +211,7 @@ export default function DashboardPage() {
                 {isLoading ? <Skeleton className="h-8 w-12" /> : metrics?.resins_calibrated}
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
-                Combinações calibradas
+                Lotes liberados para fatiamento
               </p>
             </div>
           </Card>
@@ -156,48 +219,48 @@ export default function DashboardPage() {
 
         {/* WORKFLOW SUMMARY & RECENT ACTIVITIES */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Visual Workflow Map Card */}
+          {/* Guia Rápido: Como Funciona */}
           <Card className="lg:col-span-1">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
                 <Layers className="w-4 h-4 text-brand-500" />
-                Fluxo Operacional Integrado
+                Como Funciona o Fluxo
               </CardTitle>
               <CardDescription>
-                Rastreabilidade estrita do CAD ao produto final
+                Passo a passo simples do pedido à entrega
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="relative pl-6 border-l-2 border-brand-200 space-y-6">
+              <div className="relative pl-6 border-l-2 border-slate-200 space-y-5">
                 <div className="relative">
-                  <div className="absolute -left-[31px] top-0 h-4 w-4 rounded-full border-2 border-white bg-brand-500 shadow-sm" />
-                  <div className="text-xs font-bold text-slate-800">1. Cadista Digital</div>
+                  <div className="absolute -left-[31px] top-0 h-4 w-4 rounded-full border-2 border-white bg-brand-500 shadow-xs" />
+                  <div className="text-xs font-bold text-slate-800">1. Cadastrar Trabalho</div>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Define o trabalho (ex: PAC-100) e seleciona os modelos a imprimir.
+                    Digite o código/nome do paciente e marque os modelos solicitados.
                   </p>
                 </div>
 
                 <div className="relative">
-                  <div className="absolute -left-[31px] top-0 h-4 w-4 rounded-full border-2 border-white bg-cyan-500 shadow-sm" />
-                  <div className="text-xs font-bold text-slate-800">2. Fila FIFO & Fatiador</div>
+                  <div className="absolute -left-[31px] top-0 h-4 w-4 rounded-full border-2 border-white bg-cyan-500 shadow-xs" />
+                  <div className="text-xs font-bold text-slate-800">2. Preparar no Fatiador</div>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Agrupa modelos de pacientes e valida impressora e resina calibrada.
+                    Escolha a impressora liberada e a resina calibrada para compor a mesa.
                   </p>
                 </div>
 
                 <div className="relative">
-                  <div className="absolute -left-[31px] top-0 h-4 w-4 rounded-full border-2 border-white bg-indigo-500 shadow-sm" />
-                  <div className="text-xs font-bold text-slate-800">3. Nomenclatura Atômica</div>
+                  <div className="absolute -left-[31px] top-0 h-4 w-4 rounded-full border-2 border-white bg-indigo-500 shadow-xs" />
+                  <div className="text-xs font-bold text-slate-800">3. Imprimir</div>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Gera sequencial único A001 ou 00A1 para repetições.
+                    A nomenclatura é gerada na hora para identificação na máquina.
                   </p>
                 </div>
 
                 <div className="relative">
-                  <div className="absolute -left-[31px] top-0 h-4 w-4 rounded-full border-2 border-white bg-emerald-500 shadow-sm" />
-                  <div className="text-xs font-bold text-slate-800">4. Finalização & Falhas</div>
+                  <div className="absolute -left-[31px] top-0 h-4 w-4 rounded-full border-2 border-white bg-emerald-500 shadow-xs" />
+                  <div className="text-xs font-bold text-slate-800">4. Acabamento & CQ</div>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Aprovações são concluídas. Falhas retornam à fila em vermelho.
+                    Encaixe dos dentes, ajuste de oclusão e glaze para envio.
                   </p>
                 </div>
               </div>
@@ -206,7 +269,7 @@ export default function DashboardPage() {
                 <Link href="/fatiador">
                   <Button variant="lime" className="w-full text-xs font-bold gap-2">
                     <Scissors className="w-4 h-4" />
-                    Abrir Estação do Fatiador
+                    Abrir Fatiador
                   </Button>
                 </Link>
               </div>

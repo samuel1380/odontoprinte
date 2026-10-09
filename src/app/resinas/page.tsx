@@ -68,10 +68,10 @@ export default function ResinasPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-              Lotes de Resina Fotopolimerizável
+              Resinas Fotopolimerizáveis
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-              Controle de insumos, rastreabilidade de validade e calibração por equipamento.
+              Gerencie seus frascos de resina, cadastre novos lotes e realize testes de calibração.
             </p>
           </div>
 
@@ -86,7 +86,7 @@ export default function ResinasPage() {
             <Link href="/resinas/recebimento">
               <Button variant="default" size="sm" className="gap-1.5 text-xs font-semibold h-9">
                 <Plus className="w-4 h-4" />
-                Receber Resina
+                + Cadastrar Nova Resina
               </Button>
             </Link>
           </div>

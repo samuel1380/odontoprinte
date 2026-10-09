@@ -197,7 +197,7 @@ export default function HistoricoPage() {
                       </div>
 
                       <Button size="sm" variant="ghost" className="gap-1 text-brand-600 font-semibold">
-                        Timeline
+                        Ver Histórico
                         <ChevronRight className="w-3.5 h-3.5" />
                       </Button>
                     </div>

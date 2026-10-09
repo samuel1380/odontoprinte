@@ -46,17 +46,17 @@ export default function CalibracoesPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-              Calibrações Técnicas de Resina
+              Calibrações de Resina
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              Relação estrita Resina/Lote + Impressora (tolerância micrométrica de 9.99 a 10.01 mm).
+              Testes dimensionais no paquímetro para aprovar o uso de cada lote de resina em cada impressora.
             </p>
           </div>
 
           <Link href="/calibracoes/nova" className="w-full sm:w-auto">
             <Button variant="default" size="sm" className="gap-1.5 font-bold w-full sm:w-auto justify-center">
               <Plus className="w-4 h-4" />
-              Nova Calibração Técnica
+              + Nova Calibração
             </Button>
           </Link>
         </div>

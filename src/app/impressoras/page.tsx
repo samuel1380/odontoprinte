@@ -114,10 +114,10 @@ export default function ImpressorasPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-              Parque de Impressoras 3D
+              Impressoras 3D
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-              Gestão de equipamentos de bancada e controle preventivo de ciclo semanal.
+              Gerencie suas impressoras, acompanhe o status de manutenção e cadastre novas máquinas.
             </p>
           </div>
 
@@ -128,7 +128,7 @@ export default function ImpressorasPage() {
             className="gap-1.5 font-semibold h-9 w-full sm:w-auto justify-center"
           >
             <Plus className="w-4 h-4" />
-            Cadastrar Impressora
+            + Cadastrar Nova Impressora
           </Button>
         </div>
 

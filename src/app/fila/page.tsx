@@ -206,7 +206,7 @@ export default function FilaPage() {
             icon={ListOrdered}
             title="Nenhum item na fila com os filtros selecionados"
             description="Todos os trabalhos foram fatiados ou ainda não há novos modelos solicitados pelo Cadista."
-            actionLabel="Criar Novo Trabalho (Cadista)"
+            actionLabel="+ Criar Novo Trabalho"
             onAction={() => router.push("/cadista/status")}
           />
         ) : (

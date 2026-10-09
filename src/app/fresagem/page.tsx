@@ -190,12 +190,12 @@ export default function FresagemPage() {
               return (
                 <Card
                   key={item.id}
-                  className={`overflow-hidden border-2 transition-all ${
+                  className={`overflow-hidden border transition-all ${
                     isDone
                       ? "border-emerald-200 bg-emerald-50/10"
                       : isMilling
-                      ? "border-blue-300 bg-blue-50/20"
-                      : "border-slate-200 bg-white"
+                      ? "border-blue-300 bg-blue-50/20 shadow-2xs"
+                      : "border-slate-200/90 bg-white shadow-2xs"
                   }`}
                 >
                   <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">

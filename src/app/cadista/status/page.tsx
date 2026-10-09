@@ -115,10 +115,10 @@ export default function CadistaStatusPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-              Atualização de Status do Trabalho
+              Novo Trabalho (Cadastrar Caso)
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-              Cadastre a identificação do paciente e selecione os modelos 3D que compõem o caso.
+              Informe a identificação do paciente e selecione quais modelos 3D devem ser produzidos.
             </p>
           </div>
 
@@ -133,10 +133,10 @@ export default function CadistaStatusPage() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <FileCheck2 className="w-4 h-4 text-brand-500" />
-                1. Identificação do Paciente / Trabalho
+                1. Identificação do Paciente
               </CardTitle>
               <CardDescription>
-                Compatível com LGPD: apenas o código do paciente é estritamente obrigatório.
+                O código (ex: PAC-100) é a referência principal para rastrear a ordem do início ao fim.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

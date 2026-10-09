@@ -145,37 +145,30 @@ export default function AdminUsuariosPage() {
     <AppShell>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200/80 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
           <div>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="text-brand-700 bg-brand-50 border-brand-200 font-semibold">
-                Administração do Sistema
-              </Badge>
-              <span className="text-xs text-slate-400">&bull;</span>
-              <span className="text-xs text-slate-500 font-medium">Controle de Acesso & Autorização RBAC</span>
-            </div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight mt-1 flex items-center gap-2">
-              Gestão de Usuários e Acessos
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+              Usuários e Permissões
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              Aprove novos acessos ao laboratório, gerencie perfis operacionais e audite permissões técnicas.
+              Cadastre novos membros da equipe e defina o perfil de acesso às funções do sistema.
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
             <Button
               variant="outline"
               size="sm"
               onClick={loadUsers}
               disabled={isLoading}
-              className="gap-1.5"
+              className="gap-1.5 w-full sm:w-auto justify-center"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
               Atualizar
             </Button>
-            <Button onClick={() => setModalOpen(true)} size="sm" className="gap-1.5 font-bold">
+            <Button onClick={() => setModalOpen(true)} size="sm" className="gap-1.5 font-bold w-full sm:w-auto justify-center">
               <Plus className="w-4 h-4" />
-              Adicionar Colaborador
+              + Novo Usuário
             </Button>
           </div>
         </div>

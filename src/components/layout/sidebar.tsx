@@ -43,78 +43,88 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
 
   const navigation: { group: string; items: NavItem[] }[] = [
     {
-      group: "Painel Geral",
+      group: "Principal",
       items: [
         {
-          title: "Dashboard",
+          title: "Início (Dashboard)",
           href: "/dashboard",
           icon: LayoutDashboard,
         },
-      ],
-    },
-    {
-      group: "CAD & Modelagem",
-      items: [
         {
-          title: "Cadista: Novo Trabalho",
+          title: "Novo Trabalho",
           href: "/cadista/status",
           icon: FileCheck2,
         },
         {
-          title: "Fila de Impressão (FIFO)",
+          title: "Fila de Espera",
           href: "/fila",
           icon: ListOrdered,
         },
       ],
     },
     {
-      group: "Impressão 3D & Resinas",
+      group: "Produção 3D",
       items: [
         {
-          title: "Fatiador / Preparo",
+          title: "Preparar Impressão",
           href: "/fatiador",
           icon: Scissors,
         },
         {
-          title: "Ordens de Impressão",
+          title: "Impressões em Andamento",
           href: "/impressoes",
           icon: Printer,
         },
         {
-          title: "Parque de Impressoras",
+          title: "Acabamento & CQ",
+          href: "/acabamento",
+          icon: Sparkles,
+        },
+        {
+          title: "Fresagem CNC",
+          href: "/fresagem",
+          icon: Cog,
+        },
+      ],
+    },
+    {
+      group: "Equipamentos & Materiais",
+      items: [
+        {
+          title: "Impressoras",
           href: "/impressoras",
           icon: Layers3,
         },
         {
-          title: "Lotes de Resina",
+          title: "Resinas",
           href: "/resinas",
           icon: FlaskConical,
         },
         {
-          title: "Calibrações Técnicas",
+          title: "Calibrações",
           href: "/calibracoes",
           icon: Compass,
         },
       ],
     },
     {
-      group: "Administração & Auditoria",
+      group: "Administração",
       items: [
         {
-          title: "Histórico Geral",
+          title: "Histórico Completo",
           href: "/historico",
           icon: History,
         },
         {
-          title: "Usuários & Acessos",
-          href: "/admin/usuarios",
-          icon: Users,
+          title: "Configurações",
+          href: "/admin/configuracoes",
+          icon: Settings,
           roles: ["ADMIN"],
         },
         {
-          title: "Parâmetros do Sistema",
-          href: "/admin/configuracoes",
-          icon: Settings,
+          title: "Usuários",
+          href: "/admin/usuarios",
+          icon: Users,
           roles: ["ADMIN"],
         },
       ],

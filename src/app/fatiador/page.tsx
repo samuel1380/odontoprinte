@@ -231,10 +231,10 @@ function FatiadorContent() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <Printer className="w-4 h-4 text-brand-500" />
-                  1. Seleção da Impressora Cadastrada
+                  1. Escolha a Impressora
                 </CardTitle>
                 <CardDescription>
-                  Apenas impressoras com manutenção preventiva aprovada nos últimos 7 dias.
+                  Selecione uma impressora liberada para produzir esta mesa.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -300,10 +300,10 @@ function FatiadorContent() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <FlaskConical className="w-4 h-4 text-brand-500" />
-                  2. Seleção da Resina Calibrada
+                  2. Escolha a Resina Calibrada
                 </CardTitle>
                 <CardDescription>
-                  Aparecem SOMENTE resinas com calibração técnica aprovada especificamente para a impressora selecionada.
+                  Aparecem apenas as resinas já testadas e aprovadas para a impressora selecionada.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -360,15 +360,15 @@ function FatiadorContent() {
               </CardContent>
             </Card>
 
-            {/* 3. VERIFICAÇÕES OBRIGATÓRIAS PRÉ-IMPRESSÃO (FLUXOGRAMA) */}
+            {/* 3. VERIFICAÇÕES OBRIGATÓRIAS PRÉ-IMPRESSÃO */}
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-brand-500" />
-                  3. Verificações Técnicas Obrigatórias
+                  3. Conferência Pré-Impressão
                 </CardTitle>
                 <CardDescription>
-                  Confirmação visual indispensável para assegurar taxa zero de descolamento de mesa.
+                  Confirme os pontos essenciais para garantir que a peça saia perfeita.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -496,23 +496,23 @@ function FatiadorContent() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <Barcode className="w-4 h-4 text-brand-500" />
-                  Nomenclatura Sequencial
+                  Código da Mesa de Impressão
                 </CardTitle>
                 <CardDescription>
-                  Geração atômica à prova de duplicatas concorrentes
+                  Identificação automática para carimbar o arquivo
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {generatedCode ? (
                   <div className="text-center p-4 rounded-xl bg-brand-50/40 border border-brand-300 shadow-2xs animate-in zoom-in-95">
                     <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block">
-                      Código Gerado para Impressão
+                      Código Gerado para a Peça
                     </span>
                     <span className="font-mono text-3xl font-black text-brand-600 tracking-wider block my-1">
                       {generatedCode}
                     </span>
                     <p className="text-[11px] text-slate-500">
-                      Aplique esta nomenclatura ao arquivo fatiado na mesa.
+                      Nomeie seu arquivo no fatiador com este código.
                     </p>
                   </div>
                 ) : (
@@ -523,7 +523,7 @@ function FatiadorContent() {
                     className="w-full gap-2 font-bold py-3"
                   >
                     <Barcode className="w-4 h-4" />
-                    Gerar Nomenclatura de Impressão
+                    Gerar Código da Peça
                   </Button>
                 )}
 

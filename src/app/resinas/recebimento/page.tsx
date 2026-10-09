@@ -81,11 +81,11 @@ export default function RecebimentoResinaPage() {
               Voltar
             </Button>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                Recebimento de Resina Fotopolimerizável
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                Cadastrar Nova Resina
               </h1>
               <p className="text-xs text-slate-500 mt-0.5">
-                Cadastro de frasco/lote novo conforme procedimento de qualidade laboratorial.
+                Preencha os dados do frasco ou lote de resina para disponibilizá-lo para calibração e impressão.
               </p>
             </div>
           </div>

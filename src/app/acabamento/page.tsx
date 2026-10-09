@@ -253,17 +253,17 @@ export default function AcabamentoPage() {
               return (
                 <Card
                   key={item.id}
-                  className={`overflow-hidden border-2 transition-all ${
+                  className={`overflow-hidden border transition-all ${
                     isApproved
                       ? "border-emerald-300 bg-emerald-50/15"
-                      : "border-slate-200 bg-white hover:border-slate-300 shadow-xs"
+                      : "border-slate-200/90 bg-white hover:border-slate-300 shadow-2xs"
                   }`}
                 >
                   {/* Cabeçalho do Card */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-50/80 border-b border-slate-200/80 px-4 sm:px-5 py-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-50/80 border-b border-slate-100 px-4 sm:px-5 py-3">
                     <div className="flex items-center gap-3">
                       <div className="flex items-baseline gap-2">
-                        <span className="font-mono font-black text-base text-slate-900 tracking-wider">
+                        <span className="font-mono font-bold text-base text-slate-900 tracking-wider">
                           {item.patient_code}
                         </span>
                         {item.patient_name && (
@@ -340,14 +340,14 @@ export default function AcabamentoPage() {
                           {/* Passo 1: Encaixe nos Furos */}
                           <div
                             onClick={() => handleToggleCheck(item, "teeth_inserted")}
-                            className={`p-2.5 rounded-xl border-2 cursor-pointer transition-all flex items-start gap-2.5 ${
+                            className={`p-2.5 rounded-xl border cursor-pointer transition-all flex items-start gap-2.5 ${
                               item.teeth_inserted
-                                ? "border-emerald-500 bg-emerald-50/70"
+                                ? "border-emerald-500 bg-emerald-50/70 shadow-2xs"
                                 : "border-slate-200 bg-white hover:border-slate-300"
                             }`}
                           >
                             <div
-                              className={`h-5 w-5 rounded border-2 flex items-center justify-center shrink-0 mt-0.5 ${
+                              className={`h-5 w-5 rounded border flex items-center justify-center shrink-0 mt-0.5 ${
                                 item.teeth_inserted
                                   ? "border-emerald-600 bg-emerald-500 text-white"
                                   : "border-slate-300 bg-white"
@@ -368,14 +368,14 @@ export default function AcabamentoPage() {
                           {/* Passo 2: Oclusão */}
                           <div
                             onClick={() => handleToggleCheck(item, "occlusion_checked")}
-                            className={`p-2.5 rounded-xl border-2 cursor-pointer transition-all flex items-start gap-2.5 ${
+                            className={`p-2.5 rounded-xl border cursor-pointer transition-all flex items-start gap-2.5 ${
                               item.occlusion_checked
-                                ? "border-emerald-500 bg-emerald-50/70"
+                                ? "border-emerald-500 bg-emerald-50/70 shadow-2xs"
                                 : "border-slate-200 bg-white hover:border-slate-300"
                             }`}
                           >
                             <div
-                              className={`h-5 w-5 rounded border-2 flex items-center justify-center shrink-0 mt-0.5 ${
+                              className={`h-5 w-5 rounded border flex items-center justify-center shrink-0 mt-0.5 ${
                                 item.occlusion_checked
                                   ? "border-emerald-600 bg-emerald-500 text-white"
                                   : "border-slate-300 bg-white"
@@ -396,14 +396,14 @@ export default function AcabamentoPage() {
                           {/* Passo 3: Maquiagem & Glaze */}
                           <div
                             onClick={() => handleToggleCheck(item, "glaze_applied")}
-                            className={`p-2.5 rounded-xl border-2 cursor-pointer transition-all flex items-start gap-2.5 ${
+                            className={`p-2.5 rounded-xl border cursor-pointer transition-all flex items-start gap-2.5 ${
                               item.glaze_applied
-                                ? "border-emerald-500 bg-emerald-50/70"
+                                ? "border-emerald-500 bg-emerald-50/70 shadow-2xs"
                                 : "border-slate-200 bg-white hover:border-slate-300"
                             }`}
                           >
                             <div
-                              className={`h-5 w-5 rounded border-2 flex items-center justify-center shrink-0 mt-0.5 ${
+                              className={`h-5 w-5 rounded border flex items-center justify-center shrink-0 mt-0.5 ${
                                 item.glaze_applied
                                   ? "border-emerald-600 bg-emerald-500 text-white"
                                   : "border-slate-300 bg-white"

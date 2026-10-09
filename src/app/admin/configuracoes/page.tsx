@@ -329,10 +329,10 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Sliders className="w-4 h-4 text-brand-500" />
-                1. Janela Periódica de Manutenção
+                1. Prazo de Manutenção Preventiva
               </CardTitle>
               <CardDescription>
-                Define quantos dias a impressora pode produzir antes de ser automaticamente bloqueada.
+                Quantos dias a impressora pode trabalhar antes de solicitar manutenção (padrão: 7 dias).
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -364,10 +364,10 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Sliders className="w-4 h-4 text-brand-500" />
-                2. Tolerância Dimensional do Hexágono de Teste
+                2. Tamanho Aceitável do Hexágono (Calibração)
               </CardTitle>
               <CardDescription>
-                Intervalo aceitável de medição no paquímetro para aprovação técnica da resina.
+                Medida mínima e máxima no paquímetro para aprovar a resina (padrão: 9.99 mm a 10.01 mm).
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -410,10 +410,10 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Sliders className="w-4 h-4 text-brand-500" />
-                3. Prefixos de Nomenclatura de Impressão
+                3. Prefixos de Identificação das Peças
               </CardTitle>
               <CardDescription>
-                Padrões de identificação gravados no fatiador e carimbados na bancada.
+                Letras iniciais geradas para peças normais e para repetições.
               </CardDescription>
             </CardHeader>
             <CardContent>
