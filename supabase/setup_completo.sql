@@ -201,15 +201,15 @@ CREATE TABLE IF NOT EXISTS public.resin_calibrations (
 CREATE TABLE IF NOT EXISTS public.print_runs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     run_code TEXT NOT NULL UNIQUE,
-    printer_id UUID NOT NULL REFERENCES public.printers(id),
-    resin_batch_id UUID NOT NULL REFERENCES public.resin_batches(id),
-    calibration_id UUID NOT NULL REFERENCES public.resin_calibrations(id),
+    printer_id UUID NOT NULL REFERENCES public.printers(id) ON DELETE CASCADE,
+    resin_batch_id UUID NOT NULL REFERENCES public.resin_batches(id) ON DELETE CASCADE,
+    calibration_id UUID NOT NULL REFERENCES public.resin_calibrations(id) ON DELETE CASCADE,
     supports_confirmed BOOLEAN NOT NULL DEFAULT false,
     resin_manipulated BOOLEAN NOT NULL DEFAULT false,
     status print_run_status NOT NULL DEFAULT 'PREPARADA',
     started_at TIMESTAMPTZ,
     finished_at TIMESTAMPTZ,
-    created_by UUID REFERENCES public.profiles(id),
+    created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -540,7 +540,7 @@ WHERE NOT EXISTS (SELECT 1 FROM public.system_settings);
 SELECT setval('print_run_normal_seq', 1, false);
 SELECT setval('print_run_retry_seq', 1, false);
 
--- 10. CONFIRMAÇÃO AUTOMÁTICA DE E-MAILS (REMOVE QUALQUER BLOQUEIO "Email not confirmed")
+-- 10. SINCRONIZAÇÃO AUTOMÁTICA DE USUÁRIOS E PERFIS
 DO $$
 BEGIN
     UPDATE auth.users
@@ -550,60 +550,53 @@ EXCEPTION WHEN OTHERS THEN
     null;
 END $$;
 
--- 11. PERMISSÕES OPERACIONAIS DE BANCADA (GARANTE PERSISTÊNCIA TOTAL)
-GRANT ALL ON TABLE public.printers TO anon, authenticated;
-GRANT ALL ON TABLE public.printer_maintenances TO anon, authenticated;
-GRANT ALL ON TABLE public.resin_batches TO anon, authenticated;
-GRANT ALL ON TABLE public.resin_calibrations TO anon, authenticated;
-GRANT ALL ON TABLE public.cases TO anon, authenticated;
-GRANT ALL ON TABLE public.case_status_events TO anon, authenticated;
-GRANT ALL ON TABLE public.print_jobs TO anon, authenticated;
-GRANT ALL ON TABLE public.print_job_items TO anon, authenticated;
-GRANT ALL ON TABLE public.print_runs TO anon, authenticated;
-GRANT ALL ON TABLE public.print_run_items TO anon, authenticated;
-GRANT ALL ON TABLE public.system_settings TO anon, authenticated;
-GRANT ALL ON TABLE public.audit_logs TO anon, authenticated;
-
-DO $$
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
 BEGIN
-    DROP POLICY IF EXISTS "Allow lab printer access" ON public.printers;
-    CREATE POLICY "Allow lab printer access" ON public.printers FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+    INSERT INTO public.profiles (id, full_name, role)
+    VALUES (
+        NEW.id,
+        COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email, 'Operador'),
+        'CADISTA'
+    )
+    ON CONFLICT (id) DO NOTHING;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
-    DROP POLICY IF EXISTS "Allow lab printer_maintenances access" ON public.printer_maintenances;
-    CREATE POLICY "Allow lab printer_maintenances access" ON public.printer_maintenances FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+AFTER INSERT ON auth.users
+FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
-    DROP POLICY IF EXISTS "Allow lab resin_batches access" ON public.resin_batches;
-    CREATE POLICY "Allow lab resin_batches access" ON public.resin_batches FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+-- Sincroniza perfis de contas já cadastradas em auth.users
+INSERT INTO public.profiles (id, full_name, role)
+SELECT id, COALESCE(raw_user_meta_data->>'full_name', email, 'Operador'), 'CADISTA'
+FROM auth.users
+ON CONFLICT (id) DO NOTHING;
 
-    DROP POLICY IF EXISTS "Allow lab resin_calibrations access" ON public.resin_calibrations;
-    CREATE POLICY "Allow lab resin_calibrations access" ON public.resin_calibrations FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+-- 11. PERMISSÕES OPERACIONAIS DE BANCADA (GARANTE PERSISTÊNCIA TOTAL SEM BLOQUEIOS)
+ALTER TABLE IF EXISTS public.printers DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.printer_maintenances DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.resin_batches DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.resin_calibrations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.cases DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.case_status_events DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.print_jobs DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.print_job_items DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.print_runs DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.print_run_items DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.system_settings DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.audit_logs DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.profiles DISABLE ROW LEVEL SECURITY;
 
-    DROP POLICY IF EXISTS "Allow lab cases access" ON public.cases;
-    CREATE POLICY "Allow lab cases access" ON public.cases FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
 
-    DROP POLICY IF EXISTS "Allow lab case_events access" ON public.case_status_events;
-    CREATE POLICY "Allow lab case_events access" ON public.case_status_events FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-
-    DROP POLICY IF EXISTS "Allow lab print_jobs access" ON public.print_jobs;
-    CREATE POLICY "Allow lab print_jobs access" ON public.print_jobs FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-
-    DROP POLICY IF EXISTS "Allow lab print_job_items access" ON public.print_job_items;
-    CREATE POLICY "Allow lab print_job_items access" ON public.print_job_items FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-
-    DROP POLICY IF EXISTS "Allow lab print_runs access" ON public.print_runs;
-    CREATE POLICY "Allow lab print_runs access" ON public.print_runs FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-
-    DROP POLICY IF EXISTS "Allow lab print_run_items access" ON public.print_run_items;
-    CREATE POLICY "Allow lab print_run_items access" ON public.print_run_items FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-
-    DROP POLICY IF EXISTS "Allow lab system_settings access" ON public.system_settings;
-    CREATE POLICY "Allow lab system_settings access" ON public.system_settings FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-
-    DROP POLICY IF EXISTS "Allow lab audit_logs access" ON public.audit_logs;
-    CREATE POLICY "Allow lab audit_logs access" ON public.audit_logs FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-EXCEPTION WHEN OTHERS THEN
-    null;
-END $$;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
 
 -- FIM DO SCRIPT COMPLETO
 
