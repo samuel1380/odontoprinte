@@ -18,8 +18,16 @@ interface ChatRequestPayload {
   provider?: AIProvider;
   apiKey?: string;
   model?: string;
-  customEndpoint?: string;
 }
+
+/**
+ * Modelos ativos suportados no Groq
+ */
+const GROQ_ACTIVE_MODELS = [
+  "openai/gpt-oss-120b",
+  "qwen/qwen3.8-27b",
+  "openai/gpt-oss-20b",
+] as const;
 
 /**
  * Sanitiza o histórico para o formato estrito do Google Gemini:
@@ -62,17 +70,15 @@ export async function POST(req: NextRequest) {
   const startTime = Date.now();
   try {
     const body = (await req.json()) as ChatRequestPayload;
-    // GEMINI É O PROVEDOR PRINCIPAL PRIORIZADO
     const {
       message,
       history = [],
       context = {},
       provider = "GEMINI",
       model,
-      customEndpoint,
     } = body;
 
-    // Resolução resiliente da Chave de API (prioriza GEMINI e Render Environment Variables)
+    // Resolução resiliente da Chave de API (prioriza GEMINI e depois GROQ)
     const { apiKey, activeProvider, source } = resolveAIKey(provider, body.apiKey);
 
     // Contexto condensado do laboratório para alimentar o System Prompt
@@ -121,134 +127,100 @@ Suas funções:
 3. Auxiliar no diagnóstico de falhas de impressão (descolamento de mesa, delaminação, quebra de suportes).
 4. Fornecer respostas diretas, úteis e concisas.`;
 
-    // 1. Processamento GEMINI (PRIORIDADE #1 - Gemini 3.8 Flash)
-    const executeGemini = async (key: string, selectedModel?: string) => {
-      let geminiModel = (selectedModel || "").trim();
-      if (
-        !geminiModel ||
-        geminiModel === "gemini-1.5-flash" ||
-        geminiModel === "gemini-2.0-flash" ||
-        geminiModel.toLowerCase().includes("3.8")
-      ) {
-        geminiModel = "gemini-3.8-flash";
-      }
-
-      // Cadeia de modelos em ordem de prioridade
-      const candidateGeminiModels = Array.from(
-        new Set([geminiModel, "gemini-3.8-flash", "gemini-2.0-flash", "gemini-1.5-flash"])
-      );
-
+    // 1. Processamento GEMINI — Único modelo: gemini-3.8-flash
+    const executeGemini = async (key: string) => {
+      const geminiModel = "gemini-3.8-flash";
       const contents = formatGeminiContents(history, message);
-      let lastError = "";
 
-      for (const modelToTry of candidateGeminiModels) {
-        try {
-          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${key}`;
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${key}`;
 
-          let geminiRes = await fetch(geminiUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              system_instruction: {
-                parts: [{ text: systemPrompt + "\n" + labContextSummary }],
-              },
-              contents,
-              generationConfig: {
-                temperature: 0.4,
-                maxOutputTokens: 800,
-              },
-            }),
-          });
+      let geminiRes = await fetch(geminiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system_instruction: {
+            parts: [{ text: systemPrompt + "\n" + labContextSummary }],
+          },
+          contents,
+          generationConfig: {
+            temperature: 0.4,
+            maxOutputTokens: 800,
+          },
+        }),
+      });
 
-          // Se falhar formato com system_instruction, tenta formato universal
-          if (!geminiRes.ok) {
-            const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${key}`;
-            geminiRes = await fetch(fallbackUrl, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                contents: [
+      // Se falhar formato com system_instruction, tenta formato universal
+      if (!geminiRes.ok) {
+        geminiRes = await fetch(geminiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: "user",
+                parts: [
                   {
-                    role: "user",
-                    parts: [
-                      {
-                        text: `[INSTRUÇÕES DO SISTEMA]\n${systemPrompt}\n${labContextSummary}\n[FIM INSTRUÇÕES]\n\n${message}`,
-                      },
-                    ],
+                    text: `[INSTRUÇÕES DO SISTEMA]\n${systemPrompt}\n${labContextSummary}\n[FIM INSTRUÇÕES]\n\n${message}`,
                   },
                 ],
-                generationConfig: {
-                  temperature: 0.4,
-                  maxOutputTokens: 800,
-                },
-              }),
-            });
-          }
+              },
+            ],
+            generationConfig: {
+              temperature: 0.4,
+              maxOutputTokens: 800,
+            },
+          }),
+        });
+      }
 
-          if (geminiRes.ok) {
-            const data = await geminiRes.json();
-            const reply =
-              data.candidates?.[0]?.content?.parts?.[0]?.text ||
-              "Desculpe, não consegui gerar uma resposta.";
-            return {
-              reply,
-              provider: "GEMINI",
-              model: modelToTry,
-              source,
-              latency: Date.now() - startTime,
-            };
-          } else {
-            const errData = await geminiRes.json().catch(() => ({}));
-            const rawMsg = errData?.error?.message || `HTTP ${geminiRes.status}`;
-            lastError = `[${modelToTry}] ${rawMsg}`;
-          }
-        } catch (e: any) {
-          lastError = `[${modelToTry}] ${e?.message || String(e)}`;
+      if (!geminiRes.ok) {
+        const errData = await geminiRes.json().catch(() => ({}));
+        const rawMsg = errData?.error?.message || `HTTP ${geminiRes.status}`;
+        const code = errData?.error?.code || geminiRes.status;
+
+        if (
+          rawMsg.includes("API key not valid") ||
+          rawMsg.includes("API_KEY_INVALID")
+        ) {
+          throw new Error("Chave de API do Google Gemini inválida ou não autorizada. Verifique no console https://aistudio.google.com/app/apikey.");
+        } else if (code === 429 || rawMsg.includes("RESOURCE_EXHAUSTED") || rawMsg.includes("quota")) {
+          throw new Error("Cota de requisições temporariamente esgotada (Rate Limit) no Google Gemini. Aguarde 1 minuto.");
         }
+
+        throw new Error(`Erro no Google Gemini (${geminiModel}): ${rawMsg}`);
       }
 
-      // Se todos os modelos falharem, detalha com clareza
-      let explanation = "";
-      if (
-        lastError.includes("API key not valid") ||
-        lastError.includes("API_KEY_INVALID")
-      ) {
-        explanation =
-          "Chave de API do Google Gemini inválida ou não autorizada. Verifique no console https://aistudio.google.com/app/apikey.";
-      } else if (
-        lastError.includes("429") ||
-        lastError.includes("RESOURCE_EXHAUSTED") ||
-        lastError.includes("quota")
-      ) {
-        explanation =
-          "Cota de requisições temporariamente esgotada (Rate Limit) no Google Gemini. Aguarde 1 minuto.";
-      } else {
-        explanation = `Erro retornado pelo Google Gemini: ${lastError}`;
-      }
+      const data = await geminiRes.json();
+      const reply =
+        data.candidates?.[0]?.content?.parts?.[0]?.text ||
+        "Desculpe, não consegui gerar uma resposta.";
 
-      throw new Error(explanation);
+      return {
+        reply,
+        provider: "GEMINI",
+        model: geminiModel,
+        source,
+        latency: Date.now() - startTime,
+      };
     };
 
-    // 2. Processamento GROQ (Modelos Atuais: openai/gpt-oss-120b, qwen/qwen3.8-27b, openai/gpt-oss-20b)
+    // 2. Processamento GROQ — Modelos Ativos: openai/gpt-oss-120b, qwen/qwen3.8-27b, openai/gpt-oss-20b
     const executeGroq = async (key: string, selectedModel?: string) => {
-      let groqModel = (selectedModel || "").trim();
-      if (!groqModel || groqModel.startsWith("gemini")) {
-        groqModel = "openai/gpt-oss-120b";
-      }
+      // Normaliza modelo: se não for um dos modelos ativos suportados, usa openai/gpt-oss-120b
+      const requested = (selectedModel || "").trim();
+      const primaryModel = GROQ_ACTIVE_MODELS.includes(requested as any)
+        ? requested
+        : "openai/gpt-oss-120b";
 
-      const candidateGroqModels = Array.from(
-        new Set([
-          groqModel,
-          "openai/gpt-oss-120b",
-          "qwen/qwen3.8-27b",
-          "openai/gpt-oss-20b",
-          "llama-3.3-70b-versatile",
-        ])
-      );
+      // Cascata estritamente entre os modelos ativos disponíveis no Groq
+      const modelsToTry = [
+        primaryModel,
+        ...GROQ_ACTIVE_MODELS.filter((m) => m !== primaryModel),
+      ];
 
       let lastGroqError = "";
 
-      for (const m of candidateGroqModels) {
+      for (const m of modelsToTry) {
         try {
           const groqRes = await fetch(
             "https://api.groq.com/openai/v1/chat/completions",
@@ -298,42 +270,36 @@ Suas funções:
       throw new Error(`Erro na API Groq: ${lastGroqError}`);
     };
 
-    // 3. EXECUÇÃO COM PRIORIDADE GEMINI E FALLBACK RESILIENTE
-    if (apiKey || (activeProvider === "OPENAI_COMPATIBLE" && customEndpoint)) {
+    // 3. Execução da IA com Fallback Cruzado Resiliente
+    if (apiKey) {
       if (activeProvider === "GEMINI") {
         try {
-          const result = await executeGemini(apiKey, model);
+          const result = await executeGemini(apiKey);
           return NextResponse.json(result);
         } catch (geminiErr: any) {
           console.warn("Google Gemini falhou:", geminiErr?.message);
 
-          // Fallback automático para Groq se disponível no Render
+          // Fallback automático para Groq se houver chave no Render
           const groqBackupKey = getEnvKey("GROQ");
           if (groqBackupKey) {
             try {
-              const groqResult = await executeGroq(groqBackupKey);
+              const groqResult = await executeGroq(groqBackupKey, model);
               return NextResponse.json({
                 ...groqResult,
-                note: `Google Gemini indisponível (${geminiErr?.message}). Resposta atendida automaticamente via Groq Cloud.`,
+                note: `Google Gemini 3.8 indisponível (${geminiErr?.message}). Resposta atendida via Groq Cloud (${groqResult.model}).`,
               });
             } catch (groqErr: any) {
-              const diagnosticMessage = `❌ Falha ao conectar com os Provedores de IA:\n• Google Gemini: ${geminiErr?.message}\n• Groq Fallback: ${groqErr?.message}\n• Chave Gemini testada: ${maskApiKey(apiKey)} (${source === "render" ? "Render Environment Variables" : "Painel Local"})`;
+              const diagnosticMessage = `❌ Falha ao conectar com os Provedores de IA:\n• Google Gemini 3.8: ${geminiErr?.message}\n• Groq Fallback: ${groqErr?.message}\n• Chave testada: ${maskApiKey(apiKey)}`;
               return NextResponse.json(
-                {
-                  error: "Falha na conexão com Google Gemini",
-                  details: diagnosticMessage,
-                },
+                { error: "Falha na conexão com Google Gemini 3.8", details: diagnosticMessage },
                 { status: 500 }
               );
             }
           }
 
-          const diagnosticMessage = `❌ Falha ao conectar com o Google Gemini:\n• Motivo: ${geminiErr?.message}\n• Chave testada: ${maskApiKey(apiKey)} (${source === "render" ? "Render Environment Variables" : "Painel Local"})\n• Dica: Verifique se sua chave no Google AI Studio está ativa.`;
+          const diagnosticMessage = `❌ Falha ao conectar com o Google Gemini 3.8:\n• Motivo: ${geminiErr?.message}\n• Chave testada: ${maskApiKey(apiKey)} (${source === "render" ? "Render Environment Variables" : "Painel Local"})\n• Dica: Verifique se sua chave no Google AI Studio está ativa.`;
           return NextResponse.json(
-            {
-              error: "Falha na conexão com Google Gemini",
-              details: diagnosticMessage,
-            },
+            { error: "Falha na conexão com Google Gemini 3.8", details: diagnosticMessage },
             { status: 500 }
           );
         }
@@ -345,26 +311,25 @@ Suas funções:
           return NextResponse.json(result);
         } catch (groqErr: any) {
           console.warn("Groq falhou:", groqErr?.message);
-          // Fallback para Gemini
+
+          // Fallback automático para Gemini se houver chave no Render
           const geminiBackupKey = getEnvKey("GEMINI");
           if (geminiBackupKey) {
             try {
               const geminiResult = await executeGemini(geminiBackupKey);
               return NextResponse.json({
                 ...geminiResult,
-                note: `Groq indisponível (${groqErr?.message}). Resposta atendida automaticamente via Google Gemini.`,
+                note: `Groq indisponível (${groqErr?.message}). Resposta atendida via Google Gemini 3.8.`,
               });
             } catch (geminiErr: any) {
               const diagnosticMessage = `❌ Falha ao conectar com os Provedores de IA:\n• Groq Cloud: ${groqErr?.message}\n• Google Gemini Fallback: ${geminiErr?.message}\n• Chave testada: ${maskApiKey(apiKey)}`;
               return NextResponse.json(
-                {
-                  error: "Falha na conexão com Groq",
-                  details: diagnosticMessage,
-                },
+                { error: "Falha na conexão com Groq", details: diagnosticMessage },
                 { status: 500 }
               );
             }
           }
+
           const diagnosticMessage = `❌ Falha ao conectar com Groq Cloud:\n• Motivo: ${groqErr?.message}\n• Chave testada: ${maskApiKey(apiKey)}`;
           return NextResponse.json(
             { error: "Falha na conexão com Groq", details: diagnosticMessage },
@@ -372,169 +337,9 @@ Suas funções:
           );
         }
       }
-
-      if (activeProvider === "OPENAI") {
-        const openaiModel = model || "gpt-4o-mini";
-        const openaiRes = await fetch(
-          "https://api.openai.com/v1/chat/completions",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify({
-              model: openaiModel,
-              messages: [
-                {
-                  role: "system",
-                  content: systemPrompt + "\n" + labContextSummary,
-                },
-                ...history.slice(-6),
-                { role: "user", content: message },
-              ],
-              temperature: 0.4,
-              max_tokens: 800,
-            }),
-          }
-        );
-
-        if (!openaiRes.ok) {
-          const errData = await openaiRes.json().catch(() => ({}));
-          const errMsg = errData?.error?.message || `HTTP ${openaiRes.status}`;
-          return NextResponse.json(
-            {
-              error: "Falha na conexão com OpenAI",
-              details: `Erro na API OpenAI: ${errMsg}`,
-            },
-            { status: 500 }
-          );
-        }
-
-        const data = await openaiRes.json();
-        const reply =
-          data.choices?.[0]?.message?.content ||
-          "Desculpe, não consegui gerar uma resposta.";
-        return NextResponse.json({
-          reply,
-          provider: "OPENAI",
-          model: openaiModel,
-          source,
-          latency: Date.now() - startTime,
-        });
-      }
-
-      if (activeProvider === "MISTRAL") {
-        const mistralModel = model || "mistral-large-latest";
-        const mistralRes = await fetch(
-          "https://api.mistral.ai/v1/chat/completions",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify({
-              model: mistralModel,
-              messages: [
-                {
-                  role: "system",
-                  content: systemPrompt + "\n" + labContextSummary,
-                },
-                ...history.slice(-6),
-                { role: "user", content: message },
-              ],
-              temperature: 0.4,
-              max_tokens: 800,
-            }),
-          }
-        );
-
-        if (!mistralRes.ok) {
-          const errData = await mistralRes.json().catch(() => ({}));
-          const errMsg = errData?.error?.message || `HTTP ${mistralRes.status}`;
-          return NextResponse.json(
-            {
-              error: "Falha na conexão com Mistral",
-              details: `Erro na API Mistral: ${errMsg}`,
-            },
-            { status: 500 }
-          );
-        }
-
-        const data = await mistralRes.json();
-        const reply =
-          data.choices?.[0]?.message?.content ||
-          "Desculpe, não consegui gerar uma resposta.";
-        return NextResponse.json({
-          reply,
-          provider: "MISTRAL",
-          model: mistralModel,
-          source,
-          latency: Date.now() - startTime,
-        });
-      }
-
-      if (activeProvider === "OPENAI_COMPATIBLE") {
-        const targetUrl =
-          customEndpoint?.trim() || "http://localhost:11434/v1/chat/completions";
-        const compatUrl = targetUrl.includes("/chat/completions")
-          ? targetUrl
-          : targetUrl.replace(/\/+$/, "") + "/chat/completions";
-        const compatModel = model || "llama3";
-
-        const headers: Record<string, string> = {
-          "Content-Type": "application/json",
-        };
-        if (apiKey) {
-          headers["Authorization"] = `Bearer ${apiKey}`;
-        }
-
-        const compatRes = await fetch(compatUrl, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            model: compatModel,
-            messages: [
-              {
-                role: "system",
-                content: systemPrompt + "\n" + labContextSummary,
-              },
-              ...history.slice(-6),
-              { role: "user", content: message },
-            ],
-            temperature: 0.4,
-            max_tokens: 800,
-          }),
-        });
-
-        if (!compatRes.ok) {
-          const errData = await compatRes.json().catch(() => ({}));
-          const errMsg = errData?.error?.message || `HTTP ${compatRes.status}`;
-          return NextResponse.json(
-            {
-              error: "Falha na conexão com servidor compatível",
-              details: `Erro no servidor compatível: ${errMsg}`,
-            },
-            { status: 500 }
-          );
-        }
-
-        const data = await compatRes.json();
-        const reply =
-          data.choices?.[0]?.message?.content ||
-          "Desculpe, não consegui gerar uma resposta.";
-        return NextResponse.json({
-          reply,
-          provider: "OPENAI_COMPATIBLE",
-          model: compatModel,
-          source,
-          latency: Date.now() - startTime,
-        });
-      }
     }
 
-    // 4. MODO LOCAL / FALLBACK INTELIGENTE (Quando nenhuma chave foi configurada nem no Render nem localmente)
+    // 4. MODO LOCAL INTELIGENTE (Quando nenhuma chave foi configurada nem no Render nem localmente)
     const lower = message.toLowerCase();
     let localReply = "";
 
@@ -581,7 +386,7 @@ Suas funções:
       localReply = `Olá! Sou a **OdontoIA**, copiloto do laboratório OdontoPrint. Posso te ajudar com status de pacientes, fila de impressão 3D e calibração de resinas.`;
     }
 
-    localReply += `\n\n*(💡 Modo Local Ativo. Para ativar o motor generativo em tempo real via Google Gemini, configure a chave no Render como GEMINI_API_KEY).*`;
+    localReply += `\n\n*(💡 Modo Local Ativo. Para respostas avançadas com IA em tempo real, configure sua chave do Google Gemini como GEMINI_API_KEY no Render).*`;
 
     return NextResponse.json({
       reply: localReply,
@@ -593,7 +398,7 @@ Suas funções:
     return NextResponse.json(
       {
         error: error?.message || "Erro ao processar mensagem com a IA.",
-        details: `[DIAGNÓSTICO TÉCNICO]\nErro: ${error?.message || "Erro desconhecido"}\nStack: ${error?.stack || "N/A"}`,
+        details: `[DIAGNÓSTICO TÉCNICO]\nErro: ${error?.message || "Erro desconhecido"}`,
       },
       { status: 500 }
     );

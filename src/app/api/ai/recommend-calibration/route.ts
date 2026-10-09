@@ -13,8 +13,13 @@ interface CalibrationRecommendationPayload {
   provider?: AIProvider;
   apiKey?: string;
   model?: string;
-  customEndpoint?: string;
 }
+
+const GROQ_ACTIVE_MODELS = [
+  "openai/gpt-oss-120b",
+  "qwen/qwen3.8-27b",
+  "openai/gpt-oss-20b",
+] as const;
 
 export async function POST(req: NextRequest) {
   try {
@@ -27,7 +32,6 @@ export async function POST(req: NextRequest) {
       layer_height = 0.05,
       provider = "GEMINI",
       model,
-      customEndpoint,
     } = body;
 
     const { apiKey, activeProvider } = resolveAIKey(provider, body.apiKey);
@@ -50,60 +54,49 @@ Determine os parâmetros ideais de calibração inicial recomendados para que o 
   "tips": string[] // 3 a 4 dicas cruciais de manuseio e segurança para não descolar da mesa
 }`;
 
-    const callGemini = async (key: string, selectedModel?: string) => {
-      let primaryModel = (selectedModel || "").trim();
-      if (!primaryModel || primaryModel.toLowerCase().includes("3.8") || !primaryModel.startsWith("gemini")) {
-        primaryModel = "gemini-3.8-flash";
-      }
-      const candidateModels = Array.from(
-        new Set([primaryModel, "gemini-3.8-flash", "gemini-2.0-flash", "gemini-1.5-flash"])
-      );
+    // 1. Chamada Google Gemini — Único modelo: gemini-3.8-flash
+    const callGemini = async (key: string) => {
+      const geminiModel = "gemini-3.8-flash";
+      try {
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${key}`;
+        const geminiRes = await fetch(geminiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.2,
+              responseMimeType: "application/json",
+            },
+          }),
+        });
 
-      for (const m of candidateModels) {
-        try {
-          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${key}`;
-          const geminiRes = await fetch(geminiUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ role: "user", parts: [{ text: prompt }] }],
-              generationConfig: {
-                temperature: 0.2,
-                responseMimeType: "application/json",
-              },
-            }),
-          });
-
-          if (geminiRes.ok) {
-            const data = await geminiRes.json();
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-            const cleanText = text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
-            const parsed = JSON.parse(cleanText);
-            return { ...parsed, aiProvider: "GEMINI", model: m };
-          }
-        } catch {
-          // tentar proximo modelo
+        if (geminiRes.ok) {
+          const data = await geminiRes.json();
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+          const cleanText = text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
+          const parsed = JSON.parse(cleanText);
+          return { ...parsed, aiProvider: "GEMINI", model: geminiModel };
         }
+      } catch {
+        // falha na chamada
       }
       return null;
     };
 
+    // 2. Chamada Groq Cloud — Modelos Ativos: openai/gpt-oss-120b, qwen/qwen3.8-27b, openai/gpt-oss-20b
     const callGroq = async (key: string, selectedModel?: string) => {
-      let groqModel = (selectedModel || "").trim();
-      if (!groqModel || groqModel.startsWith("gemini")) {
-        groqModel = "openai/gpt-oss-120b";
-      }
-      const candidateGroqModels = Array.from(
-        new Set([
-          groqModel,
-          "openai/gpt-oss-120b",
-          "qwen/qwen3.8-27b",
-          "openai/gpt-oss-20b",
-          "llama-3.3-70b-versatile",
-        ])
-      );
+      const requested = (selectedModel || "").trim();
+      const primaryModel = GROQ_ACTIVE_MODELS.includes(requested as any)
+        ? requested
+        : "openai/gpt-oss-120b";
 
-      for (const m of candidateGroqModels) {
+      const modelsToTry = [
+        primaryModel,
+        ...GROQ_ACTIVE_MODELS.filter((m) => m !== primaryModel),
+      ];
+
+      for (const m of modelsToTry) {
         try {
           const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
@@ -125,21 +118,21 @@ Determine os parâmetros ideais de calibração inicial recomendados para que o 
             return { ...parsed, aiProvider: "GROQ", model: m };
           }
         } catch {
-          // tentar proximo modelo
+          // tentar proximo modelo ativo
         }
       }
       return null;
     };
 
-    if (apiKey || (activeProvider === "OPENAI_COMPATIBLE" && customEndpoint)) {
+    if (apiKey) {
       if (activeProvider === "GEMINI") {
-        const res = await callGemini(apiKey, model);
+        const res = await callGemini(apiKey);
         if (res) return NextResponse.json(res);
 
         // Fallback automático para Groq se disponível no Render
         const groqBackup = getEnvKey("GROQ");
         if (groqBackup) {
-          const groqRes = await callGroq(groqBackup);
+          const groqRes = await callGroq(groqBackup, model);
           if (groqRes) return NextResponse.json(groqRes);
         }
       }
@@ -148,92 +141,16 @@ Determine os parâmetros ideais de calibração inicial recomendados para que o 
         const res = await callGroq(apiKey, model);
         if (res) return NextResponse.json(res);
 
-        // Fallback para Gemini se disponível no Render
+        // Fallback automático para Gemini se disponível no Render
         const geminiBackup = getEnvKey("GEMINI");
         if (geminiBackup) {
           const geminiRes = await callGemini(geminiBackup);
           if (geminiRes) return NextResponse.json(geminiRes);
         }
       }
-
-      if (activeProvider === "OPENAI") {
-        const openaiModel = model || "gpt-4o-mini";
-        const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model: openaiModel,
-            messages: [{ role: "user", content: prompt }],
-            response_format: { type: "json_object" },
-            temperature: 0.2,
-          }),
-        });
-
-        if (openaiRes.ok) {
-          const data = await openaiRes.json();
-          const parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}");
-          return NextResponse.json({ ...parsed, aiProvider: "OPENAI" });
-        }
-      }
-
-      if (activeProvider === "MISTRAL") {
-        const mistralModel = model || "mistral-large-latest";
-        const mistralRes = await fetch("https://api.mistral.ai/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model: mistralModel,
-            messages: [{ role: "user", content: prompt }],
-            response_format: { type: "json_object" },
-            temperature: 0.2,
-          }),
-        });
-
-        if (mistralRes.ok) {
-          const data = await mistralRes.json();
-          const parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}");
-          return NextResponse.json({ ...parsed, aiProvider: "MISTRAL" });
-        }
-      }
-
-      if (activeProvider === "OPENAI_COMPATIBLE") {
-        const targetUrl = customEndpoint?.trim() || "http://localhost:11434/v1/chat/completions";
-        const compatUrl = targetUrl.includes("/chat/completions")
-          ? targetUrl
-          : targetUrl.replace(/\/+$/, "") + "/chat/completions";
-        const compatModel = model || "llama3";
-
-        const headers: Record<string, string> = { "Content-Type": "application/json" };
-        if (apiKey) {
-          headers["Authorization"] = `Bearer ${apiKey}`;
-        }
-
-        const compatRes = await fetch(compatUrl, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            model: compatModel,
-            messages: [{ role: "user", content: prompt }],
-            response_format: { type: "json_object" },
-            temperature: 0.2,
-          }),
-        });
-
-        if (compatRes.ok) {
-          const data = await compatRes.json();
-          const parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}");
-          return NextResponse.json({ ...parsed, aiProvider: "OPENAI_COMPATIBLE" });
-        }
-      }
     }
 
-    // BASE DE DADOS TÉCNICA LOCAL DE FALLBACK (Garante funcionamento mesmo sem conexão externa)
+    // 3. BASE DE DADOS TÉCNICA LOCAL DE FALLBACK (Garante funcionamento mesmo sem conexão externa)
     const isBioProv = resin_brand.toLowerCase().includes("prov") || resin_type.toLowerCase().includes("prov");
 
     const fallbackResponse = {

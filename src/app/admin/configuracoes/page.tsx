@@ -42,21 +42,18 @@ export default function AdminConfiguracoesPage() {
   const [normalPrefix, setNormalPrefix] = useState("A");
   const [retryPrefix, setRetryPrefix] = useState("00A");
 
-  // Form State - Inteligência Artificial (Google Gemini 3.8 como Prioridade #1)
+  // Form State - Inteligência Artificial (Google Gemini 3.8 e Groq Cloud)
   const [aiProvider, setAiProvider] = useState<AIProvider>("GEMINI");
   const [aiApiKey, setAiApiKey] = useState("");
-  const [aiCustomEndpoint, setAiCustomEndpoint] = useState("");
   const [aiModel, setAiModel] = useState("gemini-3.8-flash");
   const [aiEnabled, setAiEnabled] = useState(true);
   const [showApiKey, setShowApiKey] = useState(false);
   const [isTestingAi, setIsTestingAi] = useState(false);
   const [renderAiStatus, setRenderAiStatus] = useState<{
-    groq: boolean;
     gemini: boolean;
-    openai: boolean;
-    mistral: boolean;
-    groqMasked?: string;
+    groq: boolean;
     geminiMasked?: string;
+    groqMasked?: string;
     preferredProvider?: AIProvider | null;
   } | null>(null);
   const [testResult, setTestResult] = useState<{
@@ -110,7 +107,6 @@ export default function AdminConfiguracoesPage() {
           );
         }
         setAiApiKey(aiCfg.apiKey || "");
-        setAiCustomEndpoint(aiCfg.customEndpoint || "");
         setAiEnabled(aiCfg.enabled ?? true);
       } finally {
         setIsLoading(false);
@@ -124,14 +120,8 @@ export default function AdminConfiguracoesPage() {
     setTestResult(null);
     if (newProvider === "GEMINI") {
       setAiModel("gemini-3.8-flash");
-    } else if (newProvider === "GROQ") {
-      setAiModel("openai/gpt-oss-120b");
-    } else if (newProvider === "OPENAI") {
-      setAiModel("gpt-4o-mini");
-    } else if (newProvider === "MISTRAL") {
-      setAiModel("mistral-large-latest");
     } else {
-      setAiModel("llama3");
+      setAiModel("openai/gpt-oss-120b");
     }
   };
 
@@ -145,12 +135,10 @@ export default function AdminConfiguracoesPage() {
 
   const hasKeyFromRender =
     (aiProvider === "GEMINI" && Boolean(renderAiStatus?.gemini)) ||
-    (aiProvider === "GROQ" && Boolean(renderAiStatus?.groq)) ||
-    (aiProvider === "OPENAI" && Boolean(renderAiStatus?.openai)) ||
-    (aiProvider === "MISTRAL" && Boolean(renderAiStatus?.mistral));
+    (aiProvider === "GROQ" && Boolean(renderAiStatus?.groq));
 
   const handleTestAi = async () => {
-    if (!aiApiKey.trim() && !hasKeyFromRender && aiProvider !== "OPENAI_COMPATIBLE") {
+    if (!aiApiKey.trim() && !hasKeyFromRender) {
       toast.warning("Por favor, digite uma Chave de API ou configure no Render antes de testar.");
       return;
     }
@@ -162,7 +150,6 @@ export default function AdminConfiguracoesPage() {
         provider: aiProvider,
         apiKey: aiApiKey.trim(),
         model: aiModel.trim(),
-        customEndpoint: aiCustomEndpoint.trim(),
         enabled: aiEnabled,
       });
       setTestResult(res);
@@ -203,7 +190,6 @@ export default function AdminConfiguracoesPage() {
         provider: aiProvider,
         apiKey: aiApiKey.trim(),
         model: aiModel.trim(),
-        customEndpoint: aiCustomEndpoint.trim(),
         enabled: aiEnabled,
       });
 
@@ -394,7 +380,7 @@ export default function AdminConfiguracoesPage() {
             </CardContent>
           </Card>
 
-          {/* Card 4: Inteligência Artificial (Groq / Mistral) */}
+          {/* Card 4: Inteligência Artificial (Gemini / Groq) */}
           <Card className="border-indigo-200/80 bg-gradient-to-br from-white via-indigo-50/20 to-brand-50/20 shadow-sm">
             <CardHeader className="pb-3 border-b border-indigo-100/60">
               <div className="flex items-center justify-between">
@@ -402,7 +388,7 @@ export default function AdminConfiguracoesPage() {
                   <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-indigo-600 to-brand-600 flex items-center justify-center text-white shadow-sm">
                     <Sparkles className="w-4 h-4" />
                   </div>
-                  4. Inteligência Artificial do Laboratório (Groq & Mistral)
+                  4. Inteligência Artificial do Laboratório (Gemini & Groq)
                 </CardTitle>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-medium text-slate-600">Copiloto Ativo:</span>
@@ -481,7 +467,7 @@ export default function AdminConfiguracoesPage() {
                 <label className="block text-xs font-semibold text-slate-700 mb-2">
                   Selecione o Provedor de IA
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {/* Google Gemini (PRIORIDADE #1) */}
                   <div
                     onClick={() => handleProviderChange("GEMINI")}
@@ -502,12 +488,12 @@ export default function AdminConfiguracoesPage() {
                         </Badge>
                       ) : (
                         <Badge variant="outline" className="text-blue-700 border-blue-300 text-[9px] px-1 py-0 h-4">
-                          Recomendado
+                          Prioritário
                         </Badge>
                       )}
                     </div>
                     <p className="text-[11px] text-slate-600 leading-relaxed">
-                      Motor principal, alta velocidade e raciocínio com <strong>Gemini 3.8 Flash</strong>.
+                      Motor principal oficial com <strong>Gemini 3.8 Flash</strong>. Alta capacidade analítica e raciocínio para calibragem e laboratório.
                     </p>
                   </div>
 
@@ -532,134 +518,24 @@ export default function AdminConfiguracoesPage() {
                       )}
                     </div>
                     <p className="text-[11px] text-slate-600 leading-relaxed">
-                      Aceleração ultra-rápida (&lt; 0.5s) com <strong>OpenAI GPT-OSS 120B</strong> e <strong>Qwen 3.8</strong>.
-                    </p>
-                  </div>
-
-                  {/* OpenAI */}
-                  <div
-                    onClick={() => handleProviderChange("OPENAI")}
-                    className={`cursor-pointer rounded-xl border-2 p-3 transition-all ${
-                      aiProvider === "OPENAI"
-                        ? "border-brand-600 bg-brand-50/70 shadow-sm ring-1 ring-brand-500/20"
-                        : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <Bot className="w-4 h-4 text-emerald-600" />
-                        <span className="text-sm font-bold text-slate-900">OpenAI</span>
-                      </div>
-                      {aiProvider === "OPENAI" && (
-                        <Badge className="bg-brand-600 text-white text-[10px] px-1.5 py-0 h-4">
-                          Ativo
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-slate-600 leading-relaxed">
-                      Raciocínio padrão ouro com <strong>GPT-4o-mini</strong> e <strong>GPT-4o</strong>.
-                    </p>
-                  </div>
-
-                  {/* Mistral */}
-                  <div
-                    onClick={() => handleProviderChange("MISTRAL")}
-                    className={`cursor-pointer rounded-xl border-2 p-3 transition-all ${
-                      aiProvider === "MISTRAL"
-                        ? "border-brand-600 bg-brand-50/70 shadow-sm ring-1 ring-brand-500/20"
-                        : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <Bot className="w-4 h-4 text-indigo-500" />
-                        <span className="text-sm font-bold text-slate-900">Mistral AI</span>
-                      </div>
-                      {aiProvider === "MISTRAL" && (
-                        <Badge className="bg-brand-600 text-white text-[10px] px-1.5 py-0 h-4">
-                          Ativo
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-slate-600 leading-relaxed">
-                      Especializado e consistente com <strong>Mistral Large</strong>.
-                    </p>
-                  </div>
-
-                  {/* OpenAI Compatible / Local */}
-                  <div
-                    onClick={() => handleProviderChange("OPENAI_COMPATIBLE")}
-                    className={`cursor-pointer rounded-xl border-2 p-3 transition-all ${
-                      aiProvider === "OPENAI_COMPATIBLE"
-                        ? "border-brand-600 bg-brand-50/70 shadow-sm ring-1 ring-brand-500/20"
-                        : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <Sliders className="w-4 h-4 text-purple-500" />
-                        <span className="text-sm font-bold text-slate-900">Local / Ollama</span>
-                      </div>
-                      {aiProvider === "OPENAI_COMPATIBLE" && (
-                        <Badge className="bg-brand-600 text-white text-[10px] px-1.5 py-0 h-4">
-                          Ativo
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-slate-600 leading-relaxed">
-                      Servidor local ou compatível (Ollama, LM Studio, OpenRouter).
+                      Aceleração LPU ultra-rápida (&lt; 0.5s) com modelos ativos: <strong>OpenAI GPT-OSS 120B/20B</strong> e <strong>Qwen 3.8</strong>.
                     </p>
                   </div>
                 </div>
               </div>
-
-              {/* Endpoint Customizado para Servidores Locais / Compatíveis */}
-              {aiProvider === "OPENAI_COMPATIBLE" && (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Endpoint da API (Base URL)
-                  </label>
-                  <input
-                    type="text"
-                    value={aiCustomEndpoint}
-                    onChange={(e) => setAiCustomEndpoint(e.target.value)}
-                    placeholder="http://localhost:11434/v1 ou https://openrouter.ai/api/v1"
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  />
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Insira a URL base do servidor (ex: <code className="font-mono">http://localhost:11434/v1</code> para Ollama ou <code className="font-mono">https://openrouter.ai/api/v1</code>).
-                  </p>
-                </div>
-              )}
 
               {/* Chave de API */}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
                     <KeyRound className="w-3.5 h-3.5 text-slate-500" />
-                    Chave de API (
-                    {aiProvider === "GROQ"
-                      ? "Groq"
-                      : aiProvider === "GEMINI"
-                      ? "Google AI Studio"
-                      : aiProvider === "OPENAI"
-                      ? "OpenAI"
-                      : aiProvider === "MISTRAL"
-                      ? "Mistral AI"
-                      : "Opcional / OpenRouter"}
-                    )
+                    Chave de API ({aiProvider === "GROQ" ? "Groq" : "Google AI Studio"})
                   </label>
                   <a
                     href={
                       aiProvider === "GROQ"
                         ? "https://console.groq.com/keys"
-                        : aiProvider === "GEMINI"
-                        ? "https://aistudio.google.com/app/apikey"
-                        : aiProvider === "OPENAI"
-                        ? "https://platform.openai.com/api-keys"
-                        : aiProvider === "MISTRAL"
-                        ? "https://console.mistral.ai/api-keys/"
-                        : "https://openrouter.ai/keys"
+                        : "https://aistudio.google.com/app/apikey"
                     }
                     target="_blank"
                     rel="noopener noreferrer"
@@ -680,13 +556,7 @@ export default function AdminConfiguracoesPage() {
                         ? `Chave ativa via Render (${renderAiStatus.geminiMasked})`
                         : aiProvider === "GROQ"
                         ? "gsk_... (ou deixe em branco para usar do Render)"
-                        : aiProvider === "GEMINI"
-                        ? "AIzaSy... (ou deixe em branco para usar do Render)"
-                        : aiProvider === "OPENAI"
-                        ? "sk-..."
-                        : aiProvider === "MISTRAL"
-                        ? "mistral_..."
-                        : "(Deixe vazio para Ollama local ou insira sk-or-...)"
+                        : "AIzaSy... (ou deixe em branco para usar do Render)"
                     }
                     className="w-full pl-3.5 pr-24 py-2 text-xs rounded-lg border border-slate-200 font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
                   />
@@ -703,7 +573,7 @@ export default function AdminConfiguracoesPage() {
                       type="button"
                       size="sm"
                       variant="secondary"
-                      disabled={isTestingAi || (!aiApiKey.trim() && !hasKeyFromRender && aiProvider !== "OPENAI_COMPATIBLE")}
+                      disabled={isTestingAi || (!aiApiKey.trim() && !hasKeyFromRender)}
                       onClick={handleTestAi}
                       className="h-7 text-[11px] px-2.5 font-semibold gap-1"
                     >
@@ -748,124 +618,31 @@ export default function AdminConfiguracoesPage() {
                         onClick={() => setAiModel("openai/gpt-oss-120b")}
                         className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors font-medium"
                       >
-                        openai/gpt-oss-120b (Recomendado ⭐)
+                        openai/gpt-oss-120b (Padrão Ativo ⭐)
                       </button>
                       <button
                         type="button"
                         onClick={() => setAiModel("qwen/qwen3.8-27b")}
                         className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors font-medium"
                       >
-                        qwen/qwen3.8-27b (Alibaba Qwen 3.8)
+                        qwen/qwen3.8-27b (Qwen 3.8 Ativo)
                       </button>
                       <button
                         type="button"
                         onClick={() => setAiModel("openai/gpt-oss-20b")}
                         className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors font-medium"
                       >
-                        openai/gpt-oss-20b (Ultra Rápido)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAiModel("llama-3.3-70b-versatile")}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors"
-                      >
-                        llama-3.3-70b-versatile
-                      </button>
-                    </>
-                  ) : aiProvider === "GEMINI" ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setAiModel("gemini-3.8-flash")}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 hover:bg-blue-100 hover:text-blue-800 text-blue-700 font-mono font-semibold transition-colors"
-                      >
-                        gemini-3.8-flash (Recomendado ⭐ - Gemini 3.8)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAiModel("gemini-2.0-flash")}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors"
-                      >
-                        gemini-2.0-flash (Nova Geração)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAiModel("gemini-1.5-flash")}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors"
-                      >
-                        gemini-1.5-flash (Alta Estabilidade)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAiModel("gemini-1.5-pro")}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors"
-                      >
-                        gemini-1.5-pro
-                      </button>
-                    </>
-                  ) : aiProvider === "OPENAI" ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setAiModel("gpt-4o-mini")}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors"
-                      >
-                        gpt-4o-mini (Recomendado)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAiModel("gpt-4o")}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors"
-                      >
-                        gpt-4o (Máxima Precisão)
-                      </button>
-                    </>
-                  ) : aiProvider === "MISTRAL" ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setAiModel("mistral-large-latest")}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors"
-                      >
-                        mistral-large-latest (Recomendado)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAiModel("mistral-small-latest")}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors"
-                      >
-                        mistral-small-latest
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAiModel("codestral-latest")}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors"
-                      >
-                        codestral-latest
+                        openai/gpt-oss-20b (Ultra Rápido Ativo)
                       </button>
                     </>
                   ) : (
                     <>
                       <button
                         type="button"
-                        onClick={() => setAiModel("llama3")}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors"
+                        onClick={() => setAiModel("gemini-3.8-flash")}
+                        className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 hover:bg-blue-100 hover:text-blue-800 text-blue-700 font-mono font-semibold transition-colors"
                       >
-                        llama3 (Ollama)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAiModel("deepseek-r1")}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors"
-                      >
-                        deepseek-r1
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAiModel("qwen2.5-coder")}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-600 font-mono transition-colors"
-                      >
-                        qwen2.5-coder
+                        gemini-3.8-flash (Modelo Oficial 3.8 ⭐)
                       </button>
                     </>
                   )}

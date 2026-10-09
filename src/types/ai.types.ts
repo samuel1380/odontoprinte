@@ -1,11 +1,10 @@
-export type AIProvider = "GROQ" | "GEMINI" | "OPENAI" | "MISTRAL" | "OPENAI_COMPATIBLE";
+export type AIProvider = "GEMINI" | "GROQ";
 
 export interface AIConfig {
   provider: AIProvider;
   apiKey: string;
   model: string;
   enabled: boolean;
-  customEndpoint?: string;
   temperature?: number;
 }
 

@@ -58,7 +58,7 @@ export function AppShell({ children }: AppShellProps) {
         </main>
       </div>
 
-      {/* Assistente IA Copiloto OdontoPrint (Groq / Mistral) acessível em todo o sistema */}
+      {/* Assistente IA Copiloto OdontoPrint (Gemini / Groq) acessível em todo o sistema */}
       <AICopilotDrawer />
     </div>
   );

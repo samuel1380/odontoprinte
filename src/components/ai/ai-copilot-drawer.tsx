@@ -185,7 +185,7 @@ export function AICopilotDrawer() {
                   href="/admin/configuracoes"
                   onClick={() => setIsOpen(false)}
                   className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
-                  title="Configurar Chaves da IA (Groq / Mistral)"
+                  title="Configurar Chaves da IA (Gemini / Groq)"
                 >
                   <Settings className="w-4 h-4" />
                 </Link>

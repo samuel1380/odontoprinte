@@ -61,7 +61,7 @@ function NovaCalibracaoContent() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Consulta IA (Groq / Mistral) para sugerir parâmetros da resina e impressora
+  // Consulta IA (Gemini / Groq) para sugerir parâmetros da resina e impressora
   const handleAskAiCalibration = async () => {
     const currentBatch = batches.find((b) => b.id === selectedBatchId);
     const currentPrinter = printers.find((p) => p.id === selectedPrinterId);
@@ -327,12 +327,12 @@ function NovaCalibracaoContent() {
                 {isAiLoading ? (
                   <>
                     <RefreshCw className="w-3.5 h-3.5 animate-spin text-brand-600" />
-                    Consultando IA (Groq / Mistral)...
+                    Consultando IA (Gemini / Groq)...
                   </>
                 ) : (
                   <>
                     <Sparkles className="w-3.5 h-3.5 text-brand-600" />
-                    ✨ Sugerir Parâmetros por IA (Groq / Mistral)
+                    ✨ Sugerir Parâmetros por IA (Gemini / Groq)
                   </>
                 )}
               </Button>

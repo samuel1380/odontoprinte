@@ -11,7 +11,7 @@ describe("AIService Unit Tests", () => {
     }
   });
 
-  it("deve carregar configuração padrão para Gemini quando nada foi configurado", () => {
+  it("deve carregar configuração padrão para Gemini 3.8 quando nada foi configurado", () => {
     const config = AIService.getConfig();
     expect(config.provider).toBe("GEMINI");
     expect(config.model).toBe("gemini-3.8-flash");
@@ -19,45 +19,44 @@ describe("AIService Unit Tests", () => {
     expect(config.apiKey).toBe("");
   });
 
-  it("deve salvar e carregar configurações personalizadas para Mistral AI", () => {
+  it("deve salvar e carregar configurações personalizadas para Groq Cloud", () => {
     const customConfig: AIConfig = {
-      provider: "MISTRAL",
-      apiKey: "mistral_test_key_123",
-      model: "mistral-large-latest",
+      provider: "GROQ",
+      apiKey: "gsk_test_key_123",
+      model: "openai/gpt-oss-120b",
       enabled: true,
     };
 
     AIService.saveConfig(customConfig);
     const loaded = AIService.getConfig();
 
-    expect(loaded.provider).toBe("MISTRAL");
-    expect(loaded.apiKey).toBe("mistral_test_key_123");
-    expect(loaded.model).toBe("mistral-large-latest");
+    expect(loaded.provider).toBe("GROQ");
+    expect(loaded.apiKey).toBe("gsk_test_key_123");
+    expect(loaded.model).toBe("openai/gpt-oss-120b");
     expect(loaded.enabled).toBe(true);
   });
 
-  it("deve salvar e carregar configurações para Google Gemini e OpenAI Compatível com customEndpoint", () => {
+  it("deve salvar e carregar configurações para Google Gemini e Groq com modelos válidos", () => {
     const geminiConfig: AIConfig = {
       provider: "GEMINI",
       apiKey: "AIzaSy_fake_test_key",
-      model: "gemini-2.0-flash",
+      model: "gemini-3.8-flash",
       enabled: true,
     };
     AIService.saveConfig(geminiConfig);
     expect(AIService.getConfig().provider).toBe("GEMINI");
-    expect(AIService.getConfig().model).toBe("gemini-2.0-flash");
+    expect(AIService.getConfig().model).toBe("gemini-3.8-flash");
 
-    const ollamaConfig: AIConfig = {
-      provider: "OPENAI_COMPATIBLE",
-      apiKey: "",
-      model: "llama3",
-      customEndpoint: "http://localhost:11434/v1",
+    const groqQwenConfig: AIConfig = {
+      provider: "GROQ",
+      apiKey: "gsk_qwen_test",
+      model: "qwen/qwen3.8-27b",
       enabled: true,
     };
-    AIService.saveConfig(ollamaConfig);
-    const loadedOllama = AIService.getConfig();
-    expect(loadedOllama.provider).toBe("OPENAI_COMPATIBLE");
-    expect(loadedOllama.customEndpoint).toBe("http://localhost:11434/v1");
+    AIService.saveConfig(groqQwenConfig);
+    const loadedGroq = AIService.getConfig();
+    expect(loadedGroq.provider).toBe("GROQ");
+    expect(loadedGroq.model).toBe("qwen/qwen3.8-27b");
   });
 
   it("deve validar resposta de recomendação de calibração", async () => {

@@ -39,14 +39,10 @@ export class AIService {
   }
 
   static async getEnvStatus(): Promise<{
-    groq: boolean;
     gemini: boolean;
-    openai: boolean;
-    mistral: boolean;
-    groqMasked?: string;
+    groq: boolean;
     geminiMasked?: string;
-    openaiMasked?: string;
-    mistralMasked?: string;
+    groqMasked?: string;
     preferredProvider?: import("@/types/ai.types").AIProvider | null;
   }> {
     try {
@@ -58,10 +54,8 @@ export class AIService {
       // ignore
     }
     return {
-      groq: false,
       gemini: false,
-      openai: false,
-      mistral: false,
+      groq: false,
       preferredProvider: null,
     };
   }
@@ -89,7 +83,6 @@ export class AIService {
           provider: config.provider,
           apiKey: config.apiKey,
           model: config.model,
-          customEndpoint: config.customEndpoint,
           context: {},
         }),
       });
@@ -204,7 +197,6 @@ export class AIService {
         provider: config.provider,
         apiKey: config.apiKey,
         model: config.model,
-        customEndpoint: config.customEndpoint,
       }),
     });
 
@@ -249,7 +241,6 @@ export class AIService {
         provider: config.provider,
         apiKey: config.apiKey,
         model: config.model,
-        customEndpoint: config.customEndpoint,
       }),
     });
 
