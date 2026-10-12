@@ -22,6 +22,45 @@ export const FILE_TYPE_LABELS: Record<string, string> = {
   ELEMENTO_PROVISORIO: "Elemento Provisório",
 };
 
+export const LAB_WORK_TYPES = [
+  { id: "MODELO_COM_TROQUEL", label: "Modelo com Troquel", description: "Modelo anatômico com alvéolos e troqueis destacados" },
+  { id: "PLACA", label: "Placa", description: "Placa miorrelaxante / bruxismo" },
+  { id: "COROA", label: "Coroa", description: "Coroa unitária ou ponte fixa" },
+  { id: "COROA_SOBRE_DENTE", label: "Coroa sobre Dente", description: "Preparo dental convencional" },
+  { id: "COROA_SOBRE_IMPLANTE", label: "Coroa sobre Implante", description: "Com link ou orifício para assentamento sobre implante" },
+  { id: "CERAMICA_DE_CARGA", label: "Cerâmica de Carga", description: "Resina cerâmica com alta carga de partículas" },
+  { id: "OUTRO", label: "Outro", description: "Outros modelos, gengiva ou dispositivos" },
+] as const;
+
+export const LAB_WORK_TYPE_LABELS: Record<string, string> = {
+  MODELO_COM_TROQUEL: "Modelo com Troquel",
+  PLACA: "Placa",
+  COROA: "Coroa",
+  COROA_SOBRE_DENTE: "Coroa sobre Dente",
+  COROA_SOBRE_IMPLANTE: "Coroa sobre Implante",
+  CERAMICA_DE_CARGA: "Cerâmica de Carga",
+  OUTRO: "Outro",
+  // Compatibilidade com enums antigos
+  MODELO_COM_FUROS: "Modelo com Troquel",
+  MODELO_DE_TRABALHO: "Modelo de Trabalho",
+  ANTAGONISTA: "Antagonista",
+  TROQUEL: "Troquel",
+  GENGIVA_ARTIFICIAL: "Gengiva",
+  PLACA_MIORRELAXANTE: "Placa",
+  ELEMENTO_PROVA: "Elemento Prova",
+  ELEMENTO_PROVISORIO: "Elemento Provisório",
+};
+
+export const PRINT_CARD_STATUS_CONFIG = {
+  NA_FILA: { label: "Na Fila", color: "bg-slate-800 text-slate-300 border-slate-700", step: 1 },
+  PREPARANDO: { label: "Preparando", color: "bg-indigo-500/20 text-indigo-300 border-indigo-500/40", step: 2 },
+  IMPRIMINDO: { label: "Imprimindo", color: "bg-cyan-500/20 text-cyan-300 border-cyan-500/40", step: 3 },
+  IMPRESSO: { label: "Impresso", color: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40", step: 4 },
+  CONCLUIDO: { label: "Concluído", color: "bg-teal-500/20 text-teal-300 border-teal-500/40", step: 5 },
+  FALHOU: { label: "Falhou", color: "bg-rose-500/20 text-rose-300 border-rose-500/40", step: 0 },
+  CANCELADO: { label: "Cancelado", color: "bg-zinc-800 text-zinc-400 border-zinc-700", step: 0 },
+} as const;
+
 export const PROCESS_TYPES = {
   IMPRESSAO: "Impressão 3D (Resinas)",
 } as const;

@@ -114,3 +114,81 @@ export interface MillingItem {
 
 export type MillingQueueItem = MillingItem;
 
+export type PrintCardStatus =
+  | "NA_FILA"
+  | "PREPARANDO"
+  | "IMPRIMINDO"
+  | "IMPRESSO"
+  | "CONCLUIDO"
+  | "FALHOU"
+  | "CANCELADO";
+
+export type LabWorkType =
+  | "MODELO_COM_TROQUEL"
+  | "PLACA"
+  | "COROA"
+  | "COROA_SOBRE_DENTE"
+  | "COROA_SOBRE_IMPLANTE"
+  | "CERAMICA_DE_CARGA"
+  | "OUTRO";
+
+export interface PrintCardItem {
+  id: string;
+  case_id: string;
+  print_job_id: string;
+  patient_code: string;
+  patient_name: string | null;
+  clinic_name: string;
+  cadista_name: string;
+  work_type: LabWorkType | string;
+  priority: "NORMAL" | "URGENTE";
+  due_date?: string | null;
+  material?: string | null;
+  quantity: number;
+  notes?: string | null;
+  file_name: string;
+  file_size?: number | null;
+  file_hash?: string | null;
+  file_url?: string | null;
+  backup_path?: string | null;
+  backup_done: boolean;
+  backup_done_at?: string | null;
+  status: PrintCardStatus;
+  batch_id?: string | null;
+  batch_name?: string | null;
+  is_retry: boolean;
+  retry_count: number;
+  reprint_reason?: string | null;
+  parent_item_id?: string | null;
+  last_failure_reason?: string | null;
+  created_at: string;
+  updated_at?: string;
+  queue_entered_at: string;
+}
+
+export interface DuplicateCheckInput {
+  patient: string;
+  clinic: string;
+  work_type: string;
+  file_name: string;
+  file_hash?: string;
+}
+
+export interface DuplicateMatch {
+  matched_item: PrintCardItem;
+  match_type: "EXACT_FILE" | "SAME_PATIENT_WORK" | "SAME_NAME_DIFFERENT_HASH";
+  current_status: PrintCardStatus;
+  status_label: string;
+  created_at: string;
+  batch_name?: string | null;
+  cadista_name?: string;
+  suggested_action: "REPRINT" | "NEW_VERSION" | "WARN_EXISTING";
+  alert_level: "HIGH" | "MEDIUM" | "LOW";
+  message: string;
+}
+
+export interface DuplicateCheckResult {
+  has_duplicate: boolean;
+  matches: DuplicateMatch[];
+}
+

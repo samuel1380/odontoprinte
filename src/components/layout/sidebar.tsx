@@ -50,14 +50,14 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           icon: LayoutDashboard,
         },
         {
-          title: "Novo Trabalho",
-          href: "/cadista/status",
-          icon: FileCheck2,
-        },
-        {
-          title: "Fila de Espera",
+          title: "Fila de Impressão 3D",
           href: "/fila",
           icon: ListOrdered,
+        },
+        {
+          title: "Novo Caso (Cadista)",
+          href: "/cadista/status",
+          icon: FileCheck2,
         },
       ],
     },

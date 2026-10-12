@@ -93,6 +93,27 @@ export interface PrintJobItem {
   is_retry: boolean;
   last_failure_reason?: string | null;
   last_run_code?: string | null;
+  // Campos aprimorados do laboratório
+  clinic_name?: string | null;
+  cadista_name?: string | null;
+  work_type?: string | null;
+  priority?: "NORMAL" | "URGENTE";
+  due_date?: string | null;
+  material?: string | null;
+  quantity?: number;
+  notes?: string | null;
+  file_name?: string | null;
+  file_size?: number | null;
+  file_hash?: string | null;
+  file_url?: string | null;
+  backup_path?: string | null;
+  backup_done?: boolean;
+  backup_done_at?: string | null;
+  batch_id?: string | null;
+  batch_name?: string | null;
+  parent_item_id?: string | null;
+  reprint_count?: number;
+  reprint_reason?: string | null;
   created_at: string;
   updated_at?: string;
 }
@@ -197,3 +218,27 @@ export interface AuditLog {
   new_data?: Json | null;
   created_at: string;
 }
+
+export interface PrintBatch {
+  id: string;
+  batch_name: string;
+  printer_name?: string | null;
+  printer_id?: string | null;
+  status: "EM_PREPARO" | "IMPRIMINDO" | "CONCLUIDO" | "FALHOU";
+  failure_reason?: string | null;
+  created_by?: string | null;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface PrintItemHistory {
+  id: string;
+  item_id: string;
+  from_status?: string | null;
+  to_status: string;
+  changed_by?: string | null;
+  changed_by_name?: string | null;
+  notes?: string | null;
+  created_at: string;
+}
+

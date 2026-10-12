@@ -15,6 +15,8 @@ import {
   ProcessType,
   Profile,
   UserRole,
+  PrintBatch,
+  PrintItemHistory,
 } from "@/types/database.types";
 import {
   QueueItem,
@@ -25,6 +27,12 @@ import {
   CaseTimelineEvent,
   FinishingCaseItem,
   MillingItem,
+  PrintCardItem,
+  PrintCardStatus,
+  LabWorkType,
+  DuplicateCheckInput,
+  DuplicateCheckResult,
+  DuplicateMatch,
 } from "@/types/domain";
 import {
   validateMaintenanceChecklist,
@@ -106,6 +114,8 @@ let mockPrintRunItems: PrintRunItem[] = [];
 let mockAuditLogs: AuditLog[] = [];
 let mockMillingItems: MillingItem[] = [];
 let mockFinishingItems: FinishingCaseItem[] = [];
+let mockPrintBatches: PrintBatch[] = [];
+let mockPrintItemHistory: PrintItemHistory[] = [];
 
 let normalSeqCounter = 0;
 let retrySeqCounter = 0;
@@ -452,6 +462,733 @@ export class OdontoPrintService {
     const res = await this.getQueue();
     return res.items;
   }
+
+  // ====================================================================
+  // MÓDULO: FILA DE IMPRESSÃO 3D AVANÇADA (CARDS, LOTES, DUPLICIDADE, BACKUP)
+  // ====================================================================
+
+  private static normalizeText(str: string): string {
+    if (!str) return "";
+    return str
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+  }
+
+  static mapDbStatusToCardStatus(status: string): PrintCardStatus {
+    switch (status) {
+      case "AGUARDANDO_FILA":
+      case "NA_FILA":
+        return "NA_FILA";
+      case "EM_PREPARO":
+      case "PREPARANDO":
+        return "PREPARANDO";
+      case "EM_IMPRESSAO":
+      case "IMPRIMINDO":
+        return "IMPRIMINDO";
+      case "PRONTO_ACABAMENTO":
+      case "IMPRESSO":
+        return "IMPRESSO";
+      case "CONCLUIDO":
+        return "CONCLUIDO";
+      case "FALHOU_REIMPRESSAO":
+      case "FALHOU":
+        return "FALHOU";
+      case "CANCELADO":
+        return "CANCELADO";
+      default:
+        return "NA_FILA";
+    }
+  }
+
+  static mapCardStatusToDbStatus(status: PrintCardStatus): string {
+    switch (status) {
+      case "NA_FILA":
+        return "AGUARDANDO_FILA";
+      case "PREPARANDO":
+        return "EM_PREPARO";
+      case "IMPRIMINDO":
+        return "EM_IMPRESSAO";
+      case "IMPRESSO":
+        return "PRONTO_ACABAMENTO";
+      case "CONCLUIDO":
+        return "CONCLUIDO";
+      case "FALHOU":
+        return "FALHOU_REIMPRESSAO";
+      case "CANCELADO":
+        return "CANCELADO";
+    }
+  }
+
+  static getLastUsedPreferences(): { clinic: string; cadista: string } {
+    return {
+      clinic: loadLocal("odontoprint_last_clinic", "Clínica Principal"),
+      cadista: loadLocal("odontoprint_last_cadista", "Cadista"),
+    };
+  }
+
+  static saveLastUsedPreferences(clinic: string, cadista: string): void {
+    if (clinic) saveLocal("odontoprint_last_clinic", clinic);
+    if (cadista) saveLocal("odontoprint_last_cadista", cadista);
+  }
+
+  static async getPrintCards(filters?: {
+    status?: PrintCardStatus | "TODOS";
+    clinic?: string;
+    cadista?: string;
+    batch_id?: string;
+    is_retry?: boolean;
+    search?: string;
+    today?: boolean;
+  }): Promise<PrintCardItem[]> {
+    mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
+    mockPrintJobs = loadLocal("odontoprint_jobs", mockPrintJobs);
+    mockCases = loadLocal("odontoprint_cases", mockCases);
+    mockPrintBatches = loadLocal("odontoprint_batches", mockPrintBatches);
+
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        const { data: jobItems, error: jiErr } = await client.from("print_job_items").select("*");
+        const { data: jobs, error: jErr } = await client.from("print_jobs").select("*");
+        const { data: cases, error: cErr } = await client.from("cases").select("*");
+        const { data: batches, error: bErr } = await client.from("print_batches").select("*");
+
+        if (!jiErr && jobItems) {
+          mockPrintJobItems = mergeById(jobItems, mockPrintJobItems);
+          saveLocal("odontoprint_job_items", mockPrintJobItems);
+        }
+        if (!jErr && jobs) {
+          mockPrintJobs = mergeById(jobs, mockPrintJobs);
+          saveLocal("odontoprint_jobs", mockPrintJobs);
+        }
+        if (!cErr && cases) {
+          mockCases = mergeById(cases, mockCases);
+          saveLocal("odontoprint_cases", mockCases);
+        }
+        if (!bErr && batches) {
+          mockPrintBatches = mergeById(batches, mockPrintBatches);
+          saveLocal("odontoprint_batches", mockPrintBatches);
+        }
+      } catch (err) {
+        console.warn("Supabase getPrintCards error:", err);
+      }
+    }
+
+    const cards: PrintCardItem[] = mockPrintJobItems.map((item) => {
+      const job = mockPrintJobs.find((j) => j.id === item.print_job_id);
+      const caseItem = job ? mockCases.find((c) => c.id === job.case_id) : null;
+      const batch = item.batch_id ? mockPrintBatches.find((b) => b.id === item.batch_id) : null;
+      const enteredAt = job?.queue_entered_at || item.created_at || new Date().toISOString();
+      const patientCode = caseItem?.patient_code || "PAC-SEM-CODIGO";
+      const clinicName = item.clinic_name || "Clínica Geral";
+      const cadistaName = item.cadista_name || "Cadista";
+      const cardStatus = this.mapDbStatusToCardStatus(item.status);
+      const fileName = item.file_name || `${patientCode}_${item.file_type || "MODELO"}.stl`;
+      const dateStr = (item.created_at || new Date().toISOString()).split("T")[0];
+      const backupPath = item.backup_path || `${clinicName}/${patientCode}/${dateStr}/${fileName}`;
+      const backupDone = item.backup_done ?? (cardStatus === "CONCLUIDO");
+
+      return {
+        id: item.id,
+        case_id: caseItem?.id || "",
+        print_job_id: item.print_job_id,
+        patient_code: patientCode,
+        patient_name: caseItem?.patient_name || null,
+        clinic_name: clinicName,
+        cadista_name: cadistaName,
+        work_type: item.work_type || item.file_type || "MODELO_COM_TROQUEL",
+        priority: item.priority || (job?.priority && job.priority > 1 ? "URGENTE" : "NORMAL"),
+        due_date: item.due_date || null,
+        material: item.material || null,
+        quantity: item.quantity || 1,
+        notes: item.notes || caseItem?.notes || null,
+        file_name: fileName,
+        file_size: item.file_size || null,
+        file_hash: item.file_hash || null,
+        file_url: item.file_url || null,
+        backup_path: backupPath,
+        backup_done: backupDone,
+        backup_done_at: item.backup_done_at || null,
+        status: cardStatus,
+        batch_id: item.batch_id || null,
+        batch_name: batch?.batch_name || item.batch_name || null,
+        is_retry: Boolean(item.is_retry),
+        retry_count: item.retry_count || item.reprint_count || 0,
+        reprint_reason: item.reprint_reason || item.last_failure_reason || null,
+        parent_item_id: item.parent_item_id || null,
+        last_failure_reason: item.last_failure_reason || null,
+        created_at: item.created_at || new Date().toISOString(),
+        updated_at: item.updated_at || item.created_at,
+        queue_entered_at: enteredAt,
+      };
+    });
+
+    let filtered = cards;
+
+    if (filters) {
+      if (filters.status && filters.status !== "TODOS") {
+        filtered = filtered.filter((c) => c.status === filters.status);
+      }
+      if (filters.clinic && filters.clinic !== "TODAS") {
+        filtered = filtered.filter((c) => c.clinic_name.toLowerCase() === filters.clinic!.toLowerCase());
+      }
+      if (filters.cadista && filters.cadista !== "TODOS") {
+        filtered = filtered.filter((c) => c.cadista_name.toLowerCase() === filters.cadista!.toLowerCase());
+      }
+      if (filters.batch_id) {
+        filtered = filtered.filter((c) => c.batch_id === filters.batch_id);
+      }
+      if (filters.is_retry) {
+        filtered = filtered.filter((c) => c.is_retry);
+      }
+      if (filters.today) {
+        const todayStr = new Date().toISOString().split("T")[0];
+        filtered = filtered.filter((c) => c.created_at.startsWith(todayStr) || (c.backup_done_at && c.backup_done_at.startsWith(todayStr)));
+      }
+      if (filters.search && filters.search.trim()) {
+        const q = this.normalizeText(filters.search);
+        filtered = filtered.filter((c) => {
+          return (
+            this.normalizeText(c.patient_code).includes(q) ||
+            (c.patient_name && this.normalizeText(c.patient_name).includes(q)) ||
+            this.normalizeText(c.clinic_name).includes(q) ||
+            this.normalizeText(c.cadista_name).includes(q) ||
+            this.normalizeText(c.file_name).includes(q) ||
+            this.normalizeText(String(c.work_type)).includes(q)
+          );
+        });
+      }
+    }
+
+    filtered.sort((a, b) => {
+      if (a.priority !== b.priority) return a.priority === "URGENTE" ? -1 : 1;
+      if (a.is_retry !== b.is_retry) return a.is_retry ? -1 : 1;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+
+    return filtered;
+  }
+
+  static async checkDuplicates(inputs: DuplicateCheckInput[]): Promise<DuplicateCheckResult> {
+    const existingCards = await this.getPrintCards();
+    const matches: DuplicateMatch[] = [];
+
+    for (const input of inputs) {
+      const normPatient = this.normalizeText(input.patient);
+      const normClinic = this.normalizeText(input.clinic);
+      const normFileName = input.file_name.toLowerCase().trim();
+
+      for (const card of existingCards) {
+        const cardPatientCode = this.normalizeText(card.patient_code);
+        const cardPatientName = card.patient_name ? this.normalizeText(card.patient_name) : "";
+        const cardClinic = this.normalizeText(card.clinic_name);
+        const cardFileName = card.file_name.toLowerCase().trim();
+
+        const isExactHash = Boolean(input.file_hash && card.file_hash && input.file_hash === card.file_hash);
+        const isSameName = normFileName === cardFileName;
+        const isSamePatient = normPatient === cardPatientCode || (Boolean(cardPatientName) && normPatient === cardPatientName);
+        const isSameClinic = normClinic === cardClinic;
+        const isSameWorkType = input.work_type === card.work_type;
+
+        let matchType: DuplicateMatch["match_type"] | null = null;
+        if (isExactHash) {
+          matchType = "EXACT_FILE";
+        } else if (isSamePatient && isSameClinic && isSameWorkType) {
+          matchType = isSameName ? "EXACT_FILE" : "SAME_PATIENT_WORK";
+        } else if (isSameName && isSamePatient) {
+          matchType = "SAME_NAME_DIFFERENT_HASH";
+        }
+
+        if (matchType) {
+          let suggestedAction: DuplicateMatch["suggested_action"] = "WARN_EXISTING";
+          let alertLevel: DuplicateMatch["alert_level"] = "HIGH";
+          let message = "";
+
+          if (card.status === "FALHOU") {
+            suggestedAction = "REPRINT";
+            alertLevel = "LOW";
+            message = `O trabalho anterior de ${card.patient_code} falhou. Recomenda-se cadastrar como REIMPRESSÃO vinculada ao original.`;
+          } else if (card.status === "IMPRESSO" || card.status === "CONCLUIDO") {
+            suggestedAction = "REPRINT";
+            alertLevel = "HIGH";
+            message = `ATENÇÃO: Este trabalho já foi ${card.status === "CONCLUIDO" ? "concluído" : "impresso"} em ${new Date(card.created_at).toLocaleDateString("pt-BR")}. Provável duplicidade acidental!`;
+          } else if (card.status === "NA_FILA" || card.status === "PREPARANDO" || card.status === "IMPRIMINDO") {
+            suggestedAction = "WARN_EXISTING";
+            alertLevel = "HIGH";
+            message = `ALERTA: Este trabalho já está na esteira ativa (Status: ${card.status}). Evite duplicar para não imprimir duas vezes!`;
+          }
+
+          if (matchType === "SAME_NAME_DIFFERENT_HASH" || (matchType === "SAME_PATIENT_WORK" && !isExactHash)) {
+            suggestedAction = "NEW_VERSION";
+            message += " (Arquivo com novo hash detectado: pode ser uma nova versão/ajuste enviada pelo cadista).";
+          }
+
+          matches.push({
+            matched_item: card,
+            match_type: matchType,
+            current_status: card.status,
+            status_label: card.status,
+            created_at: card.created_at,
+            batch_name: card.batch_name,
+            cadista_name: card.cadista_name,
+            suggested_action: suggestedAction,
+            alert_level: alertLevel,
+            message,
+          });
+          break;
+        }
+      }
+    }
+
+    return {
+      has_duplicate: matches.length > 0,
+      matches,
+    };
+  }
+
+  static async createPrintCards(
+    cardsToCreate: Array<{
+      patient: string;
+      patient_name?: string;
+      clinic: string;
+      cadista: string;
+      work_type: string;
+      priority?: "NORMAL" | "URGENTE";
+      due_date?: string;
+      material?: string;
+      quantity?: number;
+      notes?: string;
+      file_name: string;
+      file_size?: number;
+      file_hash?: string;
+      file_data?: string;
+      is_retry?: boolean;
+      reprint_reason?: string;
+      parent_item_id?: string;
+    }>,
+    user_id?: string,
+    user_name?: string
+  ): Promise<{ success: boolean; created_count: number; error?: string }> {
+    if (!cardsToCreate || cardsToCreate.length === 0) {
+      return { success: false, created_count: 0, error: "Nenhum arquivo ou item para cadastrar." };
+    }
+
+    mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
+    mockPrintJobs = loadLocal("odontoprint_jobs", mockPrintJobs);
+    mockCases = loadLocal("odontoprint_cases", mockCases);
+    mockPrintItemHistory = loadLocal("odontoprint_item_history", mockPrintItemHistory);
+    mockAuditLogs = loadLocal("odontoprint_audit_logs", mockAuditLogs);
+
+    const now = new Date().toISOString();
+    const createdItems: PrintJobItem[] = [];
+    const historyEntries: PrintItemHistory[] = [];
+
+    if (cardsToCreate[0]) {
+      this.saveLastUsedPreferences(cardsToCreate[0].clinic, cardsToCreate[0].cadista);
+    }
+
+    for (const card of cardsToCreate) {
+      const patientCode = card.patient.trim().toUpperCase();
+      let existingCase = mockCases.find((c) => this.normalizeText(c.patient_code) === this.normalizeText(patientCode));
+
+      let caseId = existingCase?.id;
+      if (!caseId) {
+        caseId = crypto.randomUUID();
+        const newCase: Case = {
+          id: caseId,
+          patient_code: patientCode,
+          patient_name: card.patient_name?.trim() || null,
+          notes: card.notes || null,
+          created_by: user_id || null,
+          created_at: now,
+        };
+        mockCases.unshift(newCase);
+      }
+
+      const jobId = crypto.randomUUID();
+      const newJob: PrintJob = {
+        id: jobId,
+        case_id: caseId,
+        queue_entered_at: now,
+        status: "AGUARDANDO",
+        priority: card.priority === "URGENTE" ? 2 : 1,
+        created_by: user_id || null,
+        created_at: now,
+      };
+      mockPrintJobs.unshift(newJob);
+
+      const itemId = crypto.randomUUID();
+      const dateStr = now.split("T")[0];
+      const backupPath = `${card.clinic.trim()}/${patientCode}/${dateStr}/${card.file_name}`;
+
+      if (card.file_data) {
+        this.saveUploadedFile(card.file_name, card.file_data);
+      }
+
+      const newItem: PrintJobItem = {
+        id: itemId,
+        print_job_id: jobId,
+        file_type: "MODELO_DE_TRABALHO" as DentalFileType,
+        status: "AGUARDANDO_FILA",
+        retry_count: card.is_retry ? 1 : 0,
+        is_retry: Boolean(card.is_retry),
+        clinic_name: card.clinic.trim(),
+        cadista_name: card.cadista.trim(),
+        work_type: card.work_type,
+        priority: card.priority || "NORMAL",
+        due_date: card.due_date || null,
+        material: card.material || null,
+        quantity: card.quantity || 1,
+        notes: card.notes || null,
+        file_name: card.file_name,
+        file_size: card.file_size || null,
+        file_hash: card.file_hash || null,
+        file_url: card.file_data ? `data-url:${card.file_name}` : null,
+        backup_path: backupPath,
+        backup_done: false,
+        parent_item_id: card.parent_item_id || null,
+        reprint_count: card.is_retry ? 1 : 0,
+        reprint_reason: card.reprint_reason || null,
+        created_at: now,
+      };
+
+      createdItems.push(newItem);
+      mockPrintJobItems.unshift(newItem);
+
+      const hist: PrintItemHistory = {
+        id: crypto.randomUUID(),
+        item_id: itemId,
+        from_status: null,
+        to_status: "NA_FILA",
+        changed_by: user_id || null,
+        changed_by_name: user_name || card.cadista,
+        notes: card.is_retry ? `Item criado como REIMPRESSÃO: ${card.reprint_reason || "Sem motivo"}` : "Item cadastrado na esteira 3D.",
+        created_at: now,
+      };
+      historyEntries.push(hist);
+      mockPrintItemHistory.unshift(hist);
+    }
+
+    saveLocal("odontoprint_cases", mockCases);
+    saveLocal("odontoprint_jobs", mockPrintJobs);
+    saveLocal("odontoprint_job_items", mockPrintJobItems);
+    saveLocal("odontoprint_item_history", mockPrintItemHistory);
+
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        await client.from("cases").upsert(mockCases.slice(0, cardsToCreate.length));
+        await client.from("print_jobs").insert(mockPrintJobs.slice(0, cardsToCreate.length));
+        await client.from("print_job_items").insert(createdItems);
+        await client.from("print_item_history").insert(historyEntries);
+      } catch (err) {
+        console.warn("Supabase createPrintCards persist error (fallback mantido):", err);
+      }
+    }
+
+    return { success: true, created_count: createdItems.length };
+  }
+
+  static async updateCardStatus(
+    id: string,
+    newStatus: PrintCardStatus,
+    notes?: string,
+    user_id?: string,
+    user_name?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
+    mockPrintItemHistory = loadLocal("odontoprint_item_history", mockPrintItemHistory);
+    mockAuditLogs = loadLocal("odontoprint_audit_logs", mockAuditLogs);
+
+    const item = mockPrintJobItems.find((i) => i.id === id);
+    if (!item) return { success: false, error: "Item de impressão não encontrado." };
+
+    const oldStatus = this.mapDbStatusToCardStatus(item.status);
+    const now = new Date().toISOString();
+
+    item.status = this.mapCardStatusToDbStatus(newStatus) as any;
+    item.updated_at = now;
+
+    if (newStatus === "CONCLUIDO") {
+      item.backup_done = true;
+      item.backup_done_at = now;
+    }
+
+    if (newStatus === "FALHOU") {
+      item.last_failure_reason = notes || "Falha técnica informada pelo operador.";
+      item.is_retry = true;
+      item.retry_count = (item.retry_count || 0) + 1;
+      item.reprint_count = (item.reprint_count || 0) + 1;
+      item.reprint_reason = notes || "Falha na impressão";
+    }
+
+    const hist: PrintItemHistory = {
+      id: crypto.randomUUID(),
+      item_id: id,
+      from_status: oldStatus,
+      to_status: newStatus,
+      changed_by: user_id || null,
+      changed_by_name: user_name || "Operador 3D",
+      notes: notes || null,
+      created_at: now,
+    };
+    mockPrintItemHistory.unshift(hist);
+
+    mockAuditLogs.unshift({
+      id: crypto.randomUUID(),
+      user_id: user_id || null,
+      action: `STATUS_CARD_${newStatus}`,
+      entity_type: "print_job_items",
+      entity_id: id,
+      old_data: { status: oldStatus },
+      new_data: { status: newStatus, notes, backup_done: item.backup_done },
+      created_at: now,
+    });
+
+    saveLocal("odontoprint_job_items", mockPrintJobItems);
+    saveLocal("odontoprint_item_history", mockPrintItemHistory);
+    saveLocal("odontoprint_audit_logs", mockAuditLogs);
+
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        await client.from("print_job_items").update({
+          status: item.status,
+          backup_done: item.backup_done,
+          backup_done_at: item.backup_done_at,
+          last_failure_reason: item.last_failure_reason,
+          retry_count: item.retry_count,
+          is_retry: item.is_retry,
+          updated_at: now,
+        }).eq("id", id);
+        await client.from("print_item_history").insert(hist);
+      } catch (err) {
+        console.warn("Supabase updateCardStatus error:", err);
+      }
+    }
+
+    return { success: true };
+  }
+
+  static async createPrintBatch(params: {
+    batch_name: string;
+    item_ids: string[];
+    printer_name?: string;
+    printer_id?: string;
+    user_id?: string;
+    user_name?: string;
+  }): Promise<{ success: boolean; batch?: PrintBatch; error?: string }> {
+    if (!params.item_ids || params.item_ids.length === 0) {
+      return { success: false, error: "Selecione pelo menos um card para montar o lote/placa." };
+    }
+
+    mockPrintBatches = loadLocal("odontoprint_batches", mockPrintBatches);
+    mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
+    mockPrintItemHistory = loadLocal("odontoprint_item_history", mockPrintItemHistory);
+
+    const batchId = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    const newBatch: PrintBatch = {
+      id: batchId,
+      batch_name: params.batch_name.trim(),
+      printer_name: params.printer_name?.trim() || null,
+      printer_id: params.printer_id || null,
+      status: "EM_PREPARO",
+      created_by: params.user_id || null,
+      created_at: now,
+      updated_at: now,
+    };
+
+    mockPrintBatches.unshift(newBatch);
+
+    for (const itemId of params.item_ids) {
+      const card = mockPrintJobItems.find((i) => i.id === itemId);
+      if (card) {
+        card.batch_id = batchId;
+        card.batch_name = newBatch.batch_name;
+        if (card.status === "AGUARDANDO_FILA") {
+          card.status = "EM_PREPARO";
+        }
+        card.updated_at = now;
+
+        mockPrintItemHistory.unshift({
+          id: crypto.randomUUID(),
+          item_id: itemId,
+          from_status: "NA_FILA",
+          to_status: "PREPARANDO",
+          changed_by: params.user_id || null,
+          changed_by_name: params.user_name || "Operador",
+          notes: `Vinculado ao lote de impressão: ${newBatch.batch_name}`,
+          created_at: now,
+        });
+      }
+    }
+
+    saveLocal("odontoprint_batches", mockPrintBatches);
+    saveLocal("odontoprint_job_items", mockPrintJobItems);
+    saveLocal("odontoprint_item_history", mockPrintItemHistory);
+
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        await client.from("print_batches").insert(newBatch);
+        for (const itemId of params.item_ids) {
+          await client.from("print_job_items").update({
+            batch_id: batchId,
+            batch_name: newBatch.batch_name,
+            status: "EM_PREPARO",
+            updated_at: now,
+          }).eq("id", itemId);
+        }
+      } catch (err) {
+        console.warn("Supabase createPrintBatch error:", err);
+      }
+    }
+
+    return { success: true, batch: newBatch };
+  }
+
+  static async failPrintBatch(
+    batchId: string,
+    reason?: string,
+    user_id?: string,
+    user_name?: string
+  ): Promise<{ success: boolean; affected_count: number; error?: string }> {
+    mockPrintBatches = loadLocal("odontoprint_batches", mockPrintBatches);
+    mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
+    mockPrintItemHistory = loadLocal("odontoprint_item_history", mockPrintItemHistory);
+
+    const batch = mockPrintBatches.find((b) => b.id === batchId);
+    if (!batch) return { success: false, affected_count: 0, error: "Lote não encontrado." };
+
+    const now = new Date().toISOString();
+    const failReason = reason?.trim() || "Falha técnica na mesa/lote de impressão";
+
+    batch.status = "FALHOU";
+    batch.failure_reason = failReason;
+    batch.updated_at = now;
+
+    let affectedCount = 0;
+    for (const card of mockPrintJobItems) {
+      if (card.batch_id === batchId) {
+        const oldStatus = this.mapDbStatusToCardStatus(card.status);
+        card.status = "AGUARDANDO_FILA";
+        card.is_retry = true;
+        card.retry_count = (card.retry_count || 0) + 1;
+        card.reprint_count = (card.reprint_count || 0) + 1;
+        card.last_failure_reason = failReason;
+        card.reprint_reason = failReason;
+        card.updated_at = now;
+        affectedCount++;
+
+        mockPrintItemHistory.unshift({
+          id: crypto.randomUUID(),
+          item_id: card.id,
+          from_status: oldStatus,
+          to_status: "NA_FILA",
+          changed_by: user_id || null,
+          changed_by_name: user_name || "Operador",
+          notes: `LOTE FALHOU (${batch.batch_name}): ${failReason}. Retornado para a Fila de Impressão como Reimpressão.`,
+          created_at: now,
+        });
+      }
+    }
+
+    saveLocal("odontoprint_batches", mockPrintBatches);
+    saveLocal("odontoprint_job_items", mockPrintJobItems);
+    saveLocal("odontoprint_item_history", mockPrintItemHistory);
+
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        await client.from("print_batches").update({
+          status: "FALHOU",
+          failure_reason: failReason,
+          updated_at: now,
+        }).eq("id", batchId);
+
+        await client.from("print_job_items").update({
+          status: "AGUARDANDO_FILA",
+          is_retry: true,
+          last_failure_reason: failReason,
+          reprint_reason: failReason,
+          updated_at: now,
+        }).eq("batch_id", batchId);
+      } catch (err) {
+        console.warn("Supabase failPrintBatch error:", err);
+      }
+    }
+
+    return { success: true, affected_count: affectedCount };
+  }
+
+  static async getPrintBatches(): Promise<Array<PrintBatch & { items_count: number }>> {
+    mockPrintBatches = loadLocal("odontoprint_batches", mockPrintBatches);
+    mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
+
+    return mockPrintBatches.map((b) => ({
+      ...b,
+      items_count: mockPrintJobItems.filter((i) => i.batch_id === b.id).length,
+    }));
+  }
+
+  static async getPatientPrintHistory(patientQuery: string): Promise<PrintCardItem[]> {
+    const allCards = await this.getPrintCards();
+    const q = this.normalizeText(patientQuery);
+    return allCards.filter(
+      (c) =>
+        this.normalizeText(c.patient_code).includes(q) ||
+        (Boolean(c.patient_name) && this.normalizeText(c.patient_name!).includes(q))
+    );
+  }
+
+  static async getCardHistory(itemId: string): Promise<PrintItemHistory[]> {
+    mockPrintItemHistory = loadLocal("odontoprint_item_history", mockPrintItemHistory);
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        const { data, error } = await client
+          .from("print_item_history")
+          .select("*")
+          .eq("item_id", itemId)
+          .order("created_at", { ascending: false });
+        if (!error && data) {
+          mockPrintItemHistory = mergeById(data, mockPrintItemHistory);
+          saveLocal("odontoprint_item_history", mockPrintItemHistory);
+        }
+      } catch (err) {
+        console.warn("Supabase getCardHistory error:", err);
+      }
+    }
+    return mockPrintItemHistory
+      .filter((h) => h.item_id === itemId)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }
+
+  static saveUploadedFile(fileName: string, dataUrl: string): void {
+    if (typeof window !== "undefined") {
+      try {
+        sessionStorage.setItem(`odontoprint_file_${fileName}`, dataUrl);
+      } catch {
+        // quota excedida ou sem suporte
+      }
+    }
+  }
+
+  static getUploadedFile(fileName: string): string | null {
+    if (typeof window !== "undefined") {
+      try {
+        return sessionStorage.getItem(`odontoprint_file_${fileName}`);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+
 
   // --- IMPRESSORAS E MANUTENÇÕES ---
   static async getPrinters(): Promise<PrinterWithStatus[]> {
