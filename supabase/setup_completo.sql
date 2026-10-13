@@ -234,6 +234,53 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- 3b. FILA AVANÇADA (correção 2026-10-13: sem estas colunas/tabelas o
+-- avanço para CONCLUIDO falhava no Supabase e a tela revertia)
+ALTER TABLE public.print_job_items
+    ADD COLUMN IF NOT EXISTS clinic_name TEXT,
+    ADD COLUMN IF NOT EXISTS cadista_name TEXT,
+    ADD COLUMN IF NOT EXISTS work_type TEXT,
+    ADD COLUMN IF NOT EXISTS priority TEXT NOT NULL DEFAULT 'NORMAL',
+    ADD COLUMN IF NOT EXISTS due_date TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS material TEXT,
+    ADD COLUMN IF NOT EXISTS quantity INT NOT NULL DEFAULT 1,
+    ADD COLUMN IF NOT EXISTS notes TEXT,
+    ADD COLUMN IF NOT EXISTS file_name TEXT,
+    ADD COLUMN IF NOT EXISTS file_size BIGINT,
+    ADD COLUMN IF NOT EXISTS file_hash TEXT,
+    ADD COLUMN IF NOT EXISTS file_url TEXT,
+    ADD COLUMN IF NOT EXISTS backup_path TEXT,
+    ADD COLUMN IF NOT EXISTS backup_done BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN IF NOT EXISTS backup_done_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS batch_id UUID,
+    ADD COLUMN IF NOT EXISTS batch_name TEXT,
+    ADD COLUMN IF NOT EXISTS parent_item_id UUID REFERENCES public.print_job_items(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS reprint_count INT NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS reprint_reason TEXT;
+
+CREATE TABLE IF NOT EXISTS public.print_batches (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    batch_name TEXT NOT NULL,
+    printer_name TEXT,
+    printer_id UUID REFERENCES public.printers(id) ON DELETE SET NULL,
+    status TEXT NOT NULL DEFAULT 'EM_PREPARO',
+    failure_reason TEXT,
+    created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.print_item_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    item_id UUID NOT NULL REFERENCES public.print_job_items(id) ON DELETE CASCADE,
+    from_status TEXT,
+    to_status TEXT NOT NULL,
+    changed_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    changed_by_name TEXT,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- 4. SEQUENCES E ÍNDICES
 CREATE SEQUENCE IF NOT EXISTS print_run_normal_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE IF NOT EXISTS print_run_retry_seq START WITH 1 INCREMENT BY 1;
@@ -428,14 +475,14 @@ BEGIN
             WHERE id = v_run_item.id;
 
             UPDATE public.print_job_items
-            SET status = 'CONCLUIDO', last_run_code = v_run.run_code, updated_at = now()
+            SET status = 'PRONTO_ACABAMENTO', last_run_code = v_run.run_code, updated_at = now()
             WHERE id = v_run_item.print_job_item_id;
         END IF;
 
         v_job_id := v_run_item.print_job_id;
         SELECT COUNT(*) INTO v_pending_in_job
         FROM public.print_job_items
-        WHERE print_job_id = v_job_id AND status != 'CONCLUIDO';
+        WHERE print_job_id = v_job_id AND status NOT IN ('PRONTO_ACABAMENTO', 'CONCLUIDO');
 
         IF v_pending_in_job = 0 THEN
             UPDATE public.print_jobs SET status = 'CONCLUIDO', updated_at = now() WHERE id = v_job_id;
@@ -586,6 +633,8 @@ ALTER TABLE IF EXISTS public.print_jobs DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.print_job_items DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.print_runs DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.print_run_items DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.print_batches DISABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.print_item_history DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.system_settings DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.audit_logs DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.profiles DISABLE ROW LEVEL SECURITY;

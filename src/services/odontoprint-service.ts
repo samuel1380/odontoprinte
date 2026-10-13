@@ -70,6 +70,12 @@ function saveLocal<T>(key: string, val: T): void {
   }
 }
 
+function getUpdatedTime(item: any): number {
+  const t = item?.updated_at || item?.created_at || 0;
+  const n = new Date(t).getTime();
+  return isNaN(n) ? 0 : n;
+}
+
 function mergeById<T extends { id: string }>(
   remoteList: T[] | null | undefined,
   localList: T[] | null | undefined
@@ -85,7 +91,15 @@ function mergeById<T extends { id: string }>(
   if (Array.isArray(remoteList)) {
     for (const item of remoteList) {
       if (item && item.id) {
-        map.set(item.id, item);
+        const existing = map.get(item.id);
+        // CORREÇÃO fila->CONCLUIDO: antes o remoto (antigo) sempre
+        // sobrescrevia o local (novo), revertendo o avanço de status
+        // logo após o clique. Agora vence quem tem updated_at maior.
+        if (!existing) {
+          map.set(item.id, item);
+        } else {
+          map.set(item.id, getUpdatedTime(item) >= getUpdatedTime(existing) ? item : existing);
+        }
       }
     }
   }
@@ -901,12 +915,26 @@ export class OdontoPrintService {
     mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
     mockPrintItemHistory = loadLocal("odontoprint_item_history", mockPrintItemHistory);
     mockAuditLogs = loadLocal("odontoprint_audit_logs", mockAuditLogs);
+    mockPrintJobs = loadLocal("odontoprint_jobs", mockPrintJobs);
+    mockFinishingItems = loadLocal("odontoprint_finishing_items", mockFinishingItems);
 
     const item = mockPrintJobItems.find((i) => i.id === id);
     if (!item) return { success: false, error: "Item de impressão não encontrado." };
 
     const oldStatus = this.mapDbStatusToCardStatus(item.status);
     const now = new Date().toISOString();
+
+    // Guarda contra duplo clique / transição repetida: se já está no destino,
+    // apenas garante backup_done quando CONCLUIDO e retorna sucesso.
+    if (oldStatus === newStatus) {
+      if (newStatus === "CONCLUIDO" && !item.backup_done) {
+        item.backup_done = true;
+        item.backup_done_at = now;
+        item.updated_at = now;
+        saveLocal("odontoprint_job_items", mockPrintJobItems);
+      }
+      return { success: true };
+    }
 
     item.status = this.mapCardStatusToDbStatus(newStatus) as any;
     item.updated_at = now;
@@ -922,6 +950,49 @@ export class OdontoPrintService {
       item.retry_count = (item.retry_count || 0) + 1;
       item.reprint_count = (item.reprint_count || 0) + 1;
       item.reprint_reason = notes || "Falha na impressão";
+    }
+
+    // IMPRESSO (PRONTO_ACABAMENTO) alimenta a bancada de acabamento,
+    // para o item não "sumir" entre a fila e o acabamento.
+    if (newStatus === "IMPRESSO") {
+      const parentJobForFinishing = mockPrintJobs.find((j) => j.id === item.print_job_id);
+      const parentCaseForFinishing = parentJobForFinishing
+        ? mockCases.find((c) => c.id === parentJobForFinishing.case_id)
+        : null;
+      if (!mockFinishingItems.some((f) => f.id === item.id)) {
+        const hasSockets =
+          item.file_type === "MODELO_COM_FUROS" || item.file_type === "MODELO_DE_TRABALHO";
+        mockFinishingItems.unshift({
+          id: item.id,
+          case_id: parentJobForFinishing?.case_id || parentCaseForFinishing?.id || "",
+          patient_code: parentCaseForFinishing?.patient_code || "PAC",
+          patient_name: parentCaseForFinishing?.patient_name || null,
+          file_type: item.file_type,
+          has_sockets: hasSockets,
+          origin: "IMPRESSAO",
+          status: "AGUARDANDO_MONTAGEM",
+          teeth_inserted: false,
+          occlusion_checked: false,
+          glaze_applied: false,
+          created_at: now,
+        });
+        saveLocal("odontoprint_finishing_items", mockFinishingItems);
+      }
+    }
+
+    // Sincroniza o job pai (antes o Kanban nunca atualizava o print_jobs,
+    // então dashboard/histórico ficavam presos em AGUARDANDO/PARCIAL).
+    const parentJob = mockPrintJobs.find((j) => j.id === item.print_job_id);
+    if (parentJob) {
+      const siblings = mockPrintJobItems.filter((i) => i.print_job_id === parentJob.id);
+      const isPrintDone = (s: string) => s === "CONCLUIDO" || s === "PRONTO_ACABAMENTO";
+      if (siblings.length > 0 && siblings.every((i) => isPrintDone(i.status))) {
+        parentJob.status = "CONCLUIDO";
+      } else if (siblings.some((i) => i.status !== "AGUARDANDO_FILA")) {
+        parentJob.status = "PARCIAL";
+      }
+      (parentJob as any).updated_at = now;
+      saveLocal("odontoprint_jobs", mockPrintJobs);
     }
 
     const hist: PrintItemHistory = {
@@ -954,7 +1025,9 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        await client.from("print_job_items").update({
+        // Tenta o update completo; se o banco de produção ainda não rodou a
+        // migration 20261013 (colunas backup_*, etc.), cai para o mínimo.
+        const fullPayload: Record<string, any> = {
           status: item.status,
           backup_done: item.backup_done,
           backup_done_at: item.backup_done_at,
@@ -962,8 +1035,35 @@ export class OdontoPrintService {
           retry_count: item.retry_count,
           is_retry: item.is_retry,
           updated_at: now,
-        }).eq("id", id);
-        await client.from("print_item_history").insert(hist);
+        };
+        const { error: fullErr } = await client.from("print_job_items").update(fullPayload).eq("id", id);
+        if (fullErr) {
+          const msg = `${fullErr.message || ""} ${(fullErr as any).details || ""} ${(fullErr as any).hint || ""}`;
+          const isMissingColumn =
+            /column|backup_done|backup_done_at|last_failure_reason|retry_count|is_retry|schema cache|PGRST/i.test(msg);
+          if (isMissingColumn) {
+            const { error: minErr } = await client
+              .from("print_job_items")
+              .update({ status: item.status, updated_at: now })
+              .eq("id", id);
+            if (minErr) console.warn("Supabase updateCardStatus (fallback mínimo) error:", minErr);
+          } else {
+            console.warn("Supabase updateCardStatus error:", fullErr);
+          }
+        }
+        if (parentJob) {
+          const { error: jobErr } = await client
+            .from("print_jobs")
+            .update({ status: parentJob.status, updated_at: now })
+            .eq("id", parentJob.id);
+          if (jobErr) console.warn("Supabase updateCardStatus (job pai) error:", jobErr);
+        }
+        // Histórico é auxiliar: nunca pode quebrar o avanço de status.
+        try {
+          await client.from("print_item_history").insert(hist);
+        } catch (histErr) {
+          console.warn("Supabase updateCardStatus (history) error:", histErr);
+        }
       } catch (err) {
         console.warn("Supabase updateCardStatus error:", err);
       }
@@ -1034,14 +1134,23 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        await client.from("print_batches").insert(newBatch);
+        const { error: batchErr } = await client.from("print_batches").insert(newBatch);
+        if (batchErr) console.warn("Supabase createPrintBatch (batch) error:", batchErr);
         for (const itemId of params.item_ids) {
-          await client.from("print_job_items").update({
+          const { error: itemErr } = await client.from("print_job_items").update({
             batch_id: batchId,
             batch_name: newBatch.batch_name,
             status: "EM_PREPARO",
             updated_at: now,
           }).eq("id", itemId);
+          if (itemErr) {
+            // Banco sem migration 20261013: tenta só o status.
+            const { error: retryErr } = await client.from("print_job_items").update({
+              status: "EM_PREPARO",
+              updated_at: now,
+            }).eq("id", itemId);
+            if (retryErr) console.warn("Supabase createPrintBatch (item) error:", retryErr);
+          }
         }
       } catch (err) {
         console.warn("Supabase createPrintBatch error:", err);
@@ -1128,6 +1237,19 @@ export class OdontoPrintService {
   static async getPrintBatches(): Promise<Array<PrintBatch & { items_count: number }>> {
     mockPrintBatches = loadLocal("odontoprint_batches", mockPrintBatches);
     mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
+
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        const { data, error } = await client.from("print_batches").select("*").order("created_at", { ascending: false });
+        if (!error && data) {
+          mockPrintBatches = mergeById(data, mockPrintBatches);
+          saveLocal("odontoprint_batches", mockPrintBatches);
+        }
+      } catch (err) {
+        console.warn("Supabase getPrintBatches error:", err);
+      }
+    }
 
     return mockPrintBatches.map((b) => ({
       ...b,
@@ -2017,11 +2139,15 @@ export class OdontoPrintService {
       }
 
       // Atualiza status do job pai
+      // CORREÇÃO: sucesso na impressão vira PRONTO_ACABAMENTO (bancada),
+      // então o job só fecha quando todos estão em PRONTO_ACABAMENTO/CONCLUIDO.
       const parentJob = mockPrintJobs.find((j) => j.id === jobItem.print_job_id);
       if (parentJob) {
         const siblingItems = mockPrintJobItems.filter((i) => i.print_job_id === parentJob.id);
-        const allCompleted = siblingItems.every((i) => i.status === "CONCLUIDO");
+        const isPrintStageDone = (s: string) => s === "CONCLUIDO" || s === "PRONTO_ACABAMENTO";
+        const allCompleted = siblingItems.length > 0 && siblingItems.every((i) => isPrintStageDone(i.status));
         parentJob.status = allCompleted ? "CONCLUIDO" : "PARCIAL";
+        (parentJob as any).updated_at = now;
       }
     }
 
@@ -2652,10 +2778,29 @@ export class OdontoPrintService {
 
     // Atualiza status final do item correspondente de impressão para concluído total
     mockPrintJobItems = loadLocal<PrintJobItem[]>("odontoprint_job_items", mockPrintJobItems);
+    mockPrintJobs = loadLocal("odontoprint_jobs", mockPrintJobs);
     const jobItem = mockPrintJobItems.find((i) => i.id === id);
     if (jobItem) {
       jobItem.status = "CONCLUIDO";
+      jobItem.backup_done = true;
+      jobItem.backup_done_at = jobItem.backup_done_at || now;
+      jobItem.updated_at = now;
       saveLocal("odontoprint_job_items", mockPrintJobItems);
+
+      // CORREÇÃO: o job pai também precisa fechar no localStorage
+      // (antes só fechava no Supabase, então o Kanban/histórico local
+      // nunca mostrava CONCLUIDO).
+      const parentJob = mockPrintJobs.find((j) => j.id === jobItem.print_job_id);
+      if (parentJob) {
+        const siblings = mockPrintJobItems.filter((i) => i.print_job_id === parentJob.id);
+        if (siblings.length > 0 && siblings.every((i) => i.status === "CONCLUIDO")) {
+          parentJob.status = "CONCLUIDO";
+        } else {
+          parentJob.status = "PARCIAL";
+        }
+        (parentJob as any).updated_at = now;
+        saveLocal("odontoprint_jobs", mockPrintJobs);
+      }
     }
 
     const { client, isConfigured } = this.getSupabase();
