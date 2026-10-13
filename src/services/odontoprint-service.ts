@@ -633,6 +633,7 @@ export class OdontoPrintService {
         reprint_reason: item.reprint_reason || item.last_failure_reason || null,
         parent_item_id: item.parent_item_id || null,
         last_failure_reason: item.last_failure_reason || null,
+        last_run_code: (item as any).last_run_code || null,
         created_at: item.created_at || new Date().toISOString(),
         updated_at: item.updated_at || item.created_at,
         queue_entered_at: enteredAt,
@@ -2271,6 +2272,32 @@ export class OdontoPrintService {
         items_count: itemsCount,
       };
     });
+  }
+
+  // Resumo das impressões EM ANDAMENTO com os itens vinculados.
+  // Usado pela Fila para mostrar o andamento (código, impressora, tempo).
+  static async getActiveRunsWithItems(): Promise<import("@/types/domain").ActiveRunInfo[]> {
+    const runs = await this.getPrintRuns();
+    mockPrintRunItems = loadLocal("odontoprint_print_run_items", mockPrintRunItems);
+    return runs
+      .filter((r) => r.status === "EM_IMPRESSAO")
+      .map((r) => {
+        const itemIds = mockPrintRunItems
+          .filter((ri) => ri.print_run_id === r.id)
+          .map((ri) => ri.print_job_item_id);
+        return {
+          id: r.id,
+          run_code: r.run_code,
+          printer_name: r.printer_name,
+          started_at: r.started_at || r.created_at,
+          items_count: itemIds.length,
+          item_ids: itemIds,
+        };
+      })
+      .sort(
+        (a, b) =>
+          new Date(a.started_at || 0).getTime() - new Date(b.started_at || 0).getTime()
+      );
   }
 
   static async getPrintRunById(id: string) {

@@ -118,8 +118,23 @@ export default function ImpressoesPage() {
                     </div>
                     <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-[11px] text-slate-500">
                       <span>{run.items_count} modelos na mesa</span>
-                      <span>{formatDate(run.started_at)}</span>
+                      <span>
+                        {formatDate(run.started_at)}
+                        {run.started_at &&
+                          ` · há ${Math.max(
+                            1,
+                            Math.floor(
+                              (Date.now() - new Date(run.started_at).getTime()) / 60000
+                            )
+                          )}min`}
+                      </span>
                     </div>
+                    <Link
+                      href="/fila"
+                      className="inline-block pt-1 text-[11px] text-slate-400 hover:text-white underline underline-offset-2"
+                    >
+                      Ver estes modelos na fila
+                    </Link>
                   </CardContent>
                 </Card>
               ))}

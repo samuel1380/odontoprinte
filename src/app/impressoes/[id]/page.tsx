@@ -174,7 +174,15 @@ export default function ImpressaoDetalhePage() {
               className="text-slate-400 hover:text-white gap-1 pl-0"
             >
               <ArrowLeft className="w-4 h-4" />
-              Voltar
+              Impressões
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push("/fila")}
+              className="text-slate-400 hover:text-white gap-1 pl-0"
+            >
+              Fila
             </Button>
             <div>
               <div className="flex items-center gap-2">

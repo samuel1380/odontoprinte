@@ -161,9 +161,19 @@ export interface PrintCardItem {
   reprint_reason?: string | null;
   parent_item_id?: string | null;
   last_failure_reason?: string | null;
+  last_run_code?: string | null;
   created_at: string;
   updated_at?: string;
   queue_entered_at: string;
+}
+
+export interface ActiveRunInfo {
+  id: string;
+  run_code: string;
+  printer_name: string;
+  started_at?: string | null;
+  items_count: number;
+  item_ids: string[];
 }
 
 export interface DuplicateCheckInput {

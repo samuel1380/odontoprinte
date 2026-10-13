@@ -10,6 +10,7 @@ import {
   LabWorkType,
   DuplicateMatch,
   DuplicateCheckResult,
+  ActiveRunInfo,
 } from "@/types/domain";
 import { PrintBatch, PrintItemHistory } from "@/types/database.types";
 import {
@@ -145,16 +146,34 @@ export default function FilaPage() {
   const [newBatchPrinter, setNewBatchPrinter] = useState("");
   const [isCreatingBatch, setIsCreatingBatch] = useState(false);
 
+  // Impressões em andamento (ordens EM_IMPRESSAO vinculadas à fila)
+  const [activeRuns, setActiveRuns] = useState<ActiveRunInfo[]>([]);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+
+  function formatElapsed(startedAt?: string | null): string {
+    if (!startedAt) return "—";
+    const diff = Math.max(0, Date.now() - new Date(startedAt).getTime());
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "agora";
+    if (mins < 60) return `há ${mins}min`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `há ${hours}h${mins % 60 ? ` ${mins % 60}min` : ""}`;
+    const days = Math.floor(hours / 24);
+    return `há ${days}d ${hours % 24}h`;
+  }
+
   // Carregar dados
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [cardsData, batchesData] = await Promise.all([
+      const [cardsData, batchesData, runsData] = await Promise.all([
         OdontoPrintService.getPrintCards(),
         OdontoPrintService.getPrintBatches(),
+        OdontoPrintService.getActiveRunsWithItems(),
       ]);
       setCards(cardsData);
       setBatches(batchesData);
+      setActiveRuns(runsData);
     } catch {
       toast.error("Erro ao carregar fila de impressão.");
     } finally {
@@ -167,7 +186,37 @@ export default function FilaPage() {
     const prefs = OdontoPrintService.getLastUsedPreferences();
     setBulkClinic(prefs.clinic);
     setBulkCadista(prefs.cadista);
+    // Atualiza o andamento a cada 30s (tempo decorrido + recarrega ordens)
+    const timer = setInterval(() => {
+      setNowTick(Date.now());
+    }, 30000);
+    const refresher = setInterval(() => {
+      OdontoPrintService.getActiveRunsWithItems()
+        .then(setActiveRuns)
+        .catch(() => {});
+    }, 30000);
+    return () => {
+      clearInterval(timer);
+      clearInterval(refresher);
+    };
   }, []);
+
+  // Mapa código -> ordem ativa e item -> ordem ativa (para o chip "ver impressão")
+  const runByCode = useMemo(() => {
+    const map = new Map<string, ActiveRunInfo>();
+    for (const r of activeRuns) map.set(r.run_code, r);
+    return map;
+  }, [activeRuns]);
+
+  const runByItemId = useMemo(() => {
+    const map = new Map<string, ActiveRunInfo>();
+    for (const r of activeRuns) {
+      for (const itemId of r.item_ids) {
+        if (!map.has(itemId)) map.set(itemId, r);
+      }
+    }
+    return map;
+  }, [activeRuns]);
 
   // Extrair listas únicas para filtros
   const uniqueClinics = useMemo(() => {
@@ -987,6 +1036,53 @@ export default function FilaPage() {
           )}
         </div>
 
+        {/* Andamento das impressões — ordens EM_IMPRESSAO vinculadas à fila */}
+        {!isLoading && activeRuns.length > 0 && (
+          <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-2.5">
+            <div className="flex items-center justify-between px-1 pb-2">
+              <h2 className="text-xs font-semibold text-slate-200 flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+                </span>
+                Imprimindo agora ({activeRuns.length})
+              </h2>
+              <Link
+                href="/impressoes"
+                className="text-[11px] text-slate-400 hover:text-white underline underline-offset-2"
+              >
+                Ver todas
+              </Link>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {activeRuns.map((run) => (
+                <Link
+                  key={run.id}
+                  href={`/impressoes/${run.id}`}
+                  className="shrink-0 min-w-0 w-[240px] bg-slate-950 border border-slate-800 hover:border-slate-600 rounded-lg p-2.5 transition text-left"
+                  title={`Acompanhar ordem ${run.run_code}`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-mono text-sm font-bold text-white truncate">
+                      {run.run_code}
+                    </span>
+                    <span className="ml-auto shrink-0 text-[10px] text-slate-400 whitespace-nowrap">
+                      {formatElapsed(run.started_at)}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                    {run.printer_name} · {run.items_count} modelo(s)
+                  </p>
+                  <span className="inline-flex items-center gap-1 mt-1.5 text-[11px] font-medium text-slate-300">
+                    Acompanhar
+                    <ArrowRight className="w-3 h-3" />
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Estado vazio */}
         {isLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
@@ -1113,6 +1209,25 @@ export default function FilaPage() {
                         <p className="text-[11px] text-slate-600 font-mono truncate mt-0.5" title={card.file_name}>
                           {card.file_name}
                         </p>
+                        {card.status === "IMPRIMINDO" &&
+                          (runByItemId.get(card.id) ||
+                            (card.last_run_code ? runByCode.get(card.last_run_code) : undefined)) && (
+                            <Link
+                              href={`/impressoes/${
+                                (runByItemId.get(card.id) ||
+                                  runByCode.get(card.last_run_code || ""))!.id
+                              }`}
+                              className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-md px-1.5 py-0.5"
+                              title="Abrir andamento da impressão"
+                            >
+                              {(
+                                runByItemId.get(card.id) ||
+                                runByCode.get(card.last_run_code || "")
+                              )!.run_code}
+                              {" · ver impressão"}
+                              <ArrowRight className="w-3 h-3" />
+                            </Link>
+                          )}
 
                         <div className="flex items-center flex-wrap gap-y-1 gap-x-1 mt-2 pt-2 border-t border-slate-800/70 min-w-0">
                           {getPreviousStatus(card.status) && (
@@ -1259,6 +1374,24 @@ export default function FilaPage() {
                           <span className="text-[11px] text-slate-300 bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5">
                             {statusCfg.label}
                           </span>
+                          {card.status === "IMPRIMINDO" &&
+                            (runByItemId.get(card.id) ||
+                              (card.last_run_code ? runByCode.get(card.last_run_code) : undefined)) && (
+                              <Link
+                                href={`/impressoes/${
+                                  (runByItemId.get(card.id) ||
+                                    runByCode.get(card.last_run_code || ""))!.id
+                                }`}
+                                className="block mt-1 text-[11px] text-slate-400 hover:text-white underline underline-offset-2"
+                              >
+                                {
+                                  (
+                                    runByItemId.get(card.id) ||
+                                    runByCode.get(card.last_run_code || "")
+                                  )!.run_code
+                                }{" · acompanhar"}
+                              </Link>
+                            )}
                         </td>
                         <td className="p-3 text-slate-500">
                           {card.batch_name || "—"}
