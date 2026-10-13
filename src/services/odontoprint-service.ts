@@ -944,6 +944,28 @@ export class OdontoPrintService {
       item.backup_done_at = now;
     }
 
+    // VOLTAR ETAPA: se saiu de CONCLUIDO para uma etapa anterior,
+    // desfaz o backup automático e reabre a bancada se já tinha aprovado.
+    const order: Record<string, number> = {
+      NA_FILA: 0,
+      PREPARANDO: 1,
+      IMPRIMINDO: 2,
+      IMPRESSO: 3,
+      CONCLUIDO: 4,
+    };
+    const isStepBack =
+      oldStatus in order && newStatus in order && order[newStatus] < order[oldStatus];
+    if (isStepBack && oldStatus === "CONCLUIDO") {
+      item.backup_done = false;
+      item.backup_done_at = null;
+      const finishing = mockFinishingItems.find((f) => f.id === item.id);
+      if (finishing && finishing.status === "APROVADO_CQ") {
+        finishing.status = "AGUARDANDO_MONTAGEM";
+        delete (finishing as any).finished_at;
+        saveLocal("odontoprint_finishing_items", mockFinishingItems);
+      }
+    }
+
     if (newStatus === "FALHOU") {
       item.last_failure_reason = notes || "Falha técnica informada pelo operador.";
       item.is_retry = true;

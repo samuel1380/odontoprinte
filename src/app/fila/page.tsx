@@ -40,6 +40,8 @@ import {
   Calendar,
   AlertOctagon,
   ArrowRight,
+  ArrowLeft,
+  Undo2,
   Eye,
   Trash2,
   Check,
@@ -119,6 +121,10 @@ export default function FilaPage() {
   // Modal de Falha de Card Individual
   const [cardToFail, setCardToFail] = useState<PrintCardItem | null>(null);
   const [cardFailReason, setCardFailReason] = useState("");
+
+  // Confirmação antes de concluir (evita avanço sem querer) + retorno de etapa
+  const [cardToConfirmConclude, setCardToConfirmConclude] = useState<PrintCardItem | null>(null);
+  const [isConfirmingConclude, setIsConfirmingConclude] = useState(false);
 
   // Estado do formulário de Upload em Massa
   const [pendingFiles, setPendingFiles] = useState<PendingUploadFile[]>([]);
@@ -436,31 +442,40 @@ export default function FilaPage() {
     }
   };
 
-  // Mudar status de 1 clique
-  const handleQuickAdvanceStatus = async (card: PrintCardItem) => {
-    let nextStatus: PrintCardStatus | null = null;
-    switch (card.status) {
+  // Mudar status de 1 clique (com confirmação ao concluir + botão de voltar)
+  const getNextStatus = (status: PrintCardStatus): PrintCardStatus | null => {
+    switch (status) {
       case "NA_FILA":
-        nextStatus = "PREPARANDO";
-        break;
+        return "PREPARANDO";
       case "PREPARANDO":
-        nextStatus = "IMPRIMINDO";
-        break;
+        return "IMPRIMINDO";
       case "IMPRIMINDO":
-        nextStatus = "IMPRESSO";
-        break;
+        return "IMPRESSO";
       case "IMPRESSO":
-        nextStatus = "CONCLUIDO";
-        break;
+        return "CONCLUIDO";
       case "FALHOU":
-        nextStatus = "NA_FILA";
-        break;
+        return "NA_FILA";
       default:
-        break;
+        return null;
     }
+  };
 
-    if (!nextStatus) return;
+  const getPreviousStatus = (status: PrintCardStatus): PrintCardStatus | null => {
+    switch (status) {
+      case "PREPARANDO":
+        return "NA_FILA";
+      case "IMPRIMINDO":
+        return "PREPARANDO";
+      case "IMPRESSO":
+        return "IMPRIMINDO";
+      case "CONCLUIDO":
+        return "IMPRESSO";
+      default:
+        return null;
+    }
+  };
 
+  const doAdvanceStatus = async (card: PrintCardItem, nextStatus: PrintCardStatus) => {
     try {
       const res = await OdontoPrintService.updateCardStatus(
         card.id,
@@ -470,13 +485,57 @@ export default function FilaPage() {
         user?.full_name || "Operador"
       );
       if (res.success) {
-        toast.success(`Card ${card.patient_code} avançado para "${PRINT_CARD_STATUS_CONFIG[nextStatus].label}".`);
+        toast.success(`Card ${card.patient_code} movido para "${PRINT_CARD_STATUS_CONFIG[nextStatus].label}".`);
         loadData();
       } else {
         toast.error(res.error || "Erro ao atualizar status.");
       }
     } catch {
       toast.error("Erro ao avançar status.");
+    }
+  };
+
+  const handleQuickAdvanceStatus = async (card: PrintCardItem) => {
+    const nextStatus = getNextStatus(card.status);
+    if (!nextStatus) return;
+    // Etapa final exige confirmação para evitar toque sem querer
+    if (nextStatus === "CONCLUIDO") {
+      setCardToConfirmConclude(card);
+      return;
+    }
+    await doAdvanceStatus(card, nextStatus);
+  };
+
+  const handleConfirmConclude = async () => {
+    if (!cardToConfirmConclude) return;
+    setIsConfirmingConclude(true);
+    try {
+      await doAdvanceStatus(cardToConfirmConclude, "CONCLUIDO");
+      setCardToConfirmConclude(null);
+    } finally {
+      setIsConfirmingConclude(false);
+    }
+  };
+
+  const handleGoBackStatus = async (card: PrintCardItem) => {
+    const prevStatus = getPreviousStatus(card.status);
+    if (!prevStatus) return;
+    try {
+      const res = await OdontoPrintService.updateCardStatus(
+        card.id,
+        prevStatus,
+        `Retornado manualmente de ${PRINT_CARD_STATUS_CONFIG[card.status].label} para ${PRINT_CARD_STATUS_CONFIG[prevStatus].label}`,
+        user?.id,
+        user?.full_name || "Operador"
+      );
+      if (res.success) {
+        toast.info(`Card ${card.patient_code} voltou para "${PRINT_CARD_STATUS_CONFIG[prevStatus].label}".`);
+        loadData();
+      } else {
+        toast.error(res.error || "Erro ao voltar etapa.");
+      }
+    } catch {
+      toast.error("Erro ao voltar etapa.");
     }
   };
 
@@ -1059,8 +1118,20 @@ export default function FilaPage() {
                               <Eye className="w-3 h-3" />
                             </button>
 
+                            {/* Botão de Voltar (desfaz avanço sem querer) */}
+                            {getPreviousStatus(card.status) && (
+                              <button
+                                type="button"
+                                onClick={() => handleGoBackStatus(card)}
+                                className="h-6 px-1.5 text-[10px] font-semibold text-slate-400 hover:text-white bg-transparent hover:bg-slate-800 rounded-md gap-1 flex items-center"
+                                title={`Voltar para ${PRINT_CARD_STATUS_CONFIG[getPreviousStatus(card.status)!].label}`}
+                              >
+                                <Undo2 className="w-2.5 h-2.5" />
+                                <span>Voltar</span>
+                              </button>
+                            )}
                             {/* Botão de Avanço Rápido */}
-                            {col.status !== "CONCLUIDO" && (
+                            {col.status !== "CONCLUIDO" && col.status !== "CANCELADO" && (
                               <Button
                                 size="sm"
                                 onClick={() => handleQuickAdvanceStatus(card)}
@@ -1216,7 +1287,19 @@ export default function FilaPage() {
                         </td>
                         <td className="p-3 text-right">
                           <div className="flex items-center justify-end gap-1.5">
-                            {card.status !== "CONCLUIDO" && (
+                            {getPreviousStatus(card.status) && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleGoBackStatus(card)}
+                                className="h-7 text-xs text-slate-400 hover:text-white rounded-full px-2.5 gap-1"
+                                title={`Voltar para ${PRINT_CARD_STATUS_CONFIG[getPreviousStatus(card.status)!].label}`}
+                              >
+                                <Undo2 className="w-3 h-3" />
+                                Voltar
+                              </Button>
+                            )}
+                            {card.status !== "CONCLUIDO" && card.status !== "CANCELADO" && (
                               <Button
                                 size="sm"
                                 onClick={() => handleQuickAdvanceStatus(card)}
@@ -1813,6 +1896,42 @@ export default function FilaPage() {
                 className="bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-full text-xs h-9 px-5"
               >
                 {isFailingBatch ? "Processando..." : "Confirmar Falha e Devolver à Fila"}
+              </Button>
+            </div>
+          </div>
+        </Dialog>
+
+        {/* ==================================================================== */}
+        {/* MODAL 5b: CONFIRMAR CONCLUSÃO (evita avanço sem querer) */}
+        {/* ==================================================================== */}
+        <Dialog
+          open={Boolean(cardToConfirmConclude)}
+          onOpenChange={(open) => {
+            if (!open) setCardToConfirmConclude(null);
+          }}
+          title="Concluir este card?"
+        >
+          <div className="space-y-4">
+            <p className="text-xs text-slate-300">
+              Você está concluindo o modelo <strong>{cardToConfirmConclude?.file_name}</strong>{" "}
+              (Paciente: <strong>{cardToConfirmConclude?.patient_code}</strong>).
+              Depois de concluir ainda dá para voltar uma etapa com o botão{" "}
+              <span className="font-semibold text-white">Voltar</span>, mas o ideal é conferir antes.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <Button
+                variant="outline"
+                onClick={() => setCardToConfirmConclude(null)}
+                className="border-slate-700 text-slate-300 rounded-full text-xs h-9"
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleConfirmConclude}
+                disabled={isConfirmingConclude}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-full text-xs h-9 px-5"
+              >
+                {isConfirmingConclude ? "Concluindo..." : "Sim, concluir"}
               </Button>
             </div>
           </div>
