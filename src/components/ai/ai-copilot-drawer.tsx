@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { AIChatMessage } from "@/types/ai.types";
 import { AIService } from "@/services/ai-service";
+import { DEFAULT_GROQ_MODEL, DEFAULT_GEMINI_MODEL } from "@/lib/ai/models";
 import {
   Sparkles,
   X,
@@ -35,6 +36,9 @@ export function AICopilotDrawer() {
   const [isRenderKey, setIsRenderKey] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Ref espelha o histórico para evitar closure desatualizada em envios rápidos
+  const messagesRef = useRef<AIChatMessage[]>(messages);
+  messagesRef.current = messages;
 
   const syncConfig = async () => {
     const config = AIService.getConfig();
@@ -70,7 +74,7 @@ export function AICopilotDrawer() {
 
   const handleToggleProvider = (targetProvider: "GEMINI" | "GROQ") => {
     const currentConfig = AIService.getConfig();
-    const targetModel = targetProvider === "GEMINI" ? "gemini-3.8-flash" : "openai/gpt-oss-120b";
+    const targetModel = targetProvider === "GEMINI" ? DEFAULT_GEMINI_MODEL : DEFAULT_GROQ_MODEL;
     const updated = {
       ...currentConfig,
       provider: targetProvider,
@@ -103,7 +107,7 @@ export function AICopilotDrawer() {
     setIsSending(true);
 
     try {
-      const replyText = await AIService.sendMessage(query, messages);
+      const replyText = await AIService.sendMessage(query, messagesRef.current);
       const assistantMsg: AIChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",

@@ -5,6 +5,12 @@ import { AppShell } from "@/components/layout/shell";
 import { OdontoPrintService } from "@/services/odontoprint-service";
 import { AIService } from "@/services/ai-service";
 import { AIProvider } from "@/types/ai.types";
+import {
+  GEMINI_MODELS,
+  GROQ_MODELS,
+  DEFAULT_GROQ_MODEL,
+  DEFAULT_GEMINI_MODEL,
+} from "@/lib/ai/models";
 import { SystemSettings } from "@/types/database.types";
 import {
   RefreshCcw,
@@ -38,10 +44,10 @@ export default function AdminConfiguracoesPage() {
   const [normalPrefix, setNormalPrefix] = useState("A");
   const [retryPrefix, setRetryPrefix] = useState("00A");
 
-  // Form State - Inteligência Artificial (Google Gemini 3.8 e Groq Cloud)
+  // Form State - Inteligência Artificial (Google Gemini e Groq Cloud)
   const [aiProvider, setAiProvider] = useState<AIProvider>("GEMINI");
   const [aiApiKey, setAiApiKey] = useState("");
-  const [aiModel, setAiModel] = useState("gemini-3.8-flash");
+  const [aiModel, setAiModel] = useState<string>(DEFAULT_GEMINI_MODEL);
   const [aiEnabled, setAiEnabled] = useState(true);
   const [showApiKey, setShowApiKey] = useState(false);
   const [isTestingAi, setIsTestingAi] = useState(false);
@@ -100,20 +106,16 @@ export default function AdminConfiguracoesPage() {
           setAiProvider(aiCfg.provider || "GEMINI");
           setAiModel(
             aiCfg.model ||
-              (aiCfg.provider === "GROQ"
-                ? "openai/gpt-oss-120b"
-                : "gemini-3.8-flash")
+              (aiCfg.provider === "GROQ" ? DEFAULT_GROQ_MODEL : DEFAULT_GEMINI_MODEL)
           );
         } else if (envStatus.preferredProvider) {
           setAiProvider(envStatus.preferredProvider);
           setAiModel(
-            envStatus.preferredProvider === "GROQ"
-              ? "openai/gpt-oss-120b"
-              : "gemini-3.8-flash"
+            envStatus.preferredProvider === "GROQ" ? DEFAULT_GROQ_MODEL : DEFAULT_GEMINI_MODEL
           );
         } else {
           setAiProvider(aiCfg.provider || "GEMINI");
-          setAiModel(aiCfg.model || "gemini-3.8-flash");
+          setAiModel(aiCfg.model || DEFAULT_GEMINI_MODEL);
         }
         setAiApiKey(aiCfg.apiKey || "");
         setAiEnabled(aiCfg.enabled ?? true);
@@ -127,7 +129,7 @@ export default function AdminConfiguracoesPage() {
   const handleProviderChange = (newProvider: AIProvider) => {
     setAiProvider(newProvider);
     setTestResult(null);
-    const newModel = newProvider === "GEMINI" ? "gemini-3.8-flash" : "openai/gpt-oss-120b";
+    const newModel = newProvider === "GEMINI" ? DEFAULT_GEMINI_MODEL : DEFAULT_GROQ_MODEL;
     setAiModel(newModel);
     AIService.saveConfig({
       provider: newProvider,
@@ -613,40 +615,20 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                   Modelo
                 </label>
-                <input
-                  type="text"
+                <select
                   value={aiModel}
                   onChange={(e) => setAiModel(e.target.value)}
                   className="w-full px-3.5 py-2 text-xs rounded-full border border-slate-800 bg-[#0B0F19] font-mono text-white focus:outline-none focus:border-cyan-500"
-                />
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {aiProvider === "GROQ" ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setAiModel("openai/gpt-oss-120b")}
-                        className="text-[11px] px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 font-mono font-medium hover:text-white hover:bg-slate-800 transition-colors"
-                      >
-                        openai/gpt-oss-120b
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAiModel("qwen/qwen3.8-27b")}
-                        className="text-[11px] px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 font-mono font-medium hover:text-white hover:bg-slate-800 transition-colors"
-                      >
-                        qwen/qwen3.8-27b
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setAiModel("gemini-3.8-flash")}
-                      className="text-[11px] px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 font-mono font-medium hover:text-white hover:bg-slate-800 transition-colors"
-                    >
-                      gemini-3.8-flash
-                    </button>
-                  )}
-                </div>
+                >
+                  {(aiProvider === "GROQ" ? GROQ_MODELS : GEMINI_MODELS).map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-slate-500 mt-1.5">
+                  Se o modelo principal falhar, o sistema tenta os demais da lista automaticamente.
+                </p>
               </div>
 
               {/* Status do Teste de Conexão */}

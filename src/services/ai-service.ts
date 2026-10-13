@@ -1,14 +1,32 @@
 import { AIConfig, CalibrationRecommendation, AIChatMessage } from "@/types/ai.types";
 import { OdontoPrintService } from "./odontoprint-service";
+import {
+  DEFAULT_GROQ_MODEL,
+  DEFAULT_GEMINI_MODEL,
+  normalizeModel,
+  AI_CHAT_TIMEOUT_MS,
+  AI_MAX_MESSAGE_CHARS,
+} from "@/lib/ai/models";
 
 const STORAGE_KEY = "odontoprint_ai_config";
 
 export const DEFAULT_AI_CONFIG: AIConfig = {
   provider: "GEMINI",
   apiKey: "",
-  model: "gemini-3.8-flash",
+  model: DEFAULT_GEMINI_MODEL,
   enabled: true,
 };
+
+/** Migra configurações antigas salvas (ex: modelo qwen inexistente). */
+function migrateConfig(config: AIConfig): AIConfig {
+  const provider = config.provider === "GROQ" ? "GROQ" : "GEMINI";
+  const fallback = provider === "GROQ" ? DEFAULT_GROQ_MODEL : DEFAULT_GEMINI_MODEL;
+  return {
+    ...config,
+    provider,
+    model: config.model ? normalizeModel(provider, config.model) : fallback,
+  };
+}
 
 let inMemoryConfig: AIConfig = { ...DEFAULT_AI_CONFIG };
 
@@ -18,7 +36,7 @@ export class AIService {
       try {
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved) {
-          inMemoryConfig = { ...DEFAULT_AI_CONFIG, ...JSON.parse(saved) };
+          inMemoryConfig = migrateConfig({ ...DEFAULT_AI_CONFIG, ...JSON.parse(saved) });
         }
       } catch {
         // ignore
@@ -28,7 +46,7 @@ export class AIService {
   }
 
   static saveConfig(config: AIConfig): void {
-    inMemoryConfig = { ...config };
+    inMemoryConfig = migrateConfig({ ...config });
     if (typeof window !== "undefined") {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
@@ -75,17 +93,20 @@ export class AIService {
     };
   }> {
     const startTime = Date.now();
+    const provider = config.provider === "GROQ" ? "GROQ" : "GEMINI";
+    const model = normalizeModel(provider, config.model);
     try {
       const res = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: "Teste de conexão: responda apenas 'CONEXAO_OK'",
-          provider: config.provider,
+          provider,
           apiKey: config.apiKey,
-          model: config.model,
+          model,
           context: {},
         }),
+        signal: AbortSignal.timeout(AI_CHAT_TIMEOUT_MS),
       });
 
       const data = await res.json();
@@ -96,8 +117,8 @@ export class AIService {
         const diagnosticReport = [
           `[DIAGNÓSTICO ODONTOIA]`,
           `Status: FALHA DE CONEXÃO`,
-          `Provedor: ${config.provider}`,
-          `Modelo: ${config.model}`,
+          `Provedor: ${provider}`,
+          `Modelo: ${model}`,
           `Origem da Chave: ${config.apiKey ? "Informada Manualmente" : "Variáveis de Ambiente do Render"}`,
           `Código HTTP: ${res.status}`,
           `Detalhes:`,
@@ -109,8 +130,8 @@ export class AIService {
           message: data.error || `Falha na conexão (HTTP ${res.status})`,
           latency,
           details: {
-            provider: config.provider,
-            model: config.model,
+            provider,
+            model,
             rawError: errorDetail,
             diagnosticReport,
           },
@@ -121,8 +142,8 @@ export class AIService {
       const diagnosticReport = [
         `[DIAGNÓSTICO ODONTOIA]`,
         `Status: CONEXÃO COM SUCESSO ✅`,
-        `Provedor Ativo: ${data.provider || config.provider}`,
-        `Modelo Ativo: ${data.model || config.model}`,
+        `Provedor Ativo: ${data.provider || provider}`,
+        `Modelo Ativo: ${data.model || model}`,
         `Origem da Chave: ${sourceLabel}`,
         `Latência: ${latency}ms`,
         data.note ? `Observação: ${data.note}` : "",
@@ -130,22 +151,26 @@ export class AIService {
 
       return {
         success: true,
-        message: `Conectado com sucesso ao ${data.provider || config.provider} (${data.model || config.model})!`,
+        message: `Conectado com sucesso ao ${data.provider || provider} (${data.model || model})!`,
         latency,
         details: {
-          provider: data.provider || config.provider,
-          model: data.model || config.model,
+          provider: data.provider || provider,
+          model: data.model || model,
           source: data.source,
           note: data.note,
           diagnosticReport,
         },
       };
     } catch (err: any) {
+      const isTimeout = err?.name === "TimeoutError";
+      const friendly = isTimeout
+        ? "Tempo esgotado (30s). O provedor demorou a responder; tente de novo."
+        : err?.message || "Falha na comunicação de rede com o servidor.";
       const diagnosticReport = [
         `[DIAGNÓSTICO ODONTOIA]`,
         `Status: ERRO DE REDE/FETCH`,
-        `Provedor: ${config.provider}`,
-        `Erro: ${err?.message || "Falha na comunicação de rede com o servidor."}`,
+        `Provedor: ${provider}`,
+        `Erro: ${friendly}`,
       ].join("\n");
 
       return {
@@ -163,6 +188,11 @@ export class AIService {
 
   static async sendMessage(message: string, history: AIChatMessage[] = []): Promise<string> {
     const config = this.getConfig();
+    const cleanMessage = (message || "").trim();
+    if (!cleanMessage) throw new Error("Digite sua dúvida para a OdontoIA.");
+    if (cleanMessage.length > AI_MAX_MESSAGE_CHARS) {
+      throw new Error(`Mensagem muito longa (máx. ${AI_MAX_MESSAGE_CHARS} caracteres).`);
+    }
 
     // Coleta dados em tempo real do laboratório para o contexto da IA
     let context: any = {};
@@ -192,21 +222,25 @@ export class AIService {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        message,
+        message: cleanMessage,
         history: history.map((h) => ({ role: h.role, content: h.content })),
         context,
         provider: config.provider,
         apiKey: config.apiKey,
-        model: config.model,
+        model: normalizeModel(config.provider, config.model),
       }),
+      signal: AbortSignal.timeout(AI_CHAT_TIMEOUT_MS),
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const errMsg = data.details || data.error || "Erro ao consultar a OdontoIA.";
       throw new Error(errMsg);
     }
 
+    if (typeof data.reply !== "string" || !data.reply.trim()) {
+      throw new Error("A IA retornou uma resposta vazia. Tente de novo.");
+    }
     return data.reply;
   }
 
@@ -241,11 +275,12 @@ export class AIService {
         layer_height,
         provider: config.provider,
         apiKey: config.apiKey,
-        model: config.model,
+        model: normalizeModel(config.provider, config.model),
       }),
+      signal: AbortSignal.timeout(AI_CHAT_TIMEOUT_MS),
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       throw new Error(data.error || "Erro ao obter recomendação da IA.");
     }

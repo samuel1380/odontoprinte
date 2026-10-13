@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AIProvider } from "@/types/ai.types";
 import { resolveAIKey, getEnvKey } from "@/lib/ai/env-keys";
+import { cascadeModels, AI_SERVER_TIMEOUT_MS } from "@/lib/ai/models";
 
 export const dynamic = "force-dynamic";
 
@@ -14,12 +15,6 @@ interface CalibrationRecommendationPayload {
   apiKey?: string;
   model?: string;
 }
-
-const GROQ_ACTIVE_MODELS = [
-  "openai/gpt-oss-120b",
-  "qwen/qwen3.8-27b",
-  "openai/gpt-oss-20b",
-] as const;
 
 export async function POST(req: NextRequest) {
   try {
@@ -54,49 +49,41 @@ Determine os parâmetros ideais de calibração inicial recomendados para que o 
   "tips": string[] // 3 a 4 dicas cruciais de manuseio e segurança para não descolar da mesa
 }`;
 
-    // 1. Chamada Google Gemini — Único modelo: gemini-3.8-flash
-    const callGemini = async (key: string) => {
-      const geminiModel = "gemini-3.8-flash";
-      try {
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${key}`;
-        const geminiRes = await fetch(geminiUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.2,
-              responseMimeType: "application/json",
-            },
-          }),
-        });
+    // 1. Chamada Google Gemini — cascata entre modelos reais
+    const callGemini = async (key: string, selectedModel?: string) => {
+      for (const geminiModel of cascadeModels("GEMINI", selectedModel)) {
+        try {
+          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${key}`;
+          const geminiRes = await fetch(geminiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ role: "user", parts: [{ text: prompt }] }],
+              generationConfig: {
+                temperature: 0.2,
+                responseMimeType: "application/json",
+              },
+            }),
+            signal: AbortSignal.timeout(AI_SERVER_TIMEOUT_MS),
+          });
 
-        if (geminiRes.ok) {
-          const data = await geminiRes.json();
-          const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-          const cleanText = text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
-          const parsed = JSON.parse(cleanText);
-          return { ...parsed, aiProvider: "GEMINI", model: geminiModel };
+          if (geminiRes.ok) {
+            const data = await geminiRes.json();
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+            const cleanText = text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
+            const parsed = JSON.parse(cleanText);
+            return { ...parsed, aiProvider: "GEMINI", model: geminiModel };
+          }
+        } catch {
+          // tenta próximo modelo da cascata
         }
-      } catch {
-        // falha na chamada
       }
       return null;
     };
 
-    // 2. Chamada Groq Cloud — Modelos Ativos: openai/gpt-oss-120b, qwen/qwen3.8-27b, openai/gpt-oss-20b
+    // 2. Chamada Groq Cloud — cascata entre modelos de produção
     const callGroq = async (key: string, selectedModel?: string) => {
-      const requested = (selectedModel || "").trim();
-      const primaryModel = GROQ_ACTIVE_MODELS.includes(requested as any)
-        ? requested
-        : "openai/gpt-oss-120b";
-
-      const modelsToTry = [
-        primaryModel,
-        ...GROQ_ACTIVE_MODELS.filter((m) => m !== primaryModel),
-      ];
-
-      for (const m of modelsToTry) {
+      for (const m of cascadeModels("GROQ", selectedModel)) {
         try {
           const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
@@ -110,6 +97,7 @@ Determine os parâmetros ideais de calibração inicial recomendados para que o 
               response_format: { type: "json_object" },
               temperature: 0.2,
             }),
+            signal: AbortSignal.timeout(AI_SERVER_TIMEOUT_MS),
           });
 
           if (groqRes.ok) {
@@ -126,7 +114,7 @@ Determine os parâmetros ideais de calibração inicial recomendados para que o 
 
     if (apiKey) {
       if (activeProvider === "GEMINI") {
-        const res = await callGemini(apiKey);
+        const res = await callGemini(apiKey, model);
         if (res) return NextResponse.json(res);
 
         // Fallback automático para Groq se disponível no Render
@@ -144,7 +132,7 @@ Determine os parâmetros ideais de calibração inicial recomendados para que o 
         // Fallback automático para Gemini se disponível no Render
         const geminiBackup = getEnvKey("GEMINI");
         if (geminiBackup) {
-          const geminiRes = await callGemini(geminiBackup);
+          const geminiRes = await callGemini(geminiBackup, model);
           if (geminiRes) return NextResponse.json(geminiRes);
         }
       }

@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AIProvider } from "@/types/ai.types";
 import { resolveAIKey, getEnvKey, maskApiKey } from "@/lib/ai/env-keys";
+import {
+  cascadeModels,
+  normalizeModel,
+  AI_SERVER_TIMEOUT_MS,
+  AI_MAX_MESSAGE_CHARS,
+  AI_MAX_HISTORY_TURNS,
+} from "@/lib/ai/models";
 
 export const dynamic = "force-dynamic";
 
@@ -21,28 +28,21 @@ interface ChatRequestPayload {
 }
 
 /**
- * Modelos ativos suportados no Groq
- */
-const GROQ_ACTIVE_MODELS = [
-  "openai/gpt-oss-120b",
-  "qwen/qwen3.8-27b",
-  "openai/gpt-oss-20b",
-] as const;
-
-/**
  * Sanitiza o histórico para o formato estrito do Google Gemini:
- * 1. Converte 'assistant' para 'model'.
- * 2. Mescla turnos consecutivos do mesmo autor (Gemini exige alternância estrita user -> model -> user).
- * 3. Garante que a primeira mensagem seja 'user'.
+ * 1. Ignora mensagens 'system' (vão via system_instruction).
+ * 2. Converte 'assistant' para 'model'.
+ * 3. Mescla turnos consecutivos do mesmo autor (Gemini exige alternância estrita user -> model -> user).
+ * 4. Garante que a primeira mensagem seja 'user'.
  */
 function formatGeminiContents(
   history: { role: "user" | "assistant" | "system"; content: string }[],
   userMessage: string
 ) {
   const rawTurns: { role: "user" | "model"; text: string }[] = [];
-  for (const h of history.slice(-6)) {
+  for (const h of history.slice(-AI_MAX_HISTORY_TURNS)) {
+    if (h.role === "system") continue;
     const role: "user" | "model" = h.role === "assistant" ? "model" : "user";
-    const text = typeof h.content === "string" ? h.content.trim() : "";
+    const text = typeof h.content === "string" ? h.content.trim().slice(0, 2000) : "";
     if (text) {
       rawTurns.push({ role, text });
     }
@@ -77,6 +77,21 @@ export async function POST(req: NextRequest) {
       provider = "GEMINI",
       model,
     } = body;
+
+    // Validação de entrada (evita chamadas vazias ou gigantescas)
+    const cleanMessage = typeof message === "string" ? message.trim() : "";
+    if (!cleanMessage) {
+      return NextResponse.json(
+        { error: "Mensagem vazia. Digite sua dúvida para a OdontoIA." },
+        { status: 400 }
+      );
+    }
+    if (cleanMessage.length > AI_MAX_MESSAGE_CHARS) {
+      return NextResponse.json(
+        { error: `Mensagem muito longa (máx. ${AI_MAX_MESSAGE_CHARS} caracteres). Resuma sua dúvida.` },
+        { status: 413 }
+      );
+    }
 
     // Resolução resiliente da Chave de API (prioriza GEMINI e depois GROQ)
     const { apiKey, activeProvider, source } = resolveAIKey(provider, body.apiKey);
@@ -127,96 +142,108 @@ Suas funções:
 3. Auxiliar no diagnóstico de falhas de impressão (descolamento de mesa, delaminação, quebra de suportes).
 4. Fornecer respostas diretas, úteis e concisas.`;
 
-    // 1. Processamento GEMINI — Único modelo: gemini-3.8-flash
-    const executeGemini = async (key: string) => {
-      const geminiModel = "gemini-3.8-flash";
-      const contents = formatGeminiContents(history, message);
+    // 1. Processamento GEMINI — cascata entre modelos reais (3.8 -> 3.5 -> 2.5)
+    const executeGemini = async (key: string, selectedModel?: string) => {
+      const modelsToTry = cascadeModels("GEMINI", selectedModel);
+      let lastErr = "";
 
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${key}`;
+      for (const geminiModel of modelsToTry) {
+        const contents = formatGeminiContents(history, cleanMessage);
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${key}`;
 
-      let geminiRes = await fetch(geminiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          system_instruction: {
-            parts: [{ text: systemPrompt + "\n" + labContextSummary }],
-          },
-          contents,
-          generationConfig: {
-            temperature: 0.4,
-            maxOutputTokens: 800,
-          },
-        }),
-      });
+        try {
+          let geminiRes = await fetch(geminiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              system_instruction: {
+                parts: [{ text: systemPrompt + "\n" + labContextSummary }],
+              },
+              contents,
+              generationConfig: {
+                temperature: 0.4,
+                maxOutputTokens: 800,
+              },
+            }),
+            signal: AbortSignal.timeout(AI_SERVER_TIMEOUT_MS),
+          });
 
-      // Se falhar formato com system_instruction, tenta formato universal
-      if (!geminiRes.ok) {
-        geminiRes = await fetch(geminiUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts: [
+          // Se falhar formato com system_instruction, tenta formato universal
+          if (!geminiRes.ok) {
+            geminiRes = await fetch(geminiUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [
                   {
-                    text: `[INSTRUÇÕES DO SISTEMA]\n${systemPrompt}\n${labContextSummary}\n[FIM INSTRUÇÕES]\n\n${message}`,
+                    role: "user",
+                    parts: [
+                      {
+                        text: `[INSTRUÇÕES DO SISTEMA]\n${systemPrompt}\n${labContextSummary}\n[FIM INSTRUÇÕES]\n\n${cleanMessage}`,
+                      },
+                    ],
                   },
                 ],
-              },
-            ],
-            generationConfig: {
-              temperature: 0.4,
-              maxOutputTokens: 800,
-            },
-          }),
-        });
-      }
+                generationConfig: {
+                  temperature: 0.4,
+                  maxOutputTokens: 800,
+                },
+              }),
+              signal: AbortSignal.timeout(AI_SERVER_TIMEOUT_MS),
+            });
+          }
 
-      if (!geminiRes.ok) {
-        const errData = await geminiRes.json().catch(() => ({}));
-        const rawMsg = errData?.error?.message || `HTTP ${geminiRes.status}`;
-        const code = errData?.error?.code || geminiRes.status;
+          if (geminiRes.ok) {
+            const data = await geminiRes.json();
+            const reply =
+              data.candidates?.[0]?.content?.parts?.[0]?.text ||
+              "Desculpe, não consegui gerar uma resposta.";
+            return {
+              reply,
+              provider: "GEMINI",
+              model: geminiModel,
+              source,
+              latency: Date.now() - startTime,
+            };
+          }
 
-        if (
-          rawMsg.includes("API key not valid") ||
-          rawMsg.includes("API_KEY_INVALID")
-        ) {
-          throw new Error("Chave de API do Google Gemini inválida ou não autorizada. Verifique no console https://aistudio.google.com/app/apikey.");
-        } else if (code === 429 || rawMsg.includes("RESOURCE_EXHAUSTED") || rawMsg.includes("quota")) {
-          throw new Error("Cota de requisições temporariamente esgotada (Rate Limit) no Google Gemini. Aguarde 1 minuto.");
+          const errData = await geminiRes.json().catch(() => ({}));
+          const rawMsg = errData?.error?.message || `HTTP ${geminiRes.status}`;
+          const code = errData?.error?.code || geminiRes.status;
+          lastErr = `[${geminiModel}] ${rawMsg}`;
+
+          // Erro de chave/cota não adianta trocar de modelo: propaga direto
+          if (
+            rawMsg.includes("API key not valid") ||
+            rawMsg.includes("API_KEY_INVALID")
+          ) {
+            throw new Error("Chave de API do Google Gemini inválida ou não autorizada. Verifique no console https://aistudio.google.com/app/apikey.");
+          } else if (code === 429 || rawMsg.includes("RESOURCE_EXHAUSTED") || rawMsg.includes("quota")) {
+            throw new Error("Cota de requisições temporariamente esgotada (Rate Limit) no Google Gemini. Aguarde 1 minuto.");
+          }
+        } catch (e: any) {
+          if (e?.message?.includes("Chave de API") || e?.message?.includes("Cota de requisições")) throw e;
+          lastErr = `[${geminiModel}] ${e?.name === "TimeoutError" ? "Tempo esgotado (25s)" : e?.message || String(e)}`;
         }
-
-        throw new Error(`Erro no Google Gemini (${geminiModel}): ${rawMsg}`);
       }
 
-      const data = await geminiRes.json();
-      const reply =
-        data.candidates?.[0]?.content?.parts?.[0]?.text ||
-        "Desculpe, não consegui gerar uma resposta.";
-
-      return {
-        reply,
-        provider: "GEMINI",
-        model: geminiModel,
-        source,
-        latency: Date.now() - startTime,
-      };
+      throw new Error(`Erro no Google Gemini: ${lastErr}`);
     };
 
-    // 2. Processamento GROQ — Modelos Ativos: openai/gpt-oss-120b, qwen/qwen3.8-27b, openai/gpt-oss-20b
+    // 2. Processamento GROQ — cascata entre modelos de produção
     const executeGroq = async (key: string, selectedModel?: string) => {
-      // Normaliza modelo: se não for um dos modelos ativos suportados, usa openai/gpt-oss-120b
-      const requested = (selectedModel || "").trim();
-      const primaryModel = GROQ_ACTIVE_MODELS.includes(requested as any)
-        ? requested
-        : "openai/gpt-oss-120b";
+      const normalized = normalizeModel("GROQ", selectedModel);
+      const modelsToTry = cascadeModels("GROQ", normalized);
 
-      // Cascata estritamente entre os modelos ativos disponíveis no Groq
-      const modelsToTry = [
-        primaryModel,
-        ...GROQ_ACTIVE_MODELS.filter((m) => m !== primaryModel),
-      ];
+      // Histórico sanitizado: sem 'system' no meio, sem conteúdos vazios
+      const cleanHistory = history
+        .filter((h) => h.role === "user" || h.role === "assistant")
+        .slice(-AI_MAX_HISTORY_TURNS)
+        .map((h) => ({
+          role: h.role,
+          content: typeof h.content === "string" ? h.content.slice(0, 2000) : "",
+        }))
+        .filter((h) => h.content.trim());
 
       let lastGroqError = "";
 
@@ -237,12 +264,13 @@ Suas funções:
                     role: "system",
                     content: systemPrompt + "\n" + labContextSummary,
                   },
-                  ...history.slice(-6),
-                  { role: "user", content: message },
+                  ...cleanHistory,
+                  { role: "user", content: cleanMessage },
                 ],
                 temperature: 0.4,
                 max_tokens: 800,
               }),
+              signal: AbortSignal.timeout(AI_SERVER_TIMEOUT_MS),
             }
           );
 
@@ -263,7 +291,7 @@ Suas funções:
             lastGroqError = `[${m}] ${errData?.error?.message || `HTTP ${groqRes.status}`}`;
           }
         } catch (e: any) {
-          lastGroqError = `[${m}] ${e?.message || String(e)}`;
+          lastGroqError = `[${m}] ${e?.name === "TimeoutError" ? "Tempo esgotado (25s)" : e?.message || String(e)}`;
         }
       }
 
@@ -274,7 +302,7 @@ Suas funções:
     if (apiKey) {
       if (activeProvider === "GEMINI") {
         try {
-          const result = await executeGemini(apiKey);
+          const result = await executeGemini(apiKey, model);
           return NextResponse.json(result);
         } catch (geminiErr: any) {
           console.warn("Google Gemini falhou:", geminiErr?.message);
@@ -316,7 +344,7 @@ Suas funções:
           const geminiBackupKey = getEnvKey("GEMINI");
           if (geminiBackupKey) {
             try {
-              const geminiResult = await executeGemini(geminiBackupKey);
+              const geminiResult = await executeGemini(geminiBackupKey, model);
               return NextResponse.json({
                 ...geminiResult,
                 note: `Groq indisponível (${groqErr?.message}). Resposta atendida via Google Gemini 3.8.`,
@@ -340,7 +368,7 @@ Suas funções:
     }
 
     // 4. MODO LOCAL INTELIGENTE (Quando nenhuma chave foi configurada nem no Render nem localmente)
-    const lower = message.toLowerCase();
+    const lower = cleanMessage.toLowerCase();
     let localReply = "";
 
     const allCases = context.cases || [];

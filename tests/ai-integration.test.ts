@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { AIService, DEFAULT_AI_CONFIG } from "../src/services/ai-service";
 import { AIConfig } from "../src/types/ai.types";
+import {
+  normalizeModel,
+  cascadeModels,
+  DEFAULT_GEMINI_MODEL,
+  DEFAULT_GROQ_MODEL,
+} from "../src/lib/ai/models";
 
 describe("AIService Unit Tests", () => {
   beforeEach(() => {
@@ -11,10 +17,10 @@ describe("AIService Unit Tests", () => {
     }
   });
 
-  it("deve carregar configuração padrão para Gemini 3.8 quando nada foi configurado", () => {
+  it("deve carregar configuração padrão do Gemini quando nada foi configurado", () => {
     const config = AIService.getConfig();
     expect(config.provider).toBe("GEMINI");
-    expect(config.model).toBe("gemini-3.8-flash");
+    expect(config.model).toBe(DEFAULT_GEMINI_MODEL);
     expect(config.enabled).toBe(true);
     expect(config.apiKey).toBe("");
   });
@@ -40,23 +46,37 @@ describe("AIService Unit Tests", () => {
     const geminiConfig: AIConfig = {
       provider: "GEMINI",
       apiKey: "AIzaSy_fake_test_key",
-      model: "gemini-3.8-flash",
+      model: DEFAULT_GEMINI_MODEL,
       enabled: true,
     };
     AIService.saveConfig(geminiConfig);
     expect(AIService.getConfig().provider).toBe("GEMINI");
-    expect(AIService.getConfig().model).toBe("gemini-3.8-flash");
+    expect(AIService.getConfig().model).toBe(DEFAULT_GEMINI_MODEL);
 
     const groqQwenConfig: AIConfig = {
       provider: "GROQ",
       apiKey: "gsk_qwen_test",
-      model: "qwen/qwen3.8-27b",
+      model: "qwen/qwen3-32b",
       enabled: true,
     };
     AIService.saveConfig(groqQwenConfig);
     const loadedGroq = AIService.getConfig();
     expect(loadedGroq.provider).toBe("GROQ");
-    expect(loadedGroq.model).toBe("qwen/qwen3.8-27b");
+    expect(loadedGroq.model).toBe("qwen/qwen3-32b");
+  });
+
+  it("deve migrar modelo legado inexistente para o catálogo real", () => {
+    expect(normalizeModel("GROQ", "qwen/qwen3.8-27b")).toBe("qwen/qwen3-32b");
+    expect(normalizeModel("GROQ", "modelo-inventado")).toBe(DEFAULT_GROQ_MODEL);
+    expect(normalizeModel("GEMINI", "")).toBe(DEFAULT_GEMINI_MODEL);
+  });
+
+  it("deve montar cascata com o modelo pedido primeiro (máx. 3 tentativas)", () => {
+    const cascade = cascadeModels("GROQ", "llama-3.3-70b-versatile");
+    expect(cascade[0]).toBe("llama-3.3-70b-versatile");
+    expect(cascade.length).toBeLessThanOrEqual(3);
+    const geminiCascade = cascadeModels("GEMINI", "modelo-qualquer");
+    expect(geminiCascade[0]).toBe(DEFAULT_GEMINI_MODEL);
   });
 
   it("deve validar resposta de recomendação de calibração", async () => {
