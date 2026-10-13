@@ -1057,7 +1057,7 @@ export default function FilaPage() {
                         key={card.id}
                         draggable
                         onDragStart={(e) => handleDragStart(e, card.id)}
-                        className={`bg-slate-950 border rounded-lg p-2.5 transition cursor-grab active:cursor-grabbing ${
+                        className={`min-w-0 overflow-hidden bg-slate-950 border rounded-lg p-2.5 transition cursor-grab active:cursor-grabbing ${
                           selectedCardIds.includes(card.id)
                             ? "border-slate-400"
                             : card.priority === "URGENTE"
@@ -1079,7 +1079,7 @@ export default function FilaPage() {
                           <button
                             type="button"
                             onClick={() => handleOpenPatientHistory(card.patient_code)}
-                            className="text-[13px] font-semibold text-white hover:underline underline-offset-2 truncate text-left"
+                            className="min-w-0 flex-1 text-[13px] font-semibold text-white hover:underline underline-offset-2 truncate text-left"
                             title="Ver histórico do paciente"
                           >
                             {card.patient_code}
@@ -1114,15 +1114,15 @@ export default function FilaPage() {
                           {card.file_name}
                         </p>
 
-                        <div className="flex items-center gap-1 mt-2 pt-2 border-t border-slate-800/70">
+                        <div className="flex items-center flex-wrap gap-y-1 gap-x-1 mt-2 pt-2 border-t border-slate-800/70 min-w-0">
                           {getPreviousStatus(card.status) && (
                             <button
                               type="button"
                               onClick={() => handleGoBackStatus(card)}
-                              className="px-2 py-1 text-[11px] font-medium text-slate-400 hover:text-white hover:bg-slate-800 rounded-md flex items-center gap-1"
+                              className="shrink-0 px-2 py-1 text-[11px] font-medium text-slate-400 hover:text-white hover:bg-slate-800 rounded-md flex items-center gap-1 whitespace-nowrap"
                               title={`Voltar para ${PRINT_CARD_STATUS_CONFIG[getPreviousStatus(card.status)!].label}`}
                             >
-                              <Undo2 className="w-3 h-3" />
+                              <Undo2 className="w-3 h-3 shrink-0" />
                               Voltar
                             </button>
                           )}
@@ -1130,17 +1130,17 @@ export default function FilaPage() {
                             <button
                               type="button"
                               onClick={() => handleQuickAdvanceStatus(card)}
-                              className="ml-auto px-2.5 py-1 text-[11px] font-semibold bg-slate-100 hover:bg-white text-slate-900 rounded-md flex items-center gap-1"
+                              className="shrink-0 px-2.5 py-1 text-[11px] font-semibold bg-slate-100 hover:bg-white text-slate-900 rounded-md flex items-center gap-1 whitespace-nowrap"
                             >
                               Avançar
-                              <ArrowRight className="w-3 h-3" />
+                              <ArrowRight className="w-3 h-3 shrink-0" />
                             </button>
                           )}
-                          <div className="flex items-center gap-0.5 ml-auto [&:not(:only-child)]:ml-0">
+                          <div className="shrink-0 flex items-center gap-0.5 ml-auto">
                             <button
                               type="button"
                               onClick={() => handleDownloadFile(card)}
-                              className="p-1.5 text-slate-500 hover:text-white rounded-md transition"
+                              className="p-1.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded-md transition"
                               title="Baixar arquivo"
                             >
                               <Download className="w-3.5 h-3.5" />
@@ -1148,7 +1148,7 @@ export default function FilaPage() {
                             <button
                               type="button"
                               onClick={() => handleOpenCardHistory(card)}
-                              className="p-1.5 text-slate-500 hover:text-white rounded-md transition"
+                              className="p-1.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded-md transition"
                               title="Histórico"
                             >
                               <Eye className="w-3.5 h-3.5" />
