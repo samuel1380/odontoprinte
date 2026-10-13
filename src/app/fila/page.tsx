@@ -724,36 +724,55 @@ export default function FilaPage() {
     }
   };
 
-  // Colunas do Kanban
-  const kanbanColumns: Array<{ status: PrintCardStatus; label: string; color: string; border: string }> = [
-    { status: "NA_FILA", label: "Na Fila", color: "text-slate-300", border: "border-slate-700/60" },
-    { status: "PREPARANDO", label: "Preparando", color: "text-indigo-400", border: "border-indigo-500/30" },
-    { status: "IMPRIMINDO", label: "Imprimindo", color: "text-cyan-400", border: "border-cyan-500/30" },
-    { status: "IMPRESSO", label: "Impresso", color: "text-emerald-400", border: "border-emerald-500/30" },
-    { status: "CONCLUIDO", label: "Concluído", color: "text-teal-400", border: "border-teal-500/30" },
+  // Colunas do Kanban — visual neutro e profissional
+  const kanbanColumns: Array<{ status: PrintCardStatus; label: string }> = [
+    { status: "NA_FILA", label: "Na fila" },
+    { status: "PREPARANDO", label: "Preparando" },
+    { status: "IMPRIMINDO", label: "Imprimindo" },
+    { status: "IMPRESSO", label: "Impresso" },
+    { status: "CONCLUIDO", label: "Concluído" },
   ];
+
+  const [showFilters, setShowFilters] = useState(false);
+  const hasActiveFilters =
+    statusFilter !== "TODOS" ||
+    clinicFilter !== "TODAS" ||
+    cadistaFilter !== "TODOS" ||
+    batchFilter !== "TODOS" ||
+    onlyReprints ||
+    todayFilter ||
+    searchQuery.trim() !== "";
+
+  const clearFilters = () => {
+    setStatusFilter("TODOS");
+    setClinicFilter("TODAS");
+    setCadistaFilter("TODOS");
+    setBatchFilter("TODOS");
+    setOnlyReprints(false);
+    setTodayFilter(false);
+    setSearchQuery("");
+  };
 
   return (
     <AppShell>
-      <div className="space-y-5">
-        {/* CABEÇALHO COM AÇÕES RÁPIDAS */}
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-slate-800 pb-4">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-                Fila de Impressão 3D
+      <div className="space-y-4 max-w-[1400px] mx-auto">
+        {/* Cabeçalho simples */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg sm:text-xl font-semibold text-white tracking-tight">
+                Fila de impressão
               </h1>
-              <Badge variant="outline" className="border-cyan-500/40 text-cyan-400 bg-cyan-500/10 text-xs">
-                {cards.length} cards no laboratório
-              </Badge>
+              <span className="text-xs text-slate-400 bg-slate-900 border border-slate-800 rounded-md px-2 py-0.5">
+                {filteredCards.length} de {cards.length}
+              </span>
             </div>
-            <p className="text-xs text-slate-400 mt-1">
-              Esteira de modelos STL, controle de placas/lotes, detecção de duplicidades e backup automático.
+            <p className="text-xs text-slate-500 mt-0.5">
+              Arraste entre colunas ou use Avançar / Voltar.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Botão de Criação de Lote (ativo se houver seleção) */}
+          <div className="flex items-center gap-2">
             {selectedCardIds.length > 0 && (
               <Button
                 onClick={() => {
@@ -761,231 +780,253 @@ export default function FilaPage() {
                     `Lote #${Math.floor(100 + Math.random() * 900)} – ${new Date().toLocaleDateString("pt-BR", {
                       day: "2-digit",
                       month: "2-digit",
-                    })} ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`
+                    })}`
                   );
                   setIsBatchModalOpen(true);
                 }}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full text-xs font-semibold px-4 h-9 shadow-lg shadow-indigo-600/20 gap-1.5"
+                className="bg-white hover:bg-slate-200 text-slate-900 rounded-lg text-xs font-semibold px-3 h-9 gap-1.5"
               >
                 <Layers className="w-3.5 h-3.5" />
-                <span>Criar Lote/Placa ({selectedCardIds.length})</span>
+                <span>Lote ({selectedCardIds.length})</span>
               </Button>
             )}
 
-            {/* Gerenciar Lotes */}
             <Button
               variant="outline"
               onClick={() => setIsManageBatchesModalOpen(true)}
-              className="border-slate-700 text-slate-300 hover:bg-slate-800 rounded-full text-xs h-9 px-3.5 gap-1.5"
+              className="border-slate-700 text-slate-300 hover:bg-slate-800 rounded-lg text-xs h-9 px-3"
             >
-              <Printer className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Lotes ({batches.length})</span>
+              <span>Lotes · {batches.length}</span>
             </Button>
 
-            {/* Alternar Visualização Kanban vs Lista */}
-            <div className="bg-slate-900 border border-slate-800 p-0.5 rounded-full flex items-center">
+            <div className="flex bg-slate-900 border border-slate-800 rounded-lg p-0.5">
               <button
                 type="button"
                 onClick={() => setViewMode("KANBAN")}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 transition ${
+                className={`px-2.5 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition ${
                   viewMode === "KANBAN"
-                    ? "bg-slate-800 text-white shadow-sm"
+                    ? "bg-slate-700 text-white"
                     : "text-slate-400 hover:text-slate-200"
                 }`}
+                title="Ver em colunas"
               >
                 <LayoutGrid className="w-3.5 h-3.5" />
-                <span>Kanban</span>
+                <span className="hidden sm:inline">Colunas</span>
               </button>
               <button
                 type="button"
                 onClick={() => setViewMode("LISTA")}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 transition ${
+                className={`px-2.5 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition ${
                   viewMode === "LISTA"
-                    ? "bg-slate-800 text-white shadow-sm"
+                    ? "bg-slate-700 text-white"
                     : "text-slate-400 hover:text-slate-200"
                 }`}
+                title="Ver em lista"
               >
                 <List className="w-3.5 h-3.5" />
-                <span>Tabela</span>
+                <span className="hidden sm:inline">Lista</span>
               </button>
             </div>
 
-            {/* BOTÃO PRINCIPAL: CADASTRAR IMPRESSÃO (UPLOAD RÁPIDO) */}
             <Button
               onClick={() => setIsUploadModalOpen(true)}
-              className="bg-white hover:bg-slate-200 text-slate-950 rounded-full text-xs font-bold px-4 h-9 shadow-md gap-1.5"
+              className="bg-white hover:bg-slate-200 text-slate-900 rounded-lg text-xs font-semibold px-3 h-9 gap-1.5"
             >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>Cadastrar Impressão</span>
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Nova impressão</span>
+              <span className="sm:hidden">Novo</span>
             </Button>
           </div>
         </div>
 
-        {/* BARRA DE FILTROS E BUSCA RÁPIDA */}
-        <div className="bg-[#0F172A] border border-slate-800 rounded-2xl p-3.5 space-y-3">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-            {/* Input de Busca */}
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
+        {/* Barra de busca + filtros */}
+        <div className="bg-slate-900/60 border border-slate-800 rounded-xl">
+          <div className="flex items-center gap-2 p-2.5">
+            <div className="relative flex-1 min-w-0">
+              <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar por paciente, clínica, cadista ou arquivo STL..."
-                className="w-full pl-10 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-full text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400 transition"
+                placeholder="Buscar paciente, clínica, arquivo..."
+                className="w-full pl-9 pr-8 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-slate-600 transition"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-3.5 top-2.5 text-xs text-slate-400 hover:text-white"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+                  title="Limpar busca"
                 >
-                  Limpar
+                  <XCircle className="w-4 h-4" />
                 </button>
               )}
             </div>
 
-            {/* Pills Rápidas */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0 scrollbar-none">
-              <button
-                type="button"
-                onClick={() => setTodayFilter(!todayFilter)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition flex items-center gap-1.5 whitespace-nowrap ${
-                  todayFilter
-                    ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/50"
-                    : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white"
-                }`}
-              >
-                <Calendar className="w-3.5 h-3.5" />
-                <span>Hoje</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setOnlyReprints(!onlyReprints)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition flex items-center gap-1.5 whitespace-nowrap ${
-                  onlyReprints
-                    ? "bg-amber-500/20 text-amber-300 border-amber-500/50"
-                    : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white"
-                }`}
-              >
-                <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
-                <span>Somente Reimpressões</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setStatusFilter(statusFilter === "FALHOU" ? "TODOS" : "FALHOU");
-                }}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition flex items-center gap-1.5 whitespace-nowrap ${
-                  statusFilter === "FALHOU"
-                    ? "bg-rose-500/20 text-rose-300 border-rose-500/50"
-                    : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white"
-                }`}
-              >
-                <XCircle className="w-3.5 h-3.5 text-rose-400" />
-                <span>Falhas ({statusCounts.FALHOU})</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setShowFilters(!showFilters)}
+              className={`shrink-0 px-3 py-2 rounded-lg text-xs font-medium border transition flex items-center gap-1.5 ${
+                showFilters || hasActiveFilters
+                  ? "bg-slate-800 text-white border-slate-700"
+                  : "bg-transparent text-slate-400 border-slate-800 hover:text-white hover:border-slate-700"
+              }`}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Filtros</span>
+              {hasActiveFilters && (
+                <span className="w-1.5 h-1.5 rounded-full bg-white" />
+              )}
+            </button>
           </div>
 
-          {/* Menus Dropdown de Filtros */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-slate-800/60 text-xs">
-            <div>
-              <label className="text-[10px] text-slate-400 uppercase font-semibold mb-1 block">Status</label>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as any)}
-                className="w-full bg-slate-900 border border-slate-800 text-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-cyan-400"
+          {/* Abas de status — rolagem horizontal no mobile */}
+          <div className="flex items-center gap-1 px-2.5 pb-2.5 overflow-x-auto">
+            {(
+              [
+                ["TODOS", `Todos (${cards.length})`],
+                ["NA_FILA", `Na fila (${statusCounts.NA_FILA})`],
+                ["PREPARANDO", `Preparando (${statusCounts.PREPARANDO})`],
+                ["IMPRIMINDO", `Imprimindo (${statusCounts.IMPRIMINDO})`],
+                ["IMPRESSO", `Impresso (${statusCounts.IMPRESSO})`],
+                ["CONCLUIDO", `Concluídos (${statusCounts.CONCLUIDO})`],
+                ["FALHOU", `Falhas (${statusCounts.FALHOU})`],
+              ] as Array<[PrintCardStatus | "TODOS", string]>
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setStatusFilter(value)}
+                className={`shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-medium transition ${
+                  statusFilter === value
+                    ? "bg-slate-100 text-slate-900"
+                    : "text-slate-400 hover:text-white hover:bg-slate-800"
+                }`}
               >
-                <option value="TODOS">Todos os Status</option>
-                <option value="NA_FILA">Na Fila ({statusCounts.NA_FILA})</option>
-                <option value="PREPARANDO">Preparando ({statusCounts.PREPARANDO})</option>
-                <option value="IMPRIMINDO">Imprimindo ({statusCounts.IMPRIMINDO})</option>
-                <option value="IMPRESSO">Impresso ({statusCounts.IMPRESSO})</option>
-                <option value="CONCLUIDO">Concluído ({statusCounts.CONCLUIDO})</option>
-                <option value="FALHOU">Falhou ({statusCounts.FALHOU})</option>
-                <option value="CANCELADO">Cancelado ({statusCounts.CANCELADO})</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="text-[10px] text-slate-400 uppercase font-semibold mb-1 block">Clínica</label>
-              <select
-                value={clinicFilter}
-                onChange={(e) => setClinicFilter(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-800 text-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-cyan-400"
-              >
-                <option value="TODAS">Todas as Clínicas</option>
-                {uniqueClinics.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-[10px] text-slate-400 uppercase font-semibold mb-1 block">Cadista</label>
-              <select
-                value={cadistaFilter}
-                onChange={(e) => setCadistaFilter(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-800 text-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-cyan-400"
-              >
-                <option value="TODOS">Todos os Cadistas</option>
-                {uniqueCadistas.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-[10px] text-slate-400 uppercase font-semibold mb-1 block">Lote / Placa</label>
-              <select
-                value={batchFilter}
-                onChange={(e) => setBatchFilter(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-800 text-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-cyan-400"
-              >
-                <option value="TODOS">Todos os Lotes</option>
-                {batches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.batch_name} ({b.items_count})
-                  </option>
-                ))}
-              </select>
-            </div>
+                {label}
+              </button>
+            ))}
           </div>
+
+          {showFilters && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 px-2.5 pb-2.5 pt-1 border-t border-slate-800/80">
+              <div className="pt-2">
+                <label className="text-[11px] text-slate-500 font-medium mb-1 block">Clínica</label>
+                <select
+                  value={clinicFilter}
+                  onChange={(e) => setClinicFilter(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded-lg px-2.5 py-2 text-xs focus:outline-none focus:border-slate-600"
+                >
+                  <option value="TODAS">Todas</option>
+                  {uniqueClinics.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="pt-2">
+                <label className="text-[11px] text-slate-500 font-medium mb-1 block">Cadista</label>
+                <select
+                  value={cadistaFilter}
+                  onChange={(e) => setCadistaFilter(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded-lg px-2.5 py-2 text-xs focus:outline-none focus:border-slate-600"
+                >
+                  <option value="TODOS">Todos</option>
+                  {uniqueCadistas.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="pt-2">
+                <label className="text-[11px] text-slate-500 font-medium mb-1 block">Lote</label>
+                <select
+                  value={batchFilter}
+                  onChange={(e) => setBatchFilter(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded-lg px-2.5 py-2 text-xs focus:outline-none focus:border-slate-600"
+                >
+                  <option value="TODOS">Todos</option>
+                  {batches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.batch_name} ({b.items_count})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="sm:col-span-3 flex flex-wrap items-center gap-2 pt-1">
+                <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={onlyReprints}
+                    onChange={(e) => setOnlyReprints(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-slate-700 bg-slate-800"
+                  />
+                  Só reimpressões
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={todayFilter}
+                    onChange={(e) => setTodayFilter(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-slate-700 bg-slate-800"
+                  />
+                  Só hoje
+                </label>
+                {hasActiveFilters && (
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    className="ml-auto text-xs text-slate-400 hover:text-white underline underline-offset-2"
+                  >
+                    Limpar filtros
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* ÁREA DE VISUALIZAÇÃO: KANBAN OU TABELA */}
+        {/* Estado vazio */}
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="space-y-3">
-                <Skeleton className="h-10 w-full rounded-xl bg-slate-800/60" />
-                <Skeleton className="h-36 w-full rounded-xl bg-slate-800/40" />
-                <Skeleton className="h-36 w-full rounded-xl bg-slate-800/40" />
+              <div key={i} className="space-y-2">
+                <Skeleton className="h-9 w-full rounded-lg bg-slate-800/60" />
+                <Skeleton className="h-28 w-full rounded-lg bg-slate-800/40" />
+                <Skeleton className="h-28 w-full rounded-lg bg-slate-800/40" />
               </div>
             ))}
           </div>
         ) : filteredCards.length === 0 ? (
-          <div className="bg-[#0F172A] border border-slate-800 rounded-2xl p-10 text-center">
-            <div className="w-12 h-12 rounded-full bg-slate-800 text-slate-400 mx-auto flex items-center justify-center mb-3">
-              <Printer className="w-6 h-6" />
-            </div>
-            <h3 className="text-base font-semibold text-white">Nenhum card encontrado</h3>
-            <p className="text-xs text-slate-400 max-w-md mx-auto mt-1 mb-4">
-              Não há itens correspondentes aos filtros selecionados. Cadastre novos modelos STL para iniciar a esteira.
+          <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-8 text-center">
+            <h3 className="text-sm font-semibold text-white">Nada por aqui</h3>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
+              {hasActiveFilters
+                ? "Nenhum item corresponde aos filtros. Ajuste a busca ou limpe os filtros."
+                : "Cadastre um modelo para começar a fila."}
             </p>
-            <Button
-              onClick={() => setIsUploadModalOpen(true)}
-              className="bg-white hover:bg-slate-200 text-slate-950 rounded-full text-xs font-bold px-4 h-9"
-            >
-              Cadastrar Impressão
-            </Button>
+            <div className="flex items-center justify-center gap-2">
+              {hasActiveFilters && (
+                <Button
+                  variant="outline"
+                  onClick={clearFilters}
+                  className="border-slate-700 text-slate-300 rounded-lg text-xs h-9"
+                >
+                  Limpar filtros
+                </Button>
+              )}
+              <Button
+                onClick={() => setIsUploadModalOpen(true)}
+                className="bg-white hover:bg-slate-200 text-slate-900 rounded-lg text-xs font-semibold px-4 h-9"
+              >
+                Nova impressão
+              </Button>
+            </div>
           </div>
         ) : viewMode === "KANBAN" ? (
-          /* QUADRO KANBAN (COLUNAS POR STATUS) */
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3.5 items-start">
+          /* Colunas — rolagem horizontal no celular, grade no desktop */
+          <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory lg:grid lg:grid-cols-5 lg:overflow-visible">
             {kanbanColumns.map((col) => {
               const columnCards = filteredCards.filter((c) => c.status === col.status);
 
@@ -994,182 +1035,139 @@ export default function FilaPage() {
                   key={col.status}
                   onDragOver={handleDragOver}
                   onDrop={(e) => handleDropOnColumn(e, col.status)}
-                  className={`bg-[#0F172A]/70 border ${col.border} rounded-2xl p-3 flex flex-col min-h-[480px] transition`}
+                  className="shrink-0 w-[82vw] sm:w-[320px] lg:w-auto snap-start bg-slate-900/40 border border-slate-800 rounded-xl p-2.5 flex flex-col min-h-[300px] lg:min-h-[480px]"
                 >
-                  {/* Cabeçalho da Coluna */}
-                  <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-800/80">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-cyan-400" />
-                      <h3 className={`text-xs font-bold uppercase tracking-wider ${col.color}`}>
-                        {col.label}
-                      </h3>
-                    </div>
-                    <Badge variant="outline" className="text-[10px] bg-slate-900 border-slate-800 text-slate-400 px-1.5 py-0">
+                  <div className="flex items-center justify-between px-1 pb-2 mb-2 border-b border-slate-800">
+                    <h3 className="text-xs font-semibold text-slate-200">
+                      {col.label}
+                    </h3>
+                    <span className="text-[11px] text-slate-500 tabular-nums">
                       {columnCards.length}
-                    </Badge>
+                    </span>
                   </div>
 
-                  {/* Cards da Coluna */}
-                  <div className="space-y-2.5 flex-1 overflow-y-auto">
+                  <div className="space-y-2 flex-1 lg:max-h-[62vh] lg:overflow-y-auto lg:pr-0.5">
+                    {columnCards.length === 0 && (
+                      <p className="text-[11px] text-slate-600 text-center py-6 px-2">
+                        Arraste cards para cá
+                      </p>
+                    )}
                     {columnCards.map((card) => (
                       <div
                         key={card.id}
                         draggable
                         onDragStart={(e) => handleDragStart(e, card.id)}
-                        className={`group bg-slate-900/90 border rounded-xl p-3 space-y-2.5 hover:border-slate-700 transition cursor-grab active:cursor-grabbing shadow-sm ${
+                        className={`bg-slate-950 border rounded-lg p-2.5 transition cursor-grab active:cursor-grabbing ${
                           selectedCardIds.includes(card.id)
-                            ? "border-cyan-500/80 ring-1 ring-cyan-500/40"
+                            ? "border-slate-400"
                             : card.priority === "URGENTE"
-                            ? "border-red-500/50 bg-red-950/10"
+                            ? "border-red-900"
                             : card.is_retry
-                            ? "border-amber-500/40 bg-amber-950/10"
-                            : "border-slate-800"
+                            ? "border-amber-900"
+                            : "border-slate-800 hover:border-slate-700"
                         }`}
                       >
-                        {/* Linha superior: checkbox, badges e contagem de impressões */}
-                        <div className="flex items-start justify-between gap-1.5">
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={selectedCardIds.includes(card.id)}
-                              onChange={() => toggleSelectCard(card.id)}
-                              className="h-3.5 w-3.5 rounded border-slate-700 bg-slate-800 text-cyan-500 focus:ring-cyan-400"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleOpenPatientHistory(card.patient_code)}
-                              className="text-xs font-bold text-white hover:text-cyan-400 transition text-left flex items-center gap-1"
-                              title="Clique para ver histórico completo do paciente"
-                            >
-                              <span>{card.patient_code}</span>
-                              <ChevronRight className="w-3 h-3 text-slate-500" />
-                            </button>
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-1 justify-end">
-                            {card.priority === "URGENTE" && (
-                              <Badge className="bg-red-500/20 text-red-300 border-red-500/40 text-[9px] px-1.5 py-0 font-bold uppercase animate-pulse">
-                                Urgente
-                              </Badge>
-                            )}
-                            {card.is_retry && (
-                              <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/40 text-[9px] px-1.5 py-0 font-bold">
-                                {card.retry_count > 1 ? `${card.retry_count}ª Reimp.` : "Reimpressão"}
-                              </Badge>
-                            )}
-                          </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedCardIds.includes(card.id)}
+                            onChange={() => toggleSelectCard(card.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-3.5 w-3.5 shrink-0 rounded border-slate-700 bg-slate-800"
+                            title="Selecionar para lote"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleOpenPatientHistory(card.patient_code)}
+                            className="text-[13px] font-semibold text-white hover:underline underline-offset-2 truncate text-left"
+                            title="Ver histórico do paciente"
+                          >
+                            {card.patient_code}
+                          </button>
+                          {card.priority === "URGENTE" && (
+                            <span className="ml-auto shrink-0 text-[10px] font-semibold text-red-300 bg-red-950 border border-red-900 rounded px-1.5 py-0.5">
+                              Urgente
+                            </span>
+                          )}
+                          {card.priority !== "URGENTE" && card.is_retry && (
+                            <span className="ml-auto shrink-0 text-[10px] font-medium text-amber-300 bg-amber-950/60 border border-amber-900 rounded px-1.5 py-0.5">
+                              {card.retry_count > 1 ? `${card.retry_count}ª tent.` : "Reimpressão"}
+                            </span>
+                          )}
                         </div>
 
-                        {/* Paciente (nome completo se houver) */}
                         {card.patient_name && (
-                          <p className="text-[11px] text-slate-300 font-medium truncate">
+                          <p className="text-[11px] text-slate-400 truncate mt-0.5">
                             {card.patient_name}
                           </p>
                         )}
 
-                        {/* Informações: Clínica, Cadista e Tipo de Trabalho */}
-                        <div className="text-[11px] space-y-1 text-slate-400 border-y border-slate-800/60 py-1.5">
-                          <div className="flex items-center justify-between">
-                            <span className="flex items-center gap-1 text-slate-400 truncate">
-                              <Building2 className="w-3 h-3 text-slate-500 shrink-0" />
-                              <span className="truncate">{card.clinic_name}</span>
-                            </span>
-                            <span className="text-slate-500 text-[10px]">{card.cadista_name}</span>
-                          </div>
+                        <p className="text-[11px] text-slate-500 truncate mt-1">
+                          {card.clinic_name} · {LAB_WORK_TYPE_LABELS[card.work_type] || card.work_type}
+                        </p>
+                        {card.batch_name && (
+                          <p className="text-[11px] text-slate-500 truncate" title={card.batch_name}>
+                            {card.batch_name}
+                          </p>
+                        )}
+                        <p className="text-[11px] text-slate-600 font-mono truncate mt-0.5" title={card.file_name}>
+                          {card.file_name}
+                        </p>
 
-                          <div className="flex items-center justify-between pt-0.5">
-                            <Badge variant="outline" className="border-slate-800 bg-slate-800/80 text-[10px] text-slate-300 px-1.5 py-0">
-                              {LAB_WORK_TYPE_LABELS[card.work_type] || card.work_type}
-                            </Badge>
-
-                            {card.batch_name && (
-                              <span className="text-[10px] text-indigo-400 font-medium truncate max-w-[100px]" title={card.batch_name}>
-                                {card.batch_name}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Arquivo STL e Ações de 1 Clique */}
-                        <div className="flex items-center justify-between gap-1 pt-0.5">
-                          <div className="flex items-center gap-1 text-[10px] text-slate-400 truncate max-w-[130px]">
-                            <FileText className="w-3 h-3 text-cyan-400 shrink-0" />
-                            <span className="truncate" title={card.file_name}>{card.file_name}</span>
-                          </div>
-
-                          <div className="flex items-center gap-1">
-                            {/* Download original */}
+                        <div className="flex items-center gap-1 mt-2 pt-2 border-t border-slate-800/70">
+                          {getPreviousStatus(card.status) && (
+                            <button
+                              type="button"
+                              onClick={() => handleGoBackStatus(card)}
+                              className="px-2 py-1 text-[11px] font-medium text-slate-400 hover:text-white hover:bg-slate-800 rounded-md flex items-center gap-1"
+                              title={`Voltar para ${PRINT_CARD_STATUS_CONFIG[getPreviousStatus(card.status)!].label}`}
+                            >
+                              <Undo2 className="w-3 h-3" />
+                              Voltar
+                            </button>
+                          )}
+                          {col.status !== "CONCLUIDO" && col.status !== "CANCELADO" && (
+                            <button
+                              type="button"
+                              onClick={() => handleQuickAdvanceStatus(card)}
+                              className="ml-auto px-2.5 py-1 text-[11px] font-semibold bg-slate-100 hover:bg-white text-slate-900 rounded-md flex items-center gap-1"
+                            >
+                              Avançar
+                              <ArrowRight className="w-3 h-3" />
+                            </button>
+                          )}
+                          <div className="flex items-center gap-0.5 ml-auto [&:not(:only-child)]:ml-0">
                             <button
                               type="button"
                               onClick={() => handleDownloadFile(card)}
-                              className="p-1 text-slate-400 hover:text-cyan-400 bg-slate-800/80 hover:bg-slate-800 rounded-md transition"
-                              title="Baixar arquivo original STL"
+                              className="p-1.5 text-slate-500 hover:text-white rounded-md transition"
+                              title="Baixar arquivo"
                             >
-                              <Download className="w-3 h-3" />
+                              <Download className="w-3.5 h-3.5" />
                             </button>
-
-                            {/* Ver histórico do card */}
                             <button
                               type="button"
                               onClick={() => handleOpenCardHistory(card)}
-                              className="p-1 text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-800 rounded-md transition"
-                              title="Ver histórico de alterações deste card"
+                              className="p-1.5 text-slate-500 hover:text-white rounded-md transition"
+                              title="Histórico"
                             >
-                              <Eye className="w-3 h-3" />
+                              <Eye className="w-3.5 h-3.5" />
                             </button>
-
-                            {/* Botão de Voltar (desfaz avanço sem querer) */}
-                            {getPreviousStatus(card.status) && (
-                              <button
-                                type="button"
-                                onClick={() => handleGoBackStatus(card)}
-                                className="h-6 px-1.5 text-[10px] font-semibold text-slate-400 hover:text-white bg-transparent hover:bg-slate-800 rounded-md gap-1 flex items-center"
-                                title={`Voltar para ${PRINT_CARD_STATUS_CONFIG[getPreviousStatus(card.status)!].label}`}
-                              >
-                                <Undo2 className="w-2.5 h-2.5" />
-                                <span>Voltar</span>
-                              </button>
-                            )}
-                            {/* Botão de Avanço Rápido */}
-                            {col.status !== "CONCLUIDO" && col.status !== "CANCELADO" && (
-                              <Button
-                                size="sm"
-                                onClick={() => handleQuickAdvanceStatus(card)}
-                                className="h-6 px-2 text-[10px] font-semibold bg-slate-800 hover:bg-slate-700 text-white rounded-md gap-1"
-                              >
-                                <span>Avançar</span>
-                                <ArrowRight className="w-2.5 h-2.5" />
-                              </Button>
-                            )}
                           </div>
                         </div>
 
-                        {/* Rodapé do card: Backup e Falha */}
-                        <div className="flex items-center justify-between text-[9px] pt-1 border-t border-slate-800/40 text-slate-500">
-                          <div className="flex items-center gap-1">
-                            {card.backup_done ? (
-                              <span className="text-emerald-400 flex items-center gap-0.5" title={`Backup: ${card.backup_path}`}>
-                                <CheckCircle2 className="w-2.5 h-2.5" />
-                                <span>Backup feito</span>
-                              </span>
-                            ) : (
-                              <span className="text-slate-500">Backup pendente</span>
-                            )}
-                          </div>
-
-                          {col.status !== "CONCLUIDO" && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setCardToFail(card);
-                                setCardFailReason("");
-                              }}
-                              className="text-rose-400 hover:text-rose-300 font-medium"
-                            >
-                              Falhou?
-                            </button>
-                          )}
-                        </div>
+                        {col.status !== "CONCLUIDO" && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCardToFail(card);
+                              setCardFailReason("");
+                            }}
+                            className="mt-1 text-[11px] text-slate-600 hover:text-red-400"
+                          >
+                            Marcar falha
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1178,11 +1176,11 @@ export default function FilaPage() {
             })}
           </div>
         ) : (
-          /* MODO TABELA / LISTA */
-          <div className="bg-[#0F172A] border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+          /* Lista */
+          <div className="bg-slate-900/40 border border-slate-800 rounded-xl overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-900/80 text-slate-400 font-semibold border-b border-slate-800 text-[11px] uppercase tracking-wider">
+              <table className="w-full text-left text-xs min-w-[860px]">
+                <thead className="bg-slate-950/60 text-slate-500 border-b border-slate-800 text-[11px] font-medium">
                   <tr>
                     <th className="p-3 w-10 text-center">
                       <input
@@ -1195,127 +1193,97 @@ export default function FilaPage() {
                             setSelectedCardIds(filteredCards.map((c) => c.id));
                           }
                         }}
-                        className="h-3.5 w-3.5 rounded border-slate-700 bg-slate-800 text-cyan-500"
+                        className="h-3.5 w-3.5 rounded border-slate-700 bg-slate-800"
                       />
                     </th>
-                    <th className="p-3">Paciente / Código</th>
-                    <th className="p-3">Clínica & Cadista</th>
-                    <th className="p-3">Tipo de Trabalho</th>
-                    <th className="p-3">Arquivo STL</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3">Lote / Placa</th>
-                    <th className="p-3">Backup</th>
-                    <th className="p-3 text-right">Ações</th>
+                    <th className="p-3 font-medium">Paciente</th>
+                    <th className="p-3 font-medium">Clínica</th>
+                    <th className="p-3 font-medium">Trabalho</th>
+                    <th className="p-3 font-medium">Arquivo</th>
+                    <th className="p-3 font-medium">Status</th>
+                    <th className="p-3 font-medium">Lote</th>
+                    <th className="p-3 text-right font-medium">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {filteredCards.map((card) => {
                     const statusCfg = PRINT_CARD_STATUS_CONFIG[card.status];
 
-                    return (
-                      <tr key={card.id} className="hover:bg-slate-900/40 transition">
+                      return (
+                      <tr key={card.id} className="hover:bg-slate-800/30 transition border-b border-slate-800/50 last:border-0">
                         <td className="p-3 text-center">
                           <input
                             type="checkbox"
                             checked={selectedCardIds.includes(card.id)}
                             onChange={() => toggleSelectCard(card.id)}
-                            className="h-3.5 w-3.5 rounded border-slate-700 bg-slate-800 text-cyan-500"
+                            className="h-3.5 w-3.5 rounded border-slate-700 bg-slate-800"
                           />
                         </td>
                         <td className="p-3">
                           <button
                             type="button"
                             onClick={() => handleOpenPatientHistory(card.patient_code)}
-                            className="font-bold text-white hover:text-cyan-400 transition flex items-center gap-1.5"
+                            className="font-semibold text-white hover:underline underline-offset-2 text-left"
                           >
-                            <span>{card.patient_code}</span>
-                            {card.is_retry && (
-                              <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/40 text-[9px] px-1 py-0 font-bold">
-                                Reimpressão
-                              </Badge>
-                            )}
+                            {card.patient_code}
                           </button>
                           {card.patient_name && (
-                            <div className="text-[11px] text-slate-400 mt-0.5">{card.patient_name}</div>
+                            <div className="text-[11px] text-slate-500 mt-0.5 truncate max-w-[160px]">{card.patient_name}</div>
+                          )}
+                          {card.is_retry && (
+                            <span className="text-[10px] text-amber-400">Reimpressão</span>
                           )}
                         </td>
                         <td className="p-3">
-                          <div className="text-slate-200 font-medium">{card.clinic_name}</div>
-                          <div className="text-[11px] text-slate-500">{card.cadista_name}</div>
+                          <div className="text-slate-300">{card.clinic_name}</div>
                         </td>
-                        <td className="p-3">
-                          <Badge variant="outline" className="border-slate-800 bg-slate-900 text-slate-300 text-[10px]">
-                            {LAB_WORK_TYPE_LABELS[card.work_type] || card.work_type}
-                          </Badge>
+                        <td className="p-3 text-slate-400">
+                          {LAB_WORK_TYPE_LABELS[card.work_type] || card.work_type}
                         </td>
                         <td className="p-3">
                           <div className="flex items-center gap-1.5">
-                            <span className="font-mono text-[11px] text-slate-300 truncate max-w-[150px]" title={card.file_name}>
+                            <span className="font-mono text-[11px] text-slate-400 truncate max-w-[140px]" title={card.file_name}>
                               {card.file_name}
                             </span>
                             <button
                               type="button"
                               onClick={() => handleDownloadFile(card)}
-                              className="text-slate-400 hover:text-cyan-400 p-1"
-                              title="Baixar original"
+                              className="text-slate-500 hover:text-white p-1"
+                              title="Baixar"
                             >
                               <Download className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </td>
                         <td className="p-3">
-                          <Badge className={`${statusCfg.color} text-[10px] font-semibold border`}>
+                          <span className="text-[11px] text-slate-300 bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5">
                             {statusCfg.label}
-                          </Badge>
+                          </span>
                         </td>
-                        <td className="p-3">
-                          {card.batch_name ? (
-                            <span className="text-indigo-400 font-medium">{card.batch_name}</span>
-                          ) : (
-                            <span className="text-slate-500">—</span>
-                          )}
-                        </td>
-                        <td className="p-3">
-                          {card.backup_done ? (
-                            <span className="text-emerald-400 text-[11px] flex items-center gap-1 font-medium">
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>OK</span>
-                            </span>
-                          ) : (
-                            <span className="text-slate-500 text-[11px]">Pendente</span>
-                          )}
+                        <td className="p-3 text-slate-500">
+                          {card.batch_name || "—"}
                         </td>
                         <td className="p-3 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
+                          <div className="flex items-center justify-end gap-1">
                             {getPreviousStatus(card.status) && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
+                              <button
+                                type="button"
                                 onClick={() => handleGoBackStatus(card)}
-                                className="h-7 text-xs text-slate-400 hover:text-white rounded-full px-2.5 gap-1"
+                                className="h-7 px-2 text-[11px] text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg"
                                 title={`Voltar para ${PRINT_CARD_STATUS_CONFIG[getPreviousStatus(card.status)!].label}`}
                               >
-                                <Undo2 className="w-3 h-3" />
                                 Voltar
-                              </Button>
+                              </button>
                             )}
                             {card.status !== "CONCLUIDO" && card.status !== "CANCELADO" && (
-                              <Button
-                                size="sm"
+                              <button
+                                type="button"
                                 onClick={() => handleQuickAdvanceStatus(card)}
-                                className="h-7 text-xs bg-slate-800 hover:bg-slate-700 text-white rounded-full px-2.5"
+                                className="h-7 px-2.5 text-[11px] font-semibold bg-slate-100 hover:bg-white text-slate-900 rounded-lg"
                               >
                                 Avançar
-                              </Button>
+                              </button>
                             )}
-                            <button
-                              type="button"
-                              onClick={() => handleOpenCardHistory(card)}
-                              className="p-1.5 text-slate-400 hover:text-white"
-                              title="Ver histórico"
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                            </button>
                           </div>
                         </td>
                       </tr>
