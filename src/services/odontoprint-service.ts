@@ -924,6 +924,13 @@ export class OdontoPrintService {
       try {
         // Gravação no banco central com checagem real de erro.
         // Persiste exclusivamente os novos registros criados nesta chamada com updated_at válido
+        // Dica de diagnóstico: erro de "row-level security" significa que o SQL
+        // supabase/migrations/20261014_fix_mesa_print_jobs_prod.sql ainda não foi
+        // aplicado no Supabase de produção (SQL Editor > RUN).
+        const rlsHint = (msg: string) =>
+          /row.level.security|permission denied|not allowed|policy/i.test(msg || "")
+            ? " (RLS bloqueando o anon key — rode o SQL 20261014_fix_mesa_print_jobs_prod.sql no Supabase)"
+            : "";
         if (casesToInsert.length > 0) {
           let { error: caseErr } = await client.from("cases").upsert(casesToInsert);
           if (caseErr && (caseErr.message?.includes("foreign key") || (caseErr as any).code === "23503")) {
@@ -931,7 +938,7 @@ export class OdontoPrintService {
             const retry = await client.from("cases").upsert(safeCases);
             caseErr = retry.error;
           }
-          if (caseErr) throw new Error(`Falha ao gravar pacientes: ${caseErr.message}`);
+          if (caseErr) throw new Error(`Falha ao gravar pacientes: ${caseErr.message}${rlsHint(caseErr.message)}`);
         }
 
         if (jobsToInsert.length > 0) {
@@ -941,11 +948,11 @@ export class OdontoPrintService {
             const retry = await client.from("print_jobs").insert(safeJobs);
             jobErr = retry.error;
           }
-          if (jobErr) throw new Error(`Falha ao gravar trabalhos: ${jobErr.message}`);
+          if (jobErr) throw new Error(`Falha ao gravar trabalhos: ${jobErr.message}${rlsHint(jobErr.message)}`);
         }
 
         const { error: itemErr } = await client.from("print_job_items").insert(createdItems);
-        if (itemErr) throw new Error(`Falha ao gravar itens da fila: ${itemErr.message}`);
+        if (itemErr) throw new Error(`Falha ao gravar itens da fila: ${itemErr.message}${rlsHint(itemErr.message)}`);
         const { error: histErr } = await client.from("print_item_history").insert(historyEntries);
         if (histErr) console.warn("Supabase createPrintCards (histórico) error:", histErr);
         try {
