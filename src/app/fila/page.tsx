@@ -37,10 +37,16 @@ import {
   SlidersHorizontal,
   ArrowRight,
   Undo2,
-  Eye,
   Trash2,
   ChevronDown,
   Play,
+  LayoutGrid,
+  Clock,
+  CheckCircle2,
+  ClipboardCheck,
+  Hammer,
+  RotateCcw,
+  History,
   Sparkles,
   FileText,
   Check,
@@ -1098,21 +1104,18 @@ export default function FilaPage() {
             <div className="flex items-center gap-2">
               <h1 className="text-lg sm:text-xl font-semibold text-white tracking-tight flex items-center gap-2">
                 <Layers className="w-5 h-5 text-cyan-400" />
-                Fila de Impressão 3D — Mesas de Produção
+                Fila de Impressão 3D
               </h1>
-              <span className="text-xs text-slate-400 bg-slate-900 border border-slate-800 rounded-md px-2 py-0.5">
-                {orderGroups.length} {orderGroups.length === 1 ? "mesa" : "mesas"}
-              </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Cada arquivo fica organizado na mesa de impressão da sua impressora. Acompanhe a produção e falhas.
+              Mesas, produção e falhas — tudo num só lugar.
             </p>
           </div>
 
           <div className="flex items-center gap-2">
             <Button
               onClick={() => setIsUploadModalOpen(true)}
-              className="bg-white hover:bg-slate-200 text-slate-900 rounded-lg text-xs font-semibold px-3 h-9 gap-1.5 shadow"
+              className="w-full sm:w-auto justify-center bg-white hover:bg-slate-200 text-slate-900 rounded-lg text-xs font-semibold px-3 h-9 gap-1.5 shadow"
             >
               <Plus className="w-4 h-4" />
               <span>Nova Mesa de Impressão</span>
@@ -1179,14 +1182,11 @@ export default function FilaPage() {
                 <Printer className="w-4 h-4" />
               </div>
               <div>
-                <h2 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-                  Máquinas do Laboratório — Status em Tempo Real
-                  <span className="text-[11px] font-normal text-slate-400 hidden sm:inline">
-                    (Responda na hora quais modelos estão imprimindo)
-                  </span>
+                <h2 className="text-sm sm:text-base font-bold text-white">
+                  Impressoras
                 </h2>
                 <p className="text-[11px] text-slate-400">
-                  Acompanhe o que cada impressora está rodando, conclua mesas ou reporte falhas de modelos individuais.
+                  O que cada máquina está rodando agora.
                 </p>
               </div>
             </div>
@@ -1229,7 +1229,7 @@ export default function FilaPage() {
                       </div>
 
                       {isPrinting ? (
-                        <span className="text-[10px] font-bold text-cyan-300 bg-cyan-950 border border-cyan-700 rounded-md px-2 py-0.5 flex items-center gap-1 shrink-0 animate-pulse">
+                        <span className="text-[10px] font-bold text-cyan-300 bg-cyan-950 border border-cyan-700 rounded-md px-2 py-0.5 flex items-center gap-1 shrink-0">
                           <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
                           IMPRIMINDO
                         </span>
@@ -1362,8 +1362,8 @@ export default function FilaPage() {
                           className="border-rose-800/80 text-rose-300 hover:bg-rose-950/60 text-xs h-8 rounded-lg px-2.5"
                           title="Marcar mesa inteira como falha (modelos viram prioridade)"
                         >
-                          <AlertTriangle className="w-3.5 h-3.5" />
-                          Falha Geral
+                          <XCircle className="w-3.5 h-3.5" />
+                          Falhou
                         </Button>
                       </div>
                     ) : (
@@ -1402,16 +1402,14 @@ export default function FilaPage() {
             }`}
           >
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-slate-500" />
                 Mesas na Fila
               </p>
               <p className="text-base font-bold text-white mt-0.5">
                 {tabCounts.fila} {tabCounts.fila === 1 ? "mesa" : "mesas"}
               </p>
             </div>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-              Aguardando
-            </span>
           </button>
 
           <button
@@ -1425,11 +1423,13 @@ export default function FilaPage() {
           >
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                {tabCounts.imprimindo > 0 && (
+                {tabCounts.imprimindo > 0 ? (
                   <span className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-400"></span>
                   </span>
+                ) : (
+                  <Printer className="w-3.5 h-3.5 text-slate-500" />
                 )}
                 Em Impressão
               </p>
@@ -1437,9 +1437,6 @@ export default function FilaPage() {
                 {tabCounts.imprimindo} {tabCounts.imprimindo === 1 ? "mesa" : "mesas"}
               </p>
             </div>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
-              Na Máquina
-            </span>
           </button>
 
           <button
@@ -1452,16 +1449,14 @@ export default function FilaPage() {
             }`}
           >
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <LayoutGrid className="w-3.5 h-3.5 text-slate-500" />
                 Todas as Mesas
               </p>
               <p className="text-base font-bold text-white mt-0.5">
                 {tabCounts.todas} {tabCounts.todas === 1 ? "mesa" : "mesas"}
               </p>
             </div>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
-              Geral
-            </span>
           </button>
 
           <button
@@ -1474,22 +1469,20 @@ export default function FilaPage() {
             }`}
           >
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
                 Concluídas
               </p>
               <p className="text-base font-bold text-white mt-0.5">
                 {tabCounts.concluidas} {tabCounts.concluidas === 1 ? "mesa" : "mesas"}
               </p>
             </div>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
-              Prontas
-            </span>
           </button>
         </div>
 
         {/* Banner de Prioridade Máxima: Falhas aguardando próxima mesa */}
         {!isLoading && failedPendingCount > 0 && (
-          <div className="bg-gradient-to-r from-rose-950/70 to-amber-950/60 border-2 border-rose-800/80 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+          <div className="bg-rose-950/40 border border-rose-800/60 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-xl bg-rose-900/80 text-rose-300 flex items-center justify-center shrink-0 mt-0.5">
                 <AlertTriangle className="w-5 h-5 text-rose-300" />
@@ -1513,8 +1506,8 @@ export default function FilaPage() {
               onClick={handleCollectFailed}
               className="bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold text-xs h-9 px-4 shrink-0 shadow-md gap-1.5"
             >
-              <Sparkles className="w-4 h-4" />
-              Criar Nova Mesa com as Falhas
+              <Layers className="w-4 h-4" />
+              Nova mesa com falhas
             </Button>
           </div>
         )}
@@ -1735,7 +1728,7 @@ export default function FilaPage() {
                   {/* Cabeçalho da Mesa de Impressão */}
                   <div
                     onClick={() => toggleExpandBatch(group.key)}
-                    className="w-full text-left p-3.5 sm:p-4 flex items-center gap-3 hover:bg-slate-800/30 transition cursor-pointer select-none"
+                    className="w-full text-left p-3.5 sm:p-4 flex flex-wrap items-center gap-3 hover:bg-slate-800/30 transition cursor-pointer select-none"
                   >
                     <ChevronDown
                       className={`w-4 h-4 shrink-0 text-slate-400 transition-transform ${
@@ -1762,13 +1755,6 @@ export default function FilaPage() {
                         >
                           {cfg.label}
                         </span>
-
-                        {group.isPrinting && (
-                          <span className="text-[10px] font-bold text-cyan-300 bg-cyan-950 border border-cyan-700 rounded-md px-2 py-0.5 flex items-center gap-1 animate-pulse">
-                            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-                            IMPRIMINDO NA MÁQUINA
-                          </span>
-                        )}
                       </div>
 
                       <p className="text-[11px] text-slate-400 mt-0.5">
@@ -1789,7 +1775,7 @@ export default function FilaPage() {
                     </div>
 
                     {/* Botões de Ação na Mesa */}
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0 w-full sm:w-auto">
                       {group.isPrinting ? (
                         <Button
                           type="button"
@@ -1798,7 +1784,7 @@ export default function FilaPage() {
                             setGroupConfirmTarget({ group, to: "CONCLUIDO" });
                           }}
                           size="sm"
-                          className="h-8 px-3 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg flex items-center gap-1 shadow"
+                          className="h-9 sm:h-8 px-3 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg flex-1 sm:flex-none flex items-center justify-center gap-1 shadow"
                         >
                           <Check className="w-3.5 h-3.5" />
                           Concluir Mesa
@@ -1815,7 +1801,7 @@ export default function FilaPage() {
                           }}
                           disabled={group.printableCount === 0}
                           size="sm"
-                          className="h-8 px-3.5 text-[11px] font-bold bg-white hover:bg-slate-200 text-slate-950 rounded-lg flex items-center gap-1.5 shadow disabled:opacity-40"
+                          className="h-9 sm:h-8 px-3.5 text-[11px] font-bold bg-white hover:bg-slate-200 text-slate-950 rounded-lg flex-1 sm:flex-none flex items-center justify-center gap-1.5 shadow disabled:opacity-40"
                           title={`Colocar ${group.printableCount} arquivo(s) na impressora`}
                         >
                           <Play className="w-3.5 h-3.5 fill-current" />
@@ -1846,9 +1832,6 @@ export default function FilaPage() {
                     <div className="border-t border-slate-800">
                       {/* Ações em lote na mesa */}
                       <div className="flex items-center flex-wrap gap-1.5 px-3 sm:px-4 py-2 bg-slate-950/60 border-b border-slate-800/80">
-                        <span className="text-[10px] uppercase tracking-wide text-slate-400 font-bold mr-1">
-                          Ações na Mesa
-                        </span>
                         <button
                           type="button"
                           disabled={
@@ -1856,8 +1839,9 @@ export default function FilaPage() {
                             !group.items.some((i) => i.status === "NA_FILA")
                           }
                           onClick={() => setGroupConfirmTarget({ group, to: "PREPARANDO" })}
-                          className="px-2.5 py-1 text-[11px] font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-md disabled:opacity-40 disabled:cursor-not-allowed transition"
+                          className="px-2.5 py-1 text-[11px] font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-md disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-1.5"
                         >
+                          <Hammer className="w-3.5 h-3.5" />
                           Preparar todos
                         </button>
                         <button
@@ -1867,8 +1851,9 @@ export default function FilaPage() {
                             !group.items.some((i) => i.status === "IMPRESSO")
                           }
                           onClick={() => setGroupConfirmTarget({ group, to: "CONCLUIDO" })}
-                          className="px-2.5 py-1 text-[11px] font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-md disabled:opacity-40 disabled:cursor-not-allowed transition"
+                          className="px-2.5 py-1 text-[11px] font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-md disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-1.5"
                         >
+                          <ClipboardCheck className="w-3.5 h-3.5" />
                           Concluir todos
                         </button>
                         <button
@@ -1883,9 +1868,10 @@ export default function FilaPage() {
                             setGroupFailTarget(group);
                             setGroupFailReason("");
                           }}
-                          className="px-2.5 py-1 text-[11px] font-semibold text-rose-300 hover:bg-rose-950/60 rounded-md disabled:opacity-40 disabled:cursor-not-allowed transition ml-auto"
+                          className="px-2.5 py-1 text-[11px] font-semibold text-rose-300 hover:bg-rose-950/60 rounded-md disabled:opacity-40 disabled:cursor-not-allowed transition ml-auto flex items-center gap-1.5"
                         >
-                          Marcar falha na mesa toda
+                          <XCircle className="w-3.5 h-3.5" />
+                          Falha na mesa
                         </button>
                       </div>
 
@@ -1923,23 +1909,27 @@ export default function FilaPage() {
 
                                   {/* Badges de Destaque / Falha / Prioridade */}
                                   {isFailed ? (
-                                    <span className="shrink-0 text-[11px] font-bold text-rose-200 bg-rose-950 border border-rose-500 rounded-md px-2 py-0.5 flex items-center gap-1 animate-pulse">
-                                      <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
-                                      PRIORIDADE (FALHOU)
+                                    <span className="shrink-0 text-[11px] font-bold text-rose-200 bg-rose-950 border border-rose-500 rounded-md px-2 py-0.5 flex items-center gap-1">
+                                      <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                                      Falhou · prioridade
                                     </span>
-                                  ) : isUrgent ? (
-                                    <span className="shrink-0 text-[10px] font-bold text-red-200 bg-red-950 border border-red-700 rounded px-1.5 py-0.5">
-                                      PRIORIDADE
-                                    </span>
-                                  ) : card.is_retry ? (
-                                    <span className="shrink-0 text-[10px] font-semibold text-amber-300 bg-amber-950/70 border border-amber-800 rounded px-1.5 py-0.5">
-                                      {card.retry_count > 1 ? `${card.retry_count}ª tentativa` : "Reimpressão"}
-                                    </span>
-                                  ) : null}
+                                  ) : (
+                                    <>
+                                      {isUrgent ? (
+                                        <span className="shrink-0 text-[10px] font-bold text-red-200 bg-red-950 border border-red-700 rounded px-1.5 py-0.5">
+                                          PRIORIDADE
+                                        </span>
+                                      ) : card.is_retry ? (
+                                        <span className="shrink-0 text-[10px] font-semibold text-amber-300 bg-amber-950/70 border border-amber-800 rounded px-1.5 py-0.5">
+                                          {card.retry_count > 1 ? `${card.retry_count}ª tentativa` : "Reimpressão"}
+                                        </span>
+                                      ) : null}
 
-                                  <span className="shrink-0 text-[10px] text-slate-300 bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5">
-                                    {statusCfg.label}
-                                  </span>
+                                      <span className="shrink-0 text-[10px] text-slate-300 bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5">
+                                        {statusCfg.label}
+                                      </span>
+                                    </>
+                                  )}
                                 </div>
 
                                 <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
@@ -1981,7 +1971,7 @@ export default function FilaPage() {
                                       className="px-2.5 py-1 text-xs font-semibold text-rose-300 bg-rose-950/70 hover:bg-rose-900 border border-rose-800 rounded-md flex items-center gap-1 transition shadow-sm"
                                       title="Marcar este arquivo como falha (vira prioridade para reimpressão)"
                                     >
-                                      <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                                      <XCircle className="w-3.5 h-3.5 text-rose-400" />
                                       Marcar Falha
                                     </button>
                                   )}
@@ -1994,8 +1984,8 @@ export default function FilaPage() {
                                       className="px-2.5 py-1 text-xs font-bold text-amber-950 bg-amber-400 hover:bg-amber-300 rounded-md flex items-center gap-1 shadow transition"
                                       title="Retornar arquivo para a fila como prioridade"
                                     >
-                                      <Sparkles className="w-3.5 h-3.5" />
-                                      Reimprimir (Prioritário)
+                                      <RotateCcw className="w-3.5 h-3.5" />
+                                      Reimprimir
                                     </button>
                                   )}
 
@@ -2051,7 +2041,7 @@ export default function FilaPage() {
                                     className="p-1.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded-md transition"
                                     title="Ver histórico de movimentações deste arquivo"
                                   >
-                                    <Eye className="w-3.5 h-3.5" />
+                                    <History className="w-3.5 h-3.5" />
                                   </button>
                                 </div>
                               </div>
