@@ -13,7 +13,7 @@ import {
   AlertTriangle,
   ArrowRight,
   Sparkles,
-  Scissors,
+  ListOrdered,
   Layers,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -58,10 +58,10 @@ export default function ImpressoesPage() {
             </p>
           </div>
 
-          <Link href="/fatiador" className="w-full sm:w-auto">
+          <Link href="/fila" className="w-full sm:w-auto">
             <Button variant="default" size="sm" className="gap-1.5 w-full sm:w-auto justify-center font-bold bg-white hover:bg-slate-200 text-slate-950">
-              <Scissors className="w-4 h-4" />
-              Novo Fatiamento
+              <ListOrdered className="w-4 h-4" />
+              Ir para Fila
             </Button>
           </Link>
         </div>

@@ -99,7 +99,7 @@ export default function RecebimentoResinaPage() {
         <div className="p-3.5 rounded-2xl bg-[#0F172A] border border-slate-800 text-xs text-slate-300 flex items-start gap-2.5">
           <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
           <p className="leading-relaxed">
-            O status inicial do lote será sempre <strong className="text-white">Aguardando Calibração</strong>. A resina só poderá ser selecionada no Fatiador após calibração aprovada para a impressora.
+            O status inicial do lote será sempre <strong className="text-white">Aguardando Calibração</strong>. A resina só poderá ser selecionada para impressão após calibração aprovada para a impressora.
           </p>
         </div>
 

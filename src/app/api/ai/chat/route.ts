@@ -407,7 +407,7 @@ Suas funções:
       }
     } else if (lower.includes("fila") || lower.includes("quantos")) {
       const q = context.queue || [];
-      localReply = `📋 **Situação da Fila de Impressão:**\nAtualmente temos **${q.length} modelo(s) aguardando** na fila prioritária FIFO para envio ao Fatiador.`;
+      localReply = `📋 **Situação da Fila de Impressão:**\nAtualmente temos **${q.length} modelo(s) aguardando** na fila prioritária FIFO aguardando impressão.`;
     } else if (lower.includes("resina") || lower.includes("calibr")) {
       localReply = `🧪 **Calibração de Resinas:**\nO protocolo OdontoPrint exige calibração técnica de teste com medição do hexágono entre **9.99mm e 10.01mm**.`;
     } else {

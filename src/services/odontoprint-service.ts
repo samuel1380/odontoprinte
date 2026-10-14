@@ -1613,7 +1613,7 @@ export class OdontoPrintService {
   /**
    * Move o grupo inteiro para um status (só itens elegíveis mudam).
    * "IMPRIMINDO" não entra aqui de propósito: impressão de verdade nasce
-   * no fatiador (cria mesa/código); a UI direciona para lá.
+   * no envio direto da mesa (cria ordem/código via startPrintBatchDirectly).
    */
   static async bulkUpdateGroupStatus(
     itemIds: string[],
@@ -2412,7 +2412,7 @@ export class OdontoPrintService {
     };
   }
 
-  // --- FATIADOR: OPÇÕES ELEGÍVEIS ---
+  // --- IMPRESSÃO: OPÇÕES ELEGÍVEIS (impressora + resina calibrada) ---
   static async getEligibleOptions(): Promise<{
     printers: PrinterWithStatus[];
     resins: EligibleResinOption[];

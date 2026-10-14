@@ -12,7 +12,7 @@ O **ODONTOPRINT** digitaliza integralmente o fluxo de trabalho de confecção e 
 ### Fluxo Principal do Sistema:
 1. **Cadista**: Recebe o caso, define o código do paciente (ex: `PAC-100`), seleciona entre **Fresagem** e **Impressão 3D**, e seleciona visualmente quais dos 7 modelos anatômicos serão impressos. O sistema valida que pelo menos 1 item seja selecionado antes de despachar para a fila.
 2. **Fila de Impressão (FIFO)**: Organiza os pacientes e seus arquivos por ordem de entrada. Permite ao operador selecionar peças de múltiplos pacientes para compor a mesma mesa de fatiamento. Itens não selecionados permanecem na fila intactos.
-3. **Fatiador & Preparo**: Aplica regras técnicas obrigatórias:
+3. **Envio Direto da Mesa (na Fila)**: Aplica regras técnicas automaticamente:
    - Permite escolher **apenas impressoras ativas com manutenção preventiva aprovada nos últimos 7 dias**.
    - Permite escolher **apenas lotes de resina com calibração técnica aprovada especificamente para aquela impressora**.
    - Exige checklist pré-impressão: *"Suportes colocados nas linhas pretas e área crítica?"* e *"Resina manipulada?"*.
@@ -132,17 +132,11 @@ Para demonstrar o fluxo completo de ponta a ponta na reunião com a diretoria:
      - [x] **Modelo de Trabalho**
      - [x] **Antagonista**
      - *(Deixe o **Troquel** desmarcado)*.
-   - Clique no botão **Preparar no Fatiador (2)**.
-
-3. **Fatiador & Preparo**:
-   - Na tela do Fatiador (`/fatiador`), observe que:
-     - No dropdown de impressoras, **apenas a Odonto Printer 01** (com manutenção em dia) está liberada. As demais explicam o motivo do bloqueio (manutenção vencida há 10 dias ou reprovada).
-     - No dropdown de resinas, **apenas a resina calibrada para a Odonto Printer 01** está disponível.
-   - Confirme as duas checagens obrigatórias:
-     - [x] Suportes colocados nas áreas críticas? -> **SIM**
-     - [x] Resina manipulada? -> **SIM**
-   - Clique em **Gerar Nomenclatura de Impressão** -> o código sequencial atômico `A003` (ou `A001`) será gerado.
-   - Clique no botão verde **INICIAR IMPRESSÃO**.
+    - Clique no botão **Iniciar Impressão** da mesa.
+2b. **Envio da Mesa (modal na Fila)**:
+    - No modal, selecione a impressora e confirme o envio.
+    - O sistema escolhe automaticamente a resina calibrada para aquela impressora e gera o código sequencial atômico (ex: `A003`, ou prefixo `00A` caso haja modelos de retentativa).
+    - A mesa entra em impressão e pode ser acompanhada em **Impressões**.
 
 4. **Execução & Apontamento de Falha**:
    - O sistema abrirá a ordem de impressão em andamento (`/impressoes/[id]`).

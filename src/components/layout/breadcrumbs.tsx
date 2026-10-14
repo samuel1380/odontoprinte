@@ -10,7 +10,6 @@ const ROUTE_LABELS: Record<string, string> = {
   cadista: "CAD",
   status: "Novo Trabalho",
   fila: "Fila de Espera",
-  fatiador: "Preparar Impressão",
   impressoes: "Impressões",
   impressoras: "Impressoras",
   fresagem: "Fresagem CNC",

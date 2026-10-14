@@ -15,7 +15,6 @@ import {
   Activity,
   ArrowUpRight,
   FileCheck2,
-  Scissors,
   Layers,
   Sparkles,
   Cog,
@@ -120,10 +119,10 @@ export default function DashboardPage() {
                 Novo Trabalho
               </Button>
             </Link>
-            <Link href="/fatiador">
+            <Link href="/fila">
               <Button size="sm" variant="secondary" className="text-xs gap-1.5 h-9 px-4 rounded-full">
-                <Scissors className="w-3.5 h-3.5" />
-                Fatiador
+                <ListOrdered className="w-3.5 h-3.5" />
+                Fila de Impressão
               </Button>
             </Link>
           </div>
@@ -147,13 +146,6 @@ export default function DashboardPage() {
                   {metrics.items_in_queue}
                 </span>
               )}
-            </div>
-          </Link>
-
-          <Link href="/fatiador">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#0F172A] border border-slate-800 text-slate-300 text-xs font-medium hover:bg-slate-800 hover:text-white transition">
-              <Scissors className="w-3.5 h-3.5 text-slate-400" />
-              <span>Fatiar Mesa</span>
             </div>
           </Link>
 

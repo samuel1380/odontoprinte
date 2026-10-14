@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/layout/shell";
 import { OdontoPrintService } from "@/services/odontoprint-service";
 import {
@@ -79,7 +78,6 @@ interface PendingUploadFile {
 
 export default function FilaPage() {
   const { user } = useAuth();
-  const router = useRouter();
 
   // Estados principais (fila organizada em mesas de impressão)
   const [cards, setCards] = useState<PrintCardItem[]>([]);
@@ -664,18 +662,6 @@ export default function FilaPage() {
     setExpandedBatchIds((prev) =>
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
     );
-  };
-
-  // Imprimir pedido: leva ao fatiador somente com os itens deste pedido
-  const handlePrintBatch = (group: OrderGroup) => {
-    const ids = group.items
-      .filter((i) => ["NA_FILA", "PREPARANDO", "FALHOU"].includes(i.status))
-      .map((i) => i.id);
-    if (ids.length === 0) {
-      toast.info("Este pedido não tem itens prontos para imprimir.");
-      return;
-    }
-    router.push(`/fatiador?items=${ids.join(",")}`);
   };
 
   // Apagar pedido (com confirmação; aviso extra se estiver imprimindo)
@@ -2471,21 +2457,7 @@ export default function FilaPage() {
               )}
             </div>
 
-            <div className="flex items-center justify-between pt-3 border-t border-slate-800">
-              <button
-                type="button"
-                onClick={() => {
-                  if (batchToPrintDirectly) {
-                    const ids = batchToPrintDirectly.items
-                      .filter((i) => ["NA_FILA", "PREPARANDO", "FALHOU"].includes(i.status))
-                      .map((i) => i.id);
-                    router.push(`/fatiador?items=${ids.join(",")}`);
-                  }
-                }}
-                className="text-xs text-slate-400 hover:text-white underline underline-offset-2"
-              >
-                Opções avançadas (Abrir no Fatiador)
-              </button>
+            <div className="flex items-center justify-end pt-3 border-t border-slate-800">
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"

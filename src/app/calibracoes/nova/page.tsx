@@ -174,7 +174,7 @@ function NovaCalibracaoContent() {
 
       if (res.approved) {
         toast.success("Calibração aprovada e finalizada!", {
-          description: "A resina e a impressora agora estão liberadas para seleção no Fatiador.",
+          description: "A resina e a impressora agora estão liberadas para impressão.",
         });
         router.push("/calibracoes");
       }
