@@ -82,18 +82,14 @@ Abra [http://localhost:3000](http://localhost:3000) no seu navegador.
 
 ## 🗄️ Configuração do Banco de Dados no Supabase Cloud
 
-Para conectar seu próprio banco Supabase PostgreSQL em produção, basta executar as migrations numeradas no **SQL Editor** do painel do Supabase:
+Para conectar seu próprio banco Supabase PostgreSQL em produção, basta executar o script unificado no **SQL Editor** do painel do Supabase:
 
 1. Acesse o painel do seu projeto no Supabase > **SQL Editor**.
-2. Execute em ordem os arquivos presentes na pasta `supabase/migrations/`:
-   - `001_initial_schema.sql` (Tabelas, enums, sequences e índices)
-   - `002_rls.sql` (Políticas granulares de Row Level Security para ADMIN, CADISTA, OPERADORES)
-   - `003_functions.sql` (Funções RPC atômicas: `generate_print_run_code` e `finalize_print_run`)
-   - `004_views.sql` (Views calculadas: `printer_availability_view`, `eligible_resin_calibrations_view`, `print_queue_view`)
-   - `005_realtime.sql` (Publicação em tempo real para fila e impressões)
-   - `006_seed_support.sql` (Configurações padrão)
-3. Em seguida, execute o script de dados de demonstração:
+2. Cole e execute o arquivo `supabase/setup_completo.sql` (cria 100% da estrutura, tabelas, enums, triggers, RPCs, views e permissões operacionais de uma só vez).
+3. *(Opcional)* Caso deseje carregar dados de demonstração iniciais, execute em seguida:
    - `supabase/seed.sql` (Insere as 3 impressoras em estados distintos, os lotes de resina e 6 pacientes na fila).
+4. *(Bancos já existentes)* Se o seu banco já foi criado anteriormente e você precisa apenas aplicar as novidades da esteira e mesas de impressão sem perder dados:
+   - `supabase/migrations/20261014_fix_mesa_print_jobs_prod.sql`
 
 ---
 

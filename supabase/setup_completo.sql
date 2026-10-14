@@ -286,6 +286,13 @@ CREATE TABLE IF NOT EXISTS public.print_item_history (
 -- 4. SEQUENCES E ÍNDICES
 CREATE SEQUENCE IF NOT EXISTS print_run_normal_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE IF NOT EXISTS print_run_retry_seq START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE IF NOT EXISTS print_batch_number_seq START WITH 1 INCREMENT BY 1;
+
+ALTER TABLE public.print_batches
+    ALTER COLUMN batch_number SET DEFAULT nextval('print_batch_number_seq');
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_print_batches_number_unique
+    ON public.print_batches(batch_number);
 
 CREATE INDEX IF NOT EXISTS idx_cases_patient_code ON public.cases(patient_code);
 CREATE INDEX IF NOT EXISTS idx_print_jobs_status ON public.print_jobs(status);
@@ -295,6 +302,16 @@ CREATE INDEX IF NOT EXISTS idx_print_job_items_is_retry ON public.print_job_item
 CREATE INDEX IF NOT EXISTS idx_printer_maintenances_printer ON public.printer_maintenances(printer_id, performed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_resin_calibrations_combo ON public.resin_calibrations(resin_batch_id, printer_id, status);
 CREATE INDEX IF NOT EXISTS idx_print_runs_code ON public.print_runs(run_code);
+
+CREATE INDEX IF NOT EXISTS idx_print_job_items_file_hash ON public.print_job_items(file_hash);
+CREATE INDEX IF NOT EXISTS idx_print_job_items_file_name ON public.print_job_items(file_name);
+CREATE INDEX IF NOT EXISTS idx_print_job_items_clinic ON public.print_job_items(clinic_name);
+CREATE INDEX IF NOT EXISTS idx_print_job_items_cadista ON public.print_job_items(cadista_name);
+CREATE INDEX IF NOT EXISTS idx_print_job_items_work_type ON public.print_job_items(work_type);
+CREATE INDEX IF NOT EXISTS idx_print_job_items_batch ON public.print_job_items(batch_id);
+CREATE INDEX IF NOT EXISTS idx_print_job_items_updated ON public.print_job_items(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_print_item_history_item ON public.print_item_history(item_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_print_batches_status ON public.print_batches(status);
 
 -- 5. FUNÇÕES AUXILIARES E ATÔMICAS (RPC)
 CREATE OR REPLACE FUNCTION public.get_my_role()
@@ -568,6 +585,12 @@ BEGIN
     EXCEPTION WHEN duplicate_object THEN null; WHEN undefined_object THEN null; END;
     BEGIN
         ALTER PUBLICATION supabase_realtime ADD TABLE public.print_jobs;
+    EXCEPTION WHEN duplicate_object THEN null; WHEN undefined_object THEN null; END;
+    BEGIN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.cases;
+    EXCEPTION WHEN duplicate_object THEN null; WHEN undefined_object THEN null; END;
+    BEGIN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.print_batches;
     EXCEPTION WHEN duplicate_object THEN null; WHEN undefined_object THEN null; END;
     BEGIN
         ALTER PUBLICATION supabase_realtime ADD TABLE public.print_runs;
