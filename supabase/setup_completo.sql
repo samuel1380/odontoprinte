@@ -272,6 +272,15 @@ CREATE TABLE IF NOT EXISTS public.print_batches (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Garante que se print_batches já existia no banco do usuário, as colunas novas sejam adicionadas
+ALTER TABLE public.print_batches
+    ADD COLUMN IF NOT EXISTS batch_number INT,
+    ADD COLUMN IF NOT EXISTS printer_name TEXT,
+    ADD COLUMN IF NOT EXISTS printer_id UUID REFERENCES public.printers(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'EM_PREPARO',
+    ADD COLUMN IF NOT EXISTS failure_reason TEXT,
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
 CREATE TABLE IF NOT EXISTS public.print_item_history (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     item_id UUID NOT NULL REFERENCES public.print_job_items(id) ON DELETE CASCADE,
@@ -288,11 +297,46 @@ CREATE SEQUENCE IF NOT EXISTS print_run_normal_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE IF NOT EXISTS print_run_retry_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE IF NOT EXISTS print_batch_number_seq START WITH 1 INCREMENT BY 1;
 
+-- Preenche lotes antigos que tenham batch_number nulo
+WITH numbered AS (
+    SELECT id, ROW_NUMBER() OVER (ORDER BY created_at ASC) AS rn
+    FROM public.print_batches
+    WHERE batch_number IS NULL
+)
+UPDATE public.print_batches b
+SET batch_number = numbered.rn + COALESCE(
+    (SELECT MAX(batch_number) FROM public.print_batches WHERE batch_number IS NOT NULL), 0
+)
+FROM numbered
+WHERE b.id = numbered.id;
+
 ALTER TABLE public.print_batches
     ALTER COLUMN batch_number SET DEFAULT nextval('print_batch_number_seq');
 
+SELECT setval(
+    'print_batch_number_seq',
+    COALESCE((SELECT MAX(batch_number) FROM public.print_batches), 0) + 1,
+    false
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_print_batches_number_unique
     ON public.print_batches(batch_number);
+
+-- Garante updated_at em cases, print_jobs e print_job_items
+ALTER TABLE IF EXISTS public.cases
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE IF EXISTS public.cases
+    ALTER COLUMN updated_at SET DEFAULT now();
+
+ALTER TABLE IF EXISTS public.print_jobs
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE IF EXISTS public.print_jobs
+    ALTER COLUMN updated_at SET DEFAULT now();
+
+ALTER TABLE IF EXISTS public.print_job_items
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE IF EXISTS public.print_job_items
+    ALTER COLUMN updated_at SET DEFAULT now();
 
 CREATE INDEX IF NOT EXISTS idx_cases_patient_code ON public.cases(patient_code);
 CREATE INDEX IF NOT EXISTS idx_print_jobs_status ON public.print_jobs(status);
