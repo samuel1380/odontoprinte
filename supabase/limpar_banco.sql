@@ -7,6 +7,8 @@
 -- 1. Esvazia todas as tabelas operacionais em cascata mantendo a estrutura
 TRUNCATE TABLE 
     public.audit_logs,
+    public.print_item_history,
+    public.print_batches,
     public.print_run_items,
     public.print_runs,
     public.print_job_items,

@@ -766,6 +766,70 @@ export class OdontoPrintService {
     };
   }
 
+  /**
+   * Garante que todos os casos referenciados existam de verdade no Supabase
+   * ANTES de inserir print_jobs. Sem isso, um caso "fantasma" (id que só
+   * existe no navegador — banco zerado, uso offline, outro aparelho — e foi
+   * reaproveitado pelo código do paciente) derruba o insert dos trabalhos
+   * com "print_jobs_case_id_fkey". Repara reinserindo a linha que falta.
+   */
+  static async ensureCasesExist(
+    client: any,
+    neededCaseIds: string[],
+    casesToInsert: Case[],
+    lookupCases: Case[] = mockCases,
+    rlsHint: (msg: string) => string = () => ""
+  ): Promise<void> {
+    const uniqueIds = Array.from(new Set(neededCaseIds.filter(Boolean)));
+    if (uniqueIds.length === 0 || !client) return;
+
+    const { data, error: selErr } = await client.from("cases").select("id").in("id", uniqueIds);
+    if (selErr) {
+      throw new Error(`Falha ao conferir pacientes no banco: ${selErr.message}${rlsHint(selErr.message)}`);
+    }
+    const existing = new Set((data || []).map((r: any) => r.id));
+    const missing = uniqueIds.filter((id) => !existing.has(id));
+    if (missing.length === 0) return;
+
+    const now = new Date().toISOString();
+    const repairRows: Case[] = [];
+    for (const id of missing) {
+      const fresh = casesToInsert.find((c) => c.id === id);
+      if (fresh) {
+        repairRows.push(fresh);
+        continue;
+      }
+      const stale = lookupCases.find((c) => c.id === id);
+      if (!stale) {
+        throw new Error(
+          `Falha ao gravar pacientes: caso ${id} não existe no banco central e não há dados locais para recuperá-lo. Rode o SQL de setup no Supabase e tente de novo.`
+        );
+      }
+      // Recupera o caso fantasma com o MESMO id (preserva vínculos locais),
+      // sem created_by para nunca travar na FK de profiles.
+      repairRows.push({
+        id: stale.id,
+        patient_code: stale.patient_code,
+        patient_name: stale.patient_name ?? null,
+        notes: (stale as any).notes ?? null,
+        created_by: null,
+        created_at: (stale as any).created_at || now,
+        updated_at: now,
+      } as Case);
+    }
+
+    let { error: insErr } = await client.from("cases").insert(repairRows);
+    if (insErr && ((insErr as any).code === "23503" || insErr.message?.includes("foreign key"))) {
+      const retry = await client
+        .from("cases")
+        .insert(repairRows.map((c) => ({ ...c, created_by: null })));
+      insErr = retry.error;
+    }
+    if (insErr) {
+      throw new Error(`Falha ao gravar pacientes: ${insErr.message}${rlsHint(insErr.message)}`);
+    }
+  }
+
   static async createPrintCards(
     cardsToCreate: Array<{
       patient: string;
@@ -805,6 +869,8 @@ export class OdontoPrintService {
     const newJobIds: string[] = [];
     const casesToInsert: Case[] = [];
     const jobsToInsert: PrintJob[] = [];
+    // Casos reaproveitados do navegador (não criados nesta chamada).
+    const reusedCaseIds = new Set<string>();
 
     if (cardsToCreate[0]) {
       this.saveLastUsedPreferences(cardsToCreate[0].clinic, cardsToCreate[0].cadista);
@@ -831,6 +897,11 @@ export class OdontoPrintService {
         };
         casesToInsert.push(newCase);
         mockCases.unshift(newCase);
+      } else if (!casesToInsert.some((c) => c.id === caseId)) {
+        // Reaproveitou um caso que já estava no navegador: ele pode não
+        // existir no Supabase (banco zerado/offline/outro aparelho).
+        // O ensureCasesExist abaixo confere e repara antes dos jobs.
+        reusedCaseIds.add(caseId);
       }
 
       const jobId = crypto.randomUUID();
@@ -931,6 +1002,10 @@ export class OdontoPrintService {
           /row.level.security|permission denied|not allowed|policy/i.test(msg || "")
             ? " (RLS bloqueando o anon key — rode o SQL 20261014_fix_mesa_print_jobs_prod.sql no Supabase)"
             : "";
+        const fkCaseHint = (msg: string) =>
+          /print_jobs_case_id_fkey/.test(msg || "")
+            ? " (caso do paciente ausente no banco — verifique se o SQL de setup foi aplicado e, se persistir, limpe os dados locais do navegador)"
+            : "";
         if (casesToInsert.length > 0) {
           let { error: caseErr } = await client.from("cases").upsert(casesToInsert);
           if (caseErr && (caseErr.message?.includes("foreign key") || (caseErr as any).code === "23503")) {
@@ -941,6 +1016,16 @@ export class OdontoPrintService {
           if (caseErr) throw new Error(`Falha ao gravar pacientes: ${caseErr.message}${rlsHint(caseErr.message)}`);
         }
 
+        // Blindagem contra "print_jobs_case_id_fkey": confere no banco todos
+        // os casos referenciados (novos + reaproveitados do navegador) e
+        // reinsere os que estiverem faltando ANTES de gravar os trabalhos.
+        const neededCaseIds = Array.from(
+          new Set([...casesToInsert.map((c) => c.id), ...Array.from(reusedCaseIds)])
+        );
+        if (neededCaseIds.length > 0) {
+          await this.ensureCasesExist(client, neededCaseIds, casesToInsert, mockCases, rlsHint);
+        }
+
         if (jobsToInsert.length > 0) {
           let { error: jobErr } = await client.from("print_jobs").insert(jobsToInsert);
           if (jobErr && (jobErr.message?.includes("foreign key") || (jobErr as any).code === "23503")) {
@@ -948,7 +1033,7 @@ export class OdontoPrintService {
             const retry = await client.from("print_jobs").insert(safeJobs);
             jobErr = retry.error;
           }
-          if (jobErr) throw new Error(`Falha ao gravar trabalhos: ${jobErr.message}${rlsHint(jobErr.message)}`);
+          if (jobErr) throw new Error(`Falha ao gravar trabalhos: ${jobErr.message}${rlsHint(jobErr.message)}${fkCaseHint(jobErr.message)}`);
         }
 
         const { error: itemErr } = await client.from("print_job_items").insert(createdItems);
