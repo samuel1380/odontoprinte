@@ -1349,7 +1349,33 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        const { error: batchErr } = await client.from("print_batches").insert(newBatch);
+        let { error: batchErr } = await client.from("print_batches").insert(newBatch);
+        // Colisão de numeração entre dois aparelhos: busca o maior número
+        // real no banco e tenta uma vez com o próximo livre.
+        if (batchErr && /duplicate|unique/i.test(`${batchErr.message || ""} ${(batchErr as any).details || ""}`)) {
+          try {
+            const { data: existing } = await client.from("print_batches").select("id, batch_number");
+            const maxRemote = (existing || []).reduce(
+              (m: number, b: any) => Math.max(m, Number(b?.batch_number) || 0),
+              nextNumber
+            );
+            newBatch.batch_number = maxRemote + 1;
+            newBatch.batch_name = `Impressão #${newBatch.batch_number}`;
+            for (const card of mockPrintJobItems) {
+              if (card.batch_id === batchId) {
+                card.batch_name = newBatch.batch_name;
+                card.updated_at = now;
+              }
+            }
+            mockPrintBatches = mockPrintBatches.map((b) => (b.id === batchId ? { ...newBatch } : b));
+            saveLocal("odontoprint_batches", mockPrintBatches);
+            saveLocal("odontoprint_job_items", mockPrintJobItems);
+            const retry = await client.from("print_batches").insert(newBatch);
+            batchErr = retry.error;
+          } catch (retryErr) {
+            console.warn("Supabase createOrderBatch (retry número) error:", retryErr);
+          }
+        }
         if (batchErr) console.warn("Supabase createOrderBatch (batch) error:", batchErr);
         for (const itemId of params.item_ids) {
           const { error: itemErr } = await client.from("print_job_items").update({
