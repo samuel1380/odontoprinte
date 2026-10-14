@@ -9,16 +9,10 @@ import {
   History,
   Search,
   ChevronRight,
-  Clock,
-  Printer,
-  CheckCircle2,
-  AlertTriangle,
-  FileCheck2,
   Layers,
-  Sparkles,
-  User,
+  XCircle,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -79,28 +73,47 @@ export default function HistoricoPage() {
     <AppShell>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800 pb-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-800 pb-4">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center gap-2">
-              Rastreabilidade de Trabalhos
+              <History className="w-5 h-5 text-cyan-400" />
+              Histórico Completo
             </h1>
             <p className="text-xs text-slate-400 mt-0.5">
-              Pesquise qualquer paciente, código de trabalho ou lote e visualize a linha do tempo ponta a ponta.
+              Busque um paciente e veja a linha do tempo do trabalho.
             </p>
           </div>
+          {!isLoading && cases.length > 0 && (
+            <span className="text-xs text-slate-400 bg-slate-900 border border-slate-800 rounded-md px-2 py-0.5 w-fit">
+              {cases.length} {cases.length === 1 ? "trabalho" : "trabalhos"}
+            </span>
+          )}
         </div>
 
         {/* Search Bar */}
         <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-2.5 bg-[#0F172A] p-3 rounded-2xl border border-slate-800 shadow-2xs">
           <div className="relative flex-1">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Pesquisar por paciente (ex: PAC-100), nome ou lote..."
-              className="w-full pl-9 pr-3 py-1.5 text-xs rounded-full border border-slate-800 focus:outline-none focus:border-cyan-500 bg-[#0B0F19] text-white placeholder:text-slate-500"
+              placeholder="Paciente, código ou lote... (ex: PAC-100)"
+              className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-slate-800 focus:outline-none focus:border-cyan-500 bg-[#0B0F19] text-white placeholder:text-slate-500"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery("");
+                  loadHistory("");
+                }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+                title="Limpar busca"
+              >
+                <XCircle className="w-4 h-4" />
+              </button>
+            )}
           </div>
           <Button type="submit" size="sm" className="font-bold px-5 w-full sm:w-auto justify-center rounded-full bg-white text-slate-950 hover:bg-slate-200">
             Pesquisar
@@ -115,8 +128,30 @@ export default function HistoricoPage() {
             ))}
           </div>
         ) : cases.length === 0 ? (
-          <div className="text-center py-12 bg-[#0F172A] rounded-2xl border border-dashed border-slate-800 p-8 text-xs text-slate-400">
-            Nenhum trabalho encontrado com o termo pesquisado.
+          <div className="text-center bg-[#0F172A] rounded-2xl border border-dashed border-slate-800 p-8">
+            <div className="w-12 h-12 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center mx-auto mb-3">
+              <Search className="w-6 h-6" />
+            </div>
+            <h3 className="text-sm font-semibold text-white">
+              {searchQuery ? "Nada encontrado para essa busca" : "Nenhum trabalho no histórico"}
+            </h3>
+            <p className="text-xs text-slate-400 mt-1 mb-4">
+              {searchQuery
+                ? "Confira o código do paciente ou limpe a busca para ver tudo."
+                : "Os trabalhos concluídos e em produção aparecem aqui."}
+            </p>
+            {searchQuery && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSearchQuery("");
+                  loadHistory("");
+                }}
+                className="border-slate-700 text-slate-300 rounded-full text-xs h-9"
+              >
+                Limpar busca
+              </Button>
+            )}
           </div>
         ) : (
           <div className="space-y-3">
@@ -133,9 +168,9 @@ export default function HistoricoPage() {
                   }`}
                 >
                   <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3 min-w-0">
                       <div
-                        className={`h-10 w-10 rounded-xl flex items-center justify-center font-mono font-black text-sm shrink-0 ${
+                        className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${
                           isReprint
                             ? "bg-rose-950/40 text-rose-300 border border-rose-500/30"
                             : isDone
@@ -143,16 +178,16 @@ export default function HistoricoPage() {
                             : "bg-cyan-950/40 text-cyan-300 border border-cyan-500/30"
                         }`}
                       >
-                        {c.patient_code.replace("PAC-", "")}
+                        <Layers className="w-5 h-5" />
                       </div>
 
-                      <div>
-                        <div className="flex items-center gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-mono font-bold text-sm text-white">
                             {c.patient_code}
                           </span>
                           {c.patient_name && (
-                            <span className="text-slate-400 font-medium">
+                            <span className="text-slate-400 font-medium truncate">
                               &bull; {c.patient_name}
                             </span>
                           )}
@@ -178,18 +213,34 @@ export default function HistoricoPage() {
                             {c.notes}
                           </p>
                         )}
+
+                        {c.items_count > 0 && (
+                          <div className="mt-1.5 h-1 w-full max-w-[220px] rounded-full bg-slate-800 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${
+                                isDone ? "bg-emerald-500" : "bg-cyan-500"
+                              }`}
+                              style={{
+                                width: `${Math.min(
+                                  100,
+                                  Math.round(((c.completed_count || 0) / c.items_count) * 100)
+                                )}%`,
+                              }}
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-4 pl-2 sm:pl-0 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-800">
-                      <div className="text-right">
-                        <span className="text-[10px] text-slate-500 block">Entrada no Sistema</span>
+                    <div className="flex items-center justify-between sm:justify-end gap-4 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800">
+                      <div className="text-left sm:text-right">
+                        <span className="text-[10px] text-slate-500 block">Entrada</span>
                         <span className="font-medium text-slate-300">
                           {formatDate(c.created_at)}
                         </span>
                       </div>
 
-                      <div className="text-right">
+                      <div className="text-left sm:text-right">
                         <span className="text-[10px] text-slate-500 block">Modelos</span>
                         <span className="font-bold text-white">
                           {c.completed_count} / {c.items_count}
@@ -197,7 +248,7 @@ export default function HistoricoPage() {
                       </div>
 
                       <Button size="sm" variant="ghost" className="gap-1 text-cyan-400 hover:text-cyan-300 hover:bg-slate-800 font-semibold">
-                        Ver Histórico
+                        Linha do tempo
                         <ChevronRight className="w-3.5 h-3.5" />
                       </Button>
                     </div>
@@ -232,7 +283,7 @@ export default function HistoricoPage() {
           ) : (
             <div className="py-4 space-y-6">
               {/* Timeline Container */}
-              <div className="relative pl-6 border-l-2 border-slate-800 space-y-6">
+              <div className="relative ml-2 pl-8 border-l-2 border-slate-800 space-y-6">
                 {timelineData.timeline.map((evt) => {
                   const isFailed = evt.type === "FAILED";
                   const isDone = evt.type === "COMPLETED";
@@ -240,7 +291,7 @@ export default function HistoricoPage() {
                   return (
                     <div key={evt.id} className="relative">
                       <div
-                        className={`absolute -left-[31px] top-0.5 h-4 w-4 rounded-full border-2 border-[#0F172A] shadow-sm ${
+                        className={`absolute -left-[41px] top-0.5 h-4 w-4 rounded-full border-2 border-[#0F172A] shadow-sm ${
                           isFailed
                             ? "bg-rose-500"
                             : isDone
@@ -268,7 +319,7 @@ export default function HistoricoPage() {
 
               <div className="pt-4 border-t border-slate-800 flex justify-end">
                 <Button variant="outline" size="sm" onClick={() => setModalOpen(false)} className="rounded-full border-slate-700 bg-slate-800 text-slate-200 hover:text-white hover:bg-slate-700">
-                  Fechar Linha do Tempo
+                  Fechar
                 </Button>
               </div>
             </div>
