@@ -784,9 +784,9 @@ export class OdontoPrintService {
     }>,
     user_id?: string,
     user_name?: string
-  ): Promise<{ success: boolean; created_count: number; error?: string }> {
+  ): Promise<{ success: boolean; created_count: number; created_ids: string[]; error?: string }> {
     if (!cardsToCreate || cardsToCreate.length === 0) {
-      return { success: false, created_count: 0, error: "Nenhum arquivo ou item para cadastrar." };
+      return { success: false, created_count: 0, created_ids: [], error: "Nenhum arquivo ou item para cadastrar." };
     }
 
     mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
@@ -942,12 +942,13 @@ export class OdontoPrintService {
         return {
           success: false,
           created_count: 0,
+          created_ids: [],
           error: err?.message || "Não foi possível gravar no banco central. Verifique a conexão e tente de novo.",
         };
       }
     }
 
-    return { success: true, created_count: createdItems.length };
+    return { success: true, created_count: createdItems.length, created_ids: createdItems.map((i) => i.id) };
   }
 
   static async updateCardStatus(
@@ -1283,6 +1284,154 @@ export class OdontoPrintService {
     }
 
     return { success: true, affected_count: affectedCount };
+  }
+
+  /**
+   * Cria um pedido (lote) para os itens recém-enviados.
+   * Cada pedido é independente: vincula SOMENTE os itens informados,
+   * sem alterar o status deles (continuam Aguardando).
+   */
+  static async createOrderBatch(params: {
+    item_ids: string[];
+    user_id?: string;
+    user_name?: string;
+  }): Promise<{ success: boolean; batch?: PrintBatch; error?: string }> {
+    if (!params.item_ids || params.item_ids.length === 0) {
+      return { success: false, error: "Nenhum item para formar o pedido." };
+    }
+
+    mockPrintBatches = loadLocal("odontoprint_batches", mockPrintBatches);
+    mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
+    mockPrintItemHistory = loadLocal("odontoprint_item_history", mockPrintItemHistory);
+
+    const batchId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const nextNumber =
+      mockPrintBatches.reduce((max, b) => Math.max(max, (b as any).batch_number || 0), 0) + 1;
+
+    const newBatch: PrintBatch = {
+      id: batchId,
+      batch_name: `Impressão #${nextNumber}`,
+      batch_number: nextNumber,
+      printer_name: null,
+      printer_id: null,
+      status: "AGUARDANDO",
+      created_by: params.user_id || null,
+      created_at: now,
+      updated_at: now,
+    };
+
+    mockPrintBatches.unshift(newBatch);
+
+    for (const itemId of params.item_ids) {
+      const card = mockPrintJobItems.find((i) => i.id === itemId);
+      if (card) {
+        card.batch_id = batchId;
+        card.batch_name = newBatch.batch_name;
+        card.updated_at = now;
+        mockPrintItemHistory.unshift({
+          id: crypto.randomUUID(),
+          item_id: itemId,
+          from_status: this.mapDbStatusToCardStatus(card.status),
+          to_status: this.mapDbStatusToCardStatus(card.status),
+          changed_by: params.user_id || null,
+          changed_by_name: params.user_name || "Operador",
+          notes: `Incluído no pedido ${newBatch.batch_name}`,
+          created_at: now,
+        });
+      }
+    }
+
+    saveLocal("odontoprint_batches", mockPrintBatches);
+    saveLocal("odontoprint_job_items", mockPrintJobItems);
+    saveLocal("odontoprint_item_history", mockPrintItemHistory);
+
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        const { error: batchErr } = await client.from("print_batches").insert(newBatch);
+        if (batchErr) console.warn("Supabase createOrderBatch (batch) error:", batchErr);
+        for (const itemId of params.item_ids) {
+          const { error: itemErr } = await client.from("print_job_items").update({
+            batch_id: batchId,
+            batch_name: newBatch.batch_name,
+            updated_at: now,
+          }).eq("id", itemId);
+          if (itemErr) console.warn("Supabase createOrderBatch (item) error:", itemErr);
+        }
+        try {
+          await client.from("print_item_history").insert(
+            mockPrintItemHistory.filter((h) => params.item_ids.includes(h.item_id)).slice(0, params.item_ids.length)
+          );
+        } catch (histErr) {
+          console.warn("Supabase createOrderBatch (history) error:", histErr);
+        }
+      } catch (err) {
+        console.warn("Supabase createOrderBatch error:", err);
+      }
+    }
+
+    return { success: true, batch: newBatch };
+  }
+
+  /**
+   * Apaga um pedido (lote) e seus itens da fila.
+   * Remove referências (mesas, histórico, acabamento) e os trabalhos
+   * que ficarem vazios. Os pacientes (cases) são mantidos.
+   */
+  static async deletePrintBatch(batchId: string): Promise<{ success: boolean; removed_count: number; error?: string }> {
+    mockPrintBatches = loadLocal("odontoprint_batches", mockPrintBatches);
+    mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
+    mockPrintRunItems = loadLocal("odontoprint_print_run_items", mockPrintRunItems);
+    mockPrintItemHistory = loadLocal("odontoprint_item_history", mockPrintItemHistory);
+    mockFinishingItems = loadLocal("odontoprint_finishing_items", mockFinishingItems);
+    mockPrintJobs = loadLocal("odontoprint_jobs", mockPrintJobs);
+
+    const batch = mockPrintBatches.find((b) => b.id === batchId);
+    if (!batch) return { success: false, removed_count: 0, error: "Pedido não encontrado." };
+
+    const itemIds = new Set(mockPrintJobItems.filter((i) => i.batch_id === batchId).map((i) => i.id));
+    const removedCount = itemIds.size;
+    const affectedJobIds = new Set(
+      mockPrintJobItems.filter((i) => itemIds.has(i.id)).map((i) => i.print_job_id)
+    );
+
+    mockPrintRunItems = mockPrintRunItems.filter((ri) => !itemIds.has(ri.print_job_item_id));
+    mockPrintItemHistory = mockPrintItemHistory.filter((h) => !itemIds.has(h.item_id));
+    mockFinishingItems = mockFinishingItems.filter((f) => !itemIds.has(f.id));
+    mockPrintJobItems = mockPrintJobItems.filter((i) => !itemIds.has(i.id));
+    mockPrintBatches = mockPrintBatches.filter((b) => b.id !== batchId);
+    // Trabalhos que ficaram sem nenhum item são removidos junto
+    const remainingJobIds = new Set(mockPrintJobItems.map((i) => i.print_job_id));
+    const emptiedJobIds = Array.from(affectedJobIds).filter((j) => !remainingJobIds.has(j));
+    mockPrintJobs = mockPrintJobs.filter((j) => remainingJobIds.has(j.id));
+
+    saveLocal("odontoprint_print_run_items", mockPrintRunItems);
+    saveLocal("odontoprint_item_history", mockPrintItemHistory);
+    saveLocal("odontoprint_finishing_items", mockFinishingItems);
+    saveLocal("odontoprint_job_items", mockPrintJobItems);
+    saveLocal("odontoprint_batches", mockPrintBatches);
+    saveLocal("odontoprint_jobs", mockPrintJobs);
+
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        if (itemIds.size > 0) {
+          const ids = Array.from(itemIds);
+          await client.from("print_run_items").delete().in("print_job_item_id", ids);
+          await client.from("print_item_history").delete().in("item_id", ids);
+          await client.from("print_job_items").delete().in("id", ids);
+        }
+        await client.from("print_batches").delete().eq("id", batchId);
+        if (emptiedJobIds.length > 0) {
+          await client.from("print_jobs").delete().in("id", emptiedJobIds);
+        }
+      } catch (err) {
+        console.warn("Supabase deletePrintBatch error:", err);
+      }
+    }
+
+    return { success: true, removed_count: removedCount };
   }
 
   static async getPrintBatches(): Promise<Array<PrintBatch & { items_count: number }>> {

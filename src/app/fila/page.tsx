@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/layout/shell";
 import { OdontoPrintService } from "@/services/odontoprint-service";
 import {
@@ -18,37 +19,30 @@ import {
   LAB_WORK_TYPE_LABELS,
   PRINT_CARD_STATUS_CONFIG,
 } from "@/lib/constants";
+import {
+  deriveBatchStatus,
+  BATCH_STATUS_CONFIG,
+  batchTitle,
+  BatchDerivedStatus,
+} from "@/lib/batch-status";
 import { formatDate } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import {
   Plus,
   Upload,
   Search,
-  Filter,
-  Layers,
-  Printer,
   AlertTriangle,
-  RefreshCw,
-  Clock,
-  CheckCircle2,
   XCircle,
-  FileText,
   SlidersHorizontal,
-  FolderArchive,
-  User,
-  Building2,
-  Calendar,
-  AlertOctagon,
   ArrowRight,
-  ArrowLeft,
   Undo2,
   Eye,
   Trash2,
-  Check,
-  ChevronRight,
-  LayoutGrid,
-  List,
+  ChevronDown,
+  Play,
   Sparkles,
+  FileText,
+  Check,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -82,29 +76,23 @@ interface PendingUploadFile {
 
 export default function FilaPage() {
   const { user } = useAuth();
+  const router = useRouter();
 
-  // Estados principais
+  // Estados principais (fila organizada em pedidos/lotes)
   const [cards, setCards] = useState<PrintCardItem[]>([]);
   const [batches, setBatches] = useState<Array<PrintBatch & { items_count: number }>>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<"KANBAN" | "LISTA">("KANBAN");
+  const [expandedBatchIds, setExpandedBatchIds] = useState<string[]>([]);
 
   // Filtros e busca
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<PrintCardStatus | "TODOS">("TODOS");
+  const [statusFilter, setStatusFilter] = useState<BatchDerivedStatus | "TODAS">("TODAS");
   const [clinicFilter, setClinicFilter] = useState("TODAS");
-  const [cadistaFilter, setCadistaFilter] = useState("TODOS");
-  const [batchFilter, setBatchFilter] = useState("TODOS");
   const [onlyReprints, setOnlyReprints] = useState(false);
   const [todayFilter, setTodayFilter] = useState(false);
 
-  // Seleção múltipla para lote
-  const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
-
   // Modais
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
-  const [isManageBatchesModalOpen, setIsManageBatchesModalOpen] = useState(false);
   const [isPatientHistoryModalOpen, setIsPatientHistoryModalOpen] = useState(false);
   const [selectedPatientForHistory, setSelectedPatientForHistory] = useState<string | null>(null);
   const [patientHistoryCards, setPatientHistoryCards] = useState<PrintCardItem[]>([]);
@@ -112,10 +100,9 @@ export default function FilaPage() {
   const [selectedCardForHistory, setSelectedCardForHistory] = useState<PrintCardItem | null>(null);
   const [cardHistoryEntries, setCardHistoryEntries] = useState<PrintItemHistory[]>([]);
 
-  // Modal de Falha de Lote
-  const [batchToFail, setBatchToFail] = useState<(PrintBatch & { items_count?: number }) | null>(null);
-  const [batchFailReason, setBatchFailReason] = useState("");
-  const [isFailingBatch, setIsFailingBatch] = useState(false);
+  // Modal de Apagar Pedido
+  const [batchToDelete, setBatchToDelete] = useState<OrderGroup | null>(null);
+  const [isDeletingBatch, setIsDeletingBatch] = useState(false);
 
   // Modal de Falha de Card Individual
   const [cardToFail, setCardToFail] = useState<PrintCardItem | null>(null);
@@ -138,11 +125,6 @@ export default function FilaPage() {
   const [bulkPriority, setBulkPriority] = useState<"NORMAL" | "URGENTE">("NORMAL");
   const [bulkDueDate, setBulkDueDate] = useState("");
   const [bulkMaterial, setBulkMaterial] = useState("Resina Standard Cinza");
-
-  // Novo Lote
-  const [newBatchName, setNewBatchName] = useState("");
-  const [newBatchPrinter, setNewBatchPrinter] = useState("");
-  const [isCreatingBatch, setIsCreatingBatch] = useState(false);
 
   // Impressões em andamento (ordens EM_IMPRESSAO vinculadas à fila)
   const [activeRuns, setActiveRuns] = useState<ActiveRunInfo[]>([]);
@@ -225,60 +207,115 @@ export default function FilaPage() {
     return Array.from(set).sort();
   }, [cards]);
 
-  const uniqueCadistas = useMemo(() => {
-    const set = new Set<string>();
-    cards.forEach((c) => {
-      if (c.cadista_name) set.add(c.cadista_name);
-    });
-    return Array.from(set).sort();
-  }, [cards]);
+  interface OrderGroup {
+    key: string;
+    batchId: string | null;
+    title: string;
+    batchNumber: number | null;
+    createdAt: string;
+    items: PrintCardItem[];
+    derived: BatchDerivedStatus;
+    printableCount: number;
+    isPrinting: boolean;
+  }
 
-  // Cards filtrados
-  const filteredCards = useMemo(() => {
-    return cards.filter((card) => {
-      if (statusFilter !== "TODOS" && card.status !== statusFilter) return false;
-      if (clinicFilter !== "TODAS" && card.clinic_name.toLowerCase() !== clinicFilter.toLowerCase()) return false;
-      if (cadistaFilter !== "TODOS" && card.cadista_name.toLowerCase() !== cadistaFilter.toLowerCase()) return false;
-      if (batchFilter !== "TODOS" && card.batch_id !== batchFilter) return false;
-      if (onlyReprints && !card.is_retry) return false;
+  // Pedidos (lotes): cada pedido agrupa só os itens dele, mais recentes primeiro.
+  // Itens sem lote (pedidos antigos) ficam no grupo "Sem lote", por último.
+  const orderGroups = useMemo<OrderGroup[]>(() => {
+    const byBatch = new Map<string, PrintCardItem[]>();
+    const loose: PrintCardItem[] = [];
+    for (const card of cards) {
+      if (card.batch_id && batches.some((b) => b.id === card.batch_id)) {
+        const list = byBatch.get(card.batch_id) || [];
+        list.push(card);
+        byBatch.set(card.batch_id, list);
+      } else {
+        loose.push(card);
+      }
+    }
+
+    const groups: OrderGroup[] = [...batches]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .map((b) => {
+        const items = byBatch.get(b.id) || [];
+        return {
+          key: b.id,
+          batchId: b.id,
+          title: batchTitle(b.batch_name, (b as any).batch_number ?? null),
+          batchNumber: (b as any).batch_number ?? null,
+          createdAt: b.created_at,
+          items,
+          derived: deriveBatchStatus(items.map((i) => i.status)),
+          printableCount: items.filter((i) =>
+            ["NA_FILA", "PREPARANDO", "FALHOU"].includes(i.status)
+          ).length,
+          isPrinting: items.some((i) => i.status === "IMPRIMINDO"),
+        };
+      });
+
+    if (loose.length > 0) {
+      groups.push({
+        key: "avulsos",
+        batchId: null,
+        title: "Sem lote — pedidos antigos",
+        batchNumber: null,
+        createdAt: loose.map((i) => i.created_at).sort()[0] || new Date().toISOString(),
+        items: loose,
+        derived: deriveBatchStatus(loose.map((i) => i.status)),
+        printableCount: loose.filter((i) =>
+          ["NA_FILA", "PREPARANDO", "FALHOU"].includes(i.status)
+        ).length,
+        isPrinting: loose.some((i) => i.status === "IMPRIMINDO"),
+      });
+    }
+    return groups;
+  }, [cards, batches]);
+
+  const cardMatchesQuery = (card: PrintCardItem, q: string): boolean => {
+    return (
+      card.patient_code.toLowerCase().includes(q) ||
+      (card.patient_name && card.patient_name.toLowerCase().includes(q)) ||
+      card.clinic_name.toLowerCase().includes(q) ||
+      card.cadista_name.toLowerCase().includes(q) ||
+      card.file_name.toLowerCase().includes(q) ||
+      (LAB_WORK_TYPE_LABELS[card.work_type] || card.work_type).toLowerCase().includes(q)
+    );
+  };
+
+  // Pedidos filtrados
+  const filteredGroups = useMemo(() => {
+    return orderGroups.filter((g) => {
+      if (statusFilter !== "TODAS" && g.derived !== statusFilter) return false;
+      if (clinicFilter !== "TODAS" && !g.items.some((c) => c.clinic_name.toLowerCase() === clinicFilter.toLowerCase())) return false;
+      if (onlyReprints && !g.items.some((c) => c.is_retry)) return false;
       if (todayFilter) {
         const todayStr = new Date().toISOString().split("T")[0];
-        const isToday = card.created_at.startsWith(todayStr) || (card.updated_at && card.updated_at.startsWith(todayStr));
-        if (!isToday) return false;
+        if (!g.createdAt.startsWith(todayStr)) return false;
       }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const matches =
-          card.patient_code.toLowerCase().includes(q) ||
-          (card.patient_name && card.patient_name.toLowerCase().includes(q)) ||
-          card.clinic_name.toLowerCase().includes(q) ||
-          card.cadista_name.toLowerCase().includes(q) ||
-          card.file_name.toLowerCase().includes(q) ||
-          (LAB_WORK_TYPE_LABELS[card.work_type] || card.work_type).toLowerCase().includes(q);
-        if (!matches) return false;
+        const inTitle = g.title.toLowerCase().includes(q);
+        if (!inTitle && !g.items.some((c) => cardMatchesQuery(c, q))) return false;
       }
       return true;
     });
-  }, [cards, statusFilter, clinicFilter, cadistaFilter, batchFilter, onlyReprints, todayFilter, searchQuery]);
+  }, [orderGroups, statusFilter, clinicFilter, onlyReprints, todayFilter, searchQuery]);
 
-  // Contadores por status
+  // Contadores por status do pedido
   const statusCounts = useMemo(() => {
-    const counts: Record<PrintCardStatus, number> = {
-      NA_FILA: 0,
+    const counts: Record<BatchDerivedStatus, number> = {
+      AGUARDANDO: 0,
       PREPARANDO: 0,
       IMPRIMINDO: 0,
       IMPRESSO: 0,
       CONCLUIDO: 0,
-      FALHOU: 0,
-      CANCELADO: 0,
+      ERRO: 0,
     };
-    for (const card of cards) {
-      if (counts[card.status] !== undefined) {
-        counts[card.status]++;
-      }
+    for (const g of orderGroups) {
+      counts[g.derived]++;
     }
     return counts;
-  }, [cards]);
+  }, [orderGroups]);
 
   // Helper para calcular SHA-256 do arquivo
   const computeFileHash = async (file: File): Promise<string> => {
@@ -463,9 +500,24 @@ export default function FilaPage() {
         return;
       }
 
-      toast.success(
-        `${res.created_count} arquivo(s) cadastrado(s) com sucesso na Fila de Impressão!`
-      );
+      // Cada pedido vira um lote separado com somente os itens dele
+      const batchRes = await OdontoPrintService.createOrderBatch({
+        item_ids: res.created_ids,
+        user_id: user?.id,
+        user_name: user?.full_name || bulkCadista,
+      });
+
+      if (batchRes.success && batchRes.batch) {
+        const title = batchTitle(batchRes.batch.batch_name, (batchRes.batch as any).batch_number ?? null);
+        toast.success(
+          `${res.created_count} arquivo(s) salvos no pedido ${title}!`
+        );
+        setExpandedBatchIds([batchRes.batch.id]);
+      } else {
+        toast.success(
+          `${res.created_count} arquivo(s) cadastrado(s) com sucesso na Fila de Impressão!`
+        );
+      }
       setPendingFiles([]);
       setIsUploadModalOpen(false);
       loadData();
@@ -473,6 +525,45 @@ export default function FilaPage() {
       toast.error("Erro inesperado ao salvar arquivos na esteira.");
     } finally {
       setIsSavingCards(false);
+    }
+  };
+
+  // Expandir/recolher pedido
+  const toggleExpandBatch = (key: string) => {
+    setExpandedBatchIds((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  };
+
+  // Imprimir pedido: leva ao fatiador somente com os itens deste pedido
+  const handlePrintBatch = (group: OrderGroup) => {
+    const ids = group.items
+      .filter((i) => ["NA_FILA", "PREPARANDO", "FALHOU"].includes(i.status))
+      .map((i) => i.id);
+    if (ids.length === 0) {
+      toast.info("Este pedido não tem itens prontos para imprimir.");
+      return;
+    }
+    router.push(`/fatiador?items=${ids.join(",")}`);
+  };
+
+  // Apagar pedido (com confirmação; aviso extra se estiver imprimindo)
+  const handleConfirmDeleteBatch = async () => {
+    if (!batchToDelete || !batchToDelete.batchId) return;
+    setIsDeletingBatch(true);
+    try {
+      const res = await OdontoPrintService.deletePrintBatch(batchToDelete.batchId);
+      if (res.success) {
+        toast.success(`Pedido apagado (${res.removed_count} item(ns) removidos da fila).`);
+        setBatchToDelete(null);
+        loadData();
+      } else {
+        toast.error(res.error || "Erro ao apagar pedido.");
+      }
+    } catch {
+      toast.error("Erro ao apagar pedido.");
+    } finally {
+      setIsDeletingBatch(false);
     }
   };
 
@@ -595,77 +686,6 @@ export default function FilaPage() {
     }
   };
 
-  // Criar lote
-  const handleCreateBatch = async () => {
-    if (selectedCardIds.length === 0) {
-      toast.error("Selecione pelo menos um card para montar o lote.");
-      return;
-    }
-    if (!newBatchName.trim()) {
-      toast.error("Dê um nome ou código para o lote de impressão.");
-      return;
-    }
-
-    setIsCreatingBatch(true);
-    try {
-      const res = await OdontoPrintService.createPrintBatch({
-        batch_name: newBatchName.trim(),
-        item_ids: selectedCardIds,
-        printer_name: newBatchPrinter.trim() || undefined,
-        user_id: user?.id,
-        user_name: user?.full_name || "Operador 3D",
-      });
-
-      if (!res.success) {
-        toast.error(res.error || "Erro ao criar lote.");
-        return;
-      }
-
-      toast.success(
-        `Lote "${newBatchName}" criado com ${selectedCardIds.length} cards e movido para Preparando!`
-      );
-      setSelectedCardIds([]);
-      setNewBatchName("");
-      setNewBatchPrinter("");
-      setIsBatchModalOpen(false);
-      loadData();
-    } catch {
-      toast.error("Erro ao criar lote.");
-    } finally {
-      setIsCreatingBatch(false);
-    }
-  };
-
-  // Marcar lote como falhou
-  const handleConfirmFailBatch = async () => {
-    if (!batchToFail) return;
-    setIsFailingBatch(true);
-    try {
-      const res = await OdontoPrintService.failPrintBatch(
-        batchToFail.id,
-        batchFailReason.trim() || undefined,
-        user?.id,
-        user?.full_name || "Operador 3D"
-      );
-
-      if (!res.success) {
-        toast.error(res.error || "Erro ao marcar lote como falhou.");
-        return;
-      }
-
-      toast.error(
-        `Lote marcado como FALHOU. ${res.affected_count} card(s) voltaram para "Na fila" com a tag REIMPRESSÃO!`
-      );
-      setBatchToFail(null);
-      setBatchFailReason("");
-      loadData();
-    } catch {
-      toast.error("Erro ao processar falha do lote.");
-    } finally {
-      setIsFailingBatch(false);
-    }
-  };
-
   // Abrir histórico do paciente
   const handleOpenPatientHistory = async (patientQuery: string) => {
     setSelectedPatientForHistory(patientQuery);
@@ -690,71 +710,17 @@ export default function FilaPage() {
     }
   };
 
-  // Alternar seleção de card
-  const toggleSelectCard = (id: string) => {
-    setSelectedCardIds((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
-    );
-  };
-
-  // Drag and drop HTML5 nativo entre colunas Kanban
-  const handleDragStart = (e: React.DragEvent, cardId: string) => {
-    e.dataTransfer.setData("text/plain", cardId);
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDropOnColumn = async (e: React.DragEvent, targetStatus: PrintCardStatus) => {
-    e.preventDefault();
-    const cardId = e.dataTransfer.getData("text/plain");
-    if (!cardId) return;
-
-    const card = cards.find((c) => c.id === cardId);
-    if (!card || card.status === targetStatus) return;
-
-    try {
-      const res = await OdontoPrintService.updateCardStatus(
-        cardId,
-        targetStatus,
-        undefined,
-        user?.id,
-        user?.full_name || "Operador"
-      );
-      if (res.success) {
-        toast.success(`Card ${card.patient_code} movido para ${PRINT_CARD_STATUS_CONFIG[targetStatus].label}.`);
-        loadData();
-      }
-    } catch {
-      toast.error("Erro ao mover card.");
-    }
-  };
-
-  // Colunas do Kanban — visual neutro e profissional
-  const kanbanColumns: Array<{ status: PrintCardStatus; label: string }> = [
-    { status: "NA_FILA", label: "Na fila" },
-    { status: "PREPARANDO", label: "Preparando" },
-    { status: "IMPRIMINDO", label: "Imprimindo" },
-    { status: "IMPRESSO", label: "Impresso" },
-    { status: "CONCLUIDO", label: "Concluído" },
-  ];
-
   const [showFilters, setShowFilters] = useState(false);
   const hasActiveFilters =
-    statusFilter !== "TODOS" ||
+    statusFilter !== "TODAS" ||
     clinicFilter !== "TODAS" ||
-    cadistaFilter !== "TODOS" ||
-    batchFilter !== "TODOS" ||
     onlyReprints ||
     todayFilter ||
     searchQuery.trim() !== "";
 
   const clearFilters = () => {
-    setStatusFilter("TODOS");
+    setStatusFilter("TODAS");
     setClinicFilter("TODAS");
-    setCadistaFilter("TODOS");
-    setBatchFilter("TODOS");
     setOnlyReprints(false);
     setTodayFilter(false);
     setSearchQuery("");
@@ -771,70 +737,15 @@ export default function FilaPage() {
                 Fila de impressão
               </h1>
               <span className="text-xs text-slate-400 bg-slate-900 border border-slate-800 rounded-md px-2 py-0.5">
-                {filteredCards.length} de {cards.length}
+                {filteredGroups.length} pedido(s)
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Arraste entre colunas ou use Avançar / Voltar.
+              Cada pedido é um lote separado. Toque para expandir.
             </p>
           </div>
 
           <div className="flex items-center gap-2">
-            {selectedCardIds.length > 0 && (
-              <Button
-                onClick={() => {
-                  setNewBatchName(
-                    `Lote #${Math.floor(100 + Math.random() * 900)} – ${new Date().toLocaleDateString("pt-BR", {
-                      day: "2-digit",
-                      month: "2-digit",
-                    })}`
-                  );
-                  setIsBatchModalOpen(true);
-                }}
-                className="bg-white hover:bg-slate-200 text-slate-900 rounded-lg text-xs font-semibold px-3 h-9 gap-1.5"
-              >
-                <Layers className="w-3.5 h-3.5" />
-                <span>Lote ({selectedCardIds.length})</span>
-              </Button>
-            )}
-
-            <Button
-              variant="outline"
-              onClick={() => setIsManageBatchesModalOpen(true)}
-              className="border-slate-700 text-slate-300 hover:bg-slate-800 rounded-lg text-xs h-9 px-3"
-            >
-              <span>Lotes · {batches.length}</span>
-            </Button>
-
-            <div className="flex bg-slate-900 border border-slate-800 rounded-lg p-0.5">
-              <button
-                type="button"
-                onClick={() => setViewMode("KANBAN")}
-                className={`px-2.5 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition ${
-                  viewMode === "KANBAN"
-                    ? "bg-slate-700 text-white"
-                    : "text-slate-400 hover:text-slate-200"
-                }`}
-                title="Ver em colunas"
-              >
-                <LayoutGrid className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Colunas</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("LISTA")}
-                className={`px-2.5 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition ${
-                  viewMode === "LISTA"
-                    ? "bg-slate-700 text-white"
-                    : "text-slate-400 hover:text-slate-200"
-                }`}
-                title="Ver em lista"
-              >
-                <List className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Lista</span>
-              </button>
-            </div>
-
             <Button
               onClick={() => setIsUploadModalOpen(true)}
               className="bg-white hover:bg-slate-200 text-slate-900 rounded-lg text-xs font-semibold px-3 h-9 gap-1.5"
@@ -887,18 +798,18 @@ export default function FilaPage() {
             </button>
           </div>
 
-          {/* Abas de status — rolagem horizontal no mobile */}
+          {/* Abas de status do pedido — rolagem horizontal no mobile */}
           <div className="flex items-center gap-1 px-2.5 pb-2.5 overflow-x-auto">
             {(
               [
-                ["TODOS", `Todos (${cards.length})`],
-                ["NA_FILA", `Na fila (${statusCounts.NA_FILA})`],
+                ["TODAS", `Todos (${orderGroups.length})`],
+                ["AGUARDANDO", `Aguardando (${statusCounts.AGUARDANDO})`],
                 ["PREPARANDO", `Preparando (${statusCounts.PREPARANDO})`],
                 ["IMPRIMINDO", `Imprimindo (${statusCounts.IMPRIMINDO})`],
-                ["IMPRESSO", `Impresso (${statusCounts.IMPRESSO})`],
+                ["IMPRESSO", `Impressos (${statusCounts.IMPRESSO})`],
                 ["CONCLUIDO", `Concluídos (${statusCounts.CONCLUIDO})`],
-                ["FALHOU", `Falhas (${statusCounts.FALHOU})`],
-              ] as Array<[PrintCardStatus | "TODOS", string]>
+                ["ERRO", `Erros (${statusCounts.ERRO})`],
+              ] as Array<[BatchDerivedStatus | "TODAS", string]>
             ).map(([value, label]) => (
               <button
                 key={value}
@@ -916,7 +827,7 @@ export default function FilaPage() {
           </div>
 
           {showFilters && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 px-2.5 pb-2.5 pt-1 border-t border-slate-800/80">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 px-2.5 pb-2.5 pt-1 border-t border-slate-800/80">
               <div className="pt-2">
                 <label className="text-[11px] text-slate-500 font-medium mb-1 block">Clínica</label>
                 <select
@@ -931,37 +842,7 @@ export default function FilaPage() {
                 </select>
               </div>
 
-              <div className="pt-2">
-                <label className="text-[11px] text-slate-500 font-medium mb-1 block">Cadista</label>
-                <select
-                  value={cadistaFilter}
-                  onChange={(e) => setCadistaFilter(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded-lg px-2.5 py-2 text-xs focus:outline-none focus:border-slate-600"
-                >
-                  <option value="TODOS">Todos</option>
-                  {uniqueCadistas.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="pt-2">
-                <label className="text-[11px] text-slate-500 font-medium mb-1 block">Lote</label>
-                <select
-                  value={batchFilter}
-                  onChange={(e) => setBatchFilter(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded-lg px-2.5 py-2 text-xs focus:outline-none focus:border-slate-600"
-                >
-                  <option value="TODOS">Todos</option>
-                  {batches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.batch_name} ({b.items_count})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="sm:col-span-3 flex flex-wrap items-center gap-2 pt-1">
+              <div className="flex flex-wrap items-end gap-2 pt-1 sm:pt-2">
                 <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
                   <input
                     type="checkbox"
@@ -1052,7 +933,7 @@ export default function FilaPage() {
               </div>
             ))}
           </div>
-        ) : filteredCards.length === 0 ? (
+        ) : filteredGroups.length === 0 ? (
           <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-8 text-center">
             <h3 className="text-sm font-semibold text-white">Nada por aqui</h3>
             <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
@@ -1078,293 +959,199 @@ export default function FilaPage() {
               </Button>
             </div>
           </div>
-        ) : viewMode === "KANBAN" ? (
-          /* Colunas — rolagem horizontal no celular, grade no desktop */
-          <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory lg:grid lg:grid-cols-5 lg:overflow-visible">
-            {kanbanColumns.map((col) => {
-              const columnCards = filteredCards.filter((c) => c.status === col.status);
+        ) : (
+          /* Pedidos (lotes) — um cartão por pedido, mais recentes primeiro */
+          <div className="space-y-2.5">
+            {filteredGroups.map((group) => {
+              const cfg = BATCH_STATUS_CONFIG[group.derived];
+              const expanded = expandedBatchIds.includes(group.key);
+              const batchRuns = group.items
+                .map(
+                  (i) =>
+                    runByItemId.get(i.id) ||
+                    (i.last_run_code ? runByCode.get(i.last_run_code) : undefined)
+                )
+                .filter(Boolean) as ActiveRunInfo[];
+              const firstRun = batchRuns[0];
 
               return (
                 <div
-                  key={col.status}
-                  onDragOver={handleDragOver}
-                  onDrop={(e) => handleDropOnColumn(e, col.status)}
-                  className="shrink-0 w-[82vw] sm:w-[320px] lg:w-auto snap-start bg-slate-900/40 border border-slate-800 rounded-xl p-2.5 flex flex-col min-h-[300px] lg:min-h-[480px]"
+                  key={group.key}
+                  className="bg-slate-900/40 border border-slate-800 rounded-xl overflow-hidden"
                 >
-                  <div className="flex items-center justify-between px-1 pb-2 mb-2 border-b border-slate-800">
-                    <h3 className="text-xs font-semibold text-slate-200">
-                      {col.label}
-                    </h3>
-                    <span className="text-[11px] text-slate-500 tabular-nums">
-                      {columnCards.length}
-                    </span>
-                  </div>
-
-                  <div className="space-y-2 flex-1 lg:max-h-[62vh] lg:overflow-y-auto lg:pr-0.5">
-                    {columnCards.length === 0 && (
-                      <p className="text-[11px] text-slate-600 text-center py-6 px-2">
-                        Arraste cards para cá
-                      </p>
-                    )}
-                    {columnCards.map((card) => (
-                      <div
-                        key={card.id}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, card.id)}
-                        className={`min-w-0 overflow-hidden bg-slate-950 border rounded-lg p-2.5 transition cursor-grab active:cursor-grabbing ${
-                          selectedCardIds.includes(card.id)
-                            ? "border-slate-400"
-                            : card.priority === "URGENTE"
-                            ? "border-red-900"
-                            : card.is_retry
-                            ? "border-amber-900"
-                            : "border-slate-800 hover:border-slate-700"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={selectedCardIds.includes(card.id)}
-                            onChange={() => toggleSelectCard(card.id)}
-                            onClick={(e) => e.stopPropagation()}
-                            className="h-3.5 w-3.5 shrink-0 rounded border-slate-700 bg-slate-800"
-                            title="Selecionar para lote"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleOpenPatientHistory(card.patient_code)}
-                            className="min-w-0 flex-1 text-[13px] font-semibold text-white hover:underline underline-offset-2 truncate text-left"
-                            title="Ver histórico do paciente"
-                          >
-                            {card.patient_code}
-                          </button>
-                          {card.priority === "URGENTE" && (
-                            <span className="ml-auto shrink-0 text-[10px] font-semibold text-red-300 bg-red-950 border border-red-900 rounded px-1.5 py-0.5">
-                              Urgente
-                            </span>
-                          )}
-                          {card.priority !== "URGENTE" && card.is_retry && (
-                            <span className="ml-auto shrink-0 text-[10px] font-medium text-amber-300 bg-amber-950/60 border border-amber-900 rounded px-1.5 py-0.5">
-                              {card.retry_count > 1 ? `${card.retry_count}ª tent.` : "Reimpressão"}
-                            </span>
-                          )}
-                        </div>
-
-                        {card.patient_name && (
-                          <p className="text-[11px] text-slate-400 truncate mt-0.5">
-                            {card.patient_name}
-                          </p>
-                        )}
-
-                        <p className="text-[11px] text-slate-500 truncate mt-1">
-                          {card.clinic_name} · {LAB_WORK_TYPE_LABELS[card.work_type] || card.work_type}
-                        </p>
-                        {card.batch_name && (
-                          <p className="text-[11px] text-slate-500 truncate" title={card.batch_name}>
-                            {card.batch_name}
-                          </p>
-                        )}
-                        <p className="text-[11px] text-slate-600 font-mono truncate mt-0.5" title={card.file_name}>
-                          {card.file_name}
-                        </p>
-                        {card.status === "IMPRIMINDO" &&
-                          (runByItemId.get(card.id) ||
-                            (card.last_run_code ? runByCode.get(card.last_run_code) : undefined)) && (
-                            <Link
-                              href={`/impressoes/${
-                                (runByItemId.get(card.id) ||
-                                  runByCode.get(card.last_run_code || ""))!.id
-                              }`}
-                              className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-md px-1.5 py-0.5"
-                              title="Abrir andamento da impressão"
-                            >
-                              {(
-                                runByItemId.get(card.id) ||
-                                runByCode.get(card.last_run_code || "")
-                              )!.run_code}
-                              {" · ver impressão"}
-                              <ArrowRight className="w-3 h-3" />
-                            </Link>
-                          )}
-
-                        <div className="flex items-center flex-wrap gap-y-1 gap-x-1 mt-2 pt-2 border-t border-slate-800/70 min-w-0">
-                          {getPreviousStatus(card.status) && (
-                            <button
-                              type="button"
-                              onClick={() => handleGoBackStatus(card)}
-                              className="shrink-0 px-2 py-1 text-[11px] font-medium text-slate-400 hover:text-white hover:bg-slate-800 rounded-md flex items-center gap-1 whitespace-nowrap"
-                              title={`Voltar para ${PRINT_CARD_STATUS_CONFIG[getPreviousStatus(card.status)!].label}`}
-                            >
-                              <Undo2 className="w-3 h-3 shrink-0" />
-                              Voltar
-                            </button>
-                          )}
-                          {col.status !== "CONCLUIDO" && col.status !== "CANCELADO" && (
-                            <button
-                              type="button"
-                              onClick={() => handleQuickAdvanceStatus(card)}
-                              className="shrink-0 px-2.5 py-1 text-[11px] font-semibold bg-slate-100 hover:bg-white text-slate-900 rounded-md flex items-center gap-1 whitespace-nowrap"
-                            >
-                              Avançar
-                              <ArrowRight className="w-3 h-3 shrink-0" />
-                            </button>
-                          )}
-                          <div className="shrink-0 flex items-center gap-0.5 ml-auto">
-                            <button
-                              type="button"
-                              onClick={() => handleOpenCardHistory(card)}
-                              className="p-1.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded-md transition"
-                              title="Histórico"
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-
-                        {col.status !== "CONCLUIDO" && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCardToFail(card);
-                              setCardFailReason("");
-                            }}
-                            className="mt-1 text-[11px] text-slate-600 hover:text-red-400"
-                          >
-                            Marcar falha
-                          </button>
-                        )}
+                  {/* Cabeçalho do pedido */}
+                  <div
+                    onClick={() => toggleExpandBatch(group.key)}
+                    className="w-full text-left p-3 flex items-center gap-3 hover:bg-slate-800/30 transition cursor-pointer"
+                  >
+                    <ChevronDown
+                      className={`w-4 h-4 shrink-0 text-slate-400 transition-transform ${
+                        expanded ? "" : "-rotate-90"
+                      }`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold text-white">{group.title}</span>
+                        <span
+                          className={`text-[10px] font-medium border rounded px-1.5 py-0.5 ${cfg.chip}`}
+                        >
+                          {cfg.label}
+                        </span>
                       </div>
-                    ))}
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        {formatDate(group.createdAt)} · {group.items.length}{" "}
+                        {group.items.length === 1 ? "item" : "itens"}
+                      </p>
+                      {firstRun && (
+                        <Link
+                          href={`/impressoes/${firstRun.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-slate-300 hover:text-white underline underline-offset-2"
+                        >
+                          Mesa {firstRun.run_code} · acompanhar
+                          <ArrowRight className="w-3 h-3" />
+                        </Link>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePrintBatch(group);
+                        }}
+                        disabled={group.printableCount === 0}
+                        className="h-8 px-3 text-[11px] font-semibold bg-slate-100 hover:bg-white text-slate-900 rounded-lg flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                        title={
+                          group.printableCount === 0
+                            ? "Nada pronto para imprimir neste pedido"
+                            : `Imprimir ${group.printableCount} item(ns) deste pedido`
+                        }
+                      >
+                        <Play className="w-3 h-3" />
+                        Imprimir
+                        {group.printableCount > 0 && <span>· {group.printableCount}</span>}
+                      </button>
+                      {group.batchId && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setBatchToDelete(group);
+                          }}
+                          className="h-8 px-2.5 text-[11px] font-medium text-slate-400 hover:text-red-300 hover:bg-slate-800 rounded-lg flex items-center gap-1"
+                          title="Apagar pedido"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Apagar</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
+
+                  {/* Itens do pedido (recolhidos por padrão) */}
+                  {expanded && (
+                    <div className="border-t border-slate-800 divide-y divide-slate-800/60">
+                      {group.items.map((card) => {
+                        const statusCfg = PRINT_CARD_STATUS_CONFIG[card.status];
+                        const itemRun =
+                          runByItemId.get(card.id) ||
+                          (card.last_run_code ? runByCode.get(card.last_run_code) : undefined);
+                        return (
+                          <div key={card.id} className="p-2.5 pl-4 sm:pl-5 min-w-0">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenPatientHistory(card.patient_code)}
+                                className="min-w-0 flex-1 truncate text-left text-[13px] font-semibold text-white hover:underline underline-offset-2"
+                                title="Ver histórico do paciente"
+                              >
+                                {card.patient_code}
+                              </button>
+                              {card.priority === "URGENTE" && (
+                                <span className="shrink-0 text-[10px] font-semibold text-red-300 bg-red-950 border border-red-900 rounded px-1.5 py-0.5">
+                                  Urgente
+                                </span>
+                              )}
+                              {card.priority !== "URGENTE" && card.is_retry && (
+                                <span className="shrink-0 text-[10px] font-medium text-amber-300 bg-amber-950/60 border border-amber-900 rounded px-1.5 py-0.5">
+                                  {card.retry_count > 1 ? `${card.retry_count}ª tent.` : "Reimpressão"}
+                                </span>
+                              )}
+                              <span className="shrink-0 text-[10px] text-slate-300 bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5">
+                                {statusCfg.label}
+                              </span>
+                            </div>
+
+                            {card.patient_name && (
+                              <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                                {card.patient_name}
+                              </p>
+                            )}
+                            <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                              {card.clinic_name} ·{" "}
+                              {LAB_WORK_TYPE_LABELS[card.work_type] || card.work_type}
+                            </p>
+                            <p
+                              className="text-[11px] text-slate-600 font-mono truncate"
+                              title={card.file_name}
+                            >
+                              {card.file_name}
+                            </p>
+
+                            <div className="flex items-center flex-wrap gap-y-1 gap-x-1 mt-1.5 min-w-0">
+                              {getPreviousStatus(card.status) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleGoBackStatus(card)}
+                                  className="shrink-0 px-2 py-1 text-[11px] font-medium text-slate-400 hover:text-white hover:bg-slate-800 rounded-md flex items-center gap-1 whitespace-nowrap"
+                                  title={`Voltar para ${
+                                    PRINT_CARD_STATUS_CONFIG[getPreviousStatus(card.status)!].label
+                                  }`}
+                                >
+                                  <Undo2 className="w-3 h-3 shrink-0" />
+                                  Voltar
+                                </button>
+                              )}
+                              {card.status !== "CONCLUIDO" && card.status !== "CANCELADO" && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickAdvanceStatus(card)}
+                                  className="shrink-0 px-2.5 py-1 text-[11px] font-semibold bg-slate-100 hover:bg-white text-slate-900 rounded-md flex items-center gap-1 whitespace-nowrap"
+                                >
+                                  Avançar
+                                  <ArrowRight className="w-3 h-3 shrink-0" />
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleOpenCardHistory(card)}
+                                className="shrink-0 p-1.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded-md transition"
+                                title="Histórico"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
+                              {card.status !== "CONCLUIDO" && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCardToFail(card);
+                                    setCardFailReason("");
+                                  }}
+                                  className="shrink-0 text-[11px] text-slate-600 hover:text-red-400"
+                                >
+                                  Marcar falha
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}
-          </div>
-        ) : (
-          /* Lista */
-          <div className="bg-slate-900/40 border border-slate-800 rounded-xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs min-w-[860px]">
-                <thead className="bg-slate-950/60 text-slate-500 border-b border-slate-800 text-[11px] font-medium">
-                  <tr>
-                    <th className="p-3 w-10 text-center">
-                      <input
-                        type="checkbox"
-                        checked={selectedCardIds.length === filteredCards.length && filteredCards.length > 0}
-                        onChange={() => {
-                          if (selectedCardIds.length === filteredCards.length) {
-                            setSelectedCardIds([]);
-                          } else {
-                            setSelectedCardIds(filteredCards.map((c) => c.id));
-                          }
-                        }}
-                        className="h-3.5 w-3.5 rounded border-slate-700 bg-slate-800"
-                      />
-                    </th>
-                    <th className="p-3 font-medium">Paciente</th>
-                    <th className="p-3 font-medium">Clínica</th>
-                    <th className="p-3 font-medium">Trabalho</th>
-                    <th className="p-3 font-medium">Arquivo</th>
-                    <th className="p-3 font-medium">Status</th>
-                    <th className="p-3 font-medium">Lote</th>
-                    <th className="p-3 text-right font-medium">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60">
-                  {filteredCards.map((card) => {
-                    const statusCfg = PRINT_CARD_STATUS_CONFIG[card.status];
-
-                      return (
-                      <tr key={card.id} className="hover:bg-slate-800/30 transition border-b border-slate-800/50 last:border-0">
-                        <td className="p-3 text-center">
-                          <input
-                            type="checkbox"
-                            checked={selectedCardIds.includes(card.id)}
-                            onChange={() => toggleSelectCard(card.id)}
-                            className="h-3.5 w-3.5 rounded border-slate-700 bg-slate-800"
-                          />
-                        </td>
-                        <td className="p-3">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenPatientHistory(card.patient_code)}
-                            className="font-semibold text-white hover:underline underline-offset-2 text-left"
-                          >
-                            {card.patient_code}
-                          </button>
-                          {card.patient_name && (
-                            <div className="text-[11px] text-slate-500 mt-0.5 truncate max-w-[160px]">{card.patient_name}</div>
-                          )}
-                          {card.is_retry && (
-                            <span className="text-[10px] text-amber-400">Reimpressão</span>
-                          )}
-                        </td>
-                        <td className="p-3">
-                          <div className="text-slate-300">{card.clinic_name}</div>
-                        </td>
-                        <td className="p-3 text-slate-400">
-                          {LAB_WORK_TYPE_LABELS[card.work_type] || card.work_type}
-                        </td>
-                        <td className="p-3">
-                          <span className="font-mono text-[11px] text-slate-400 truncate max-w-[180px] block" title={card.file_name}>
-                            {card.file_name}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <span className="text-[11px] text-slate-300 bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5">
-                            {statusCfg.label}
-                          </span>
-                          {card.status === "IMPRIMINDO" &&
-                            (runByItemId.get(card.id) ||
-                              (card.last_run_code ? runByCode.get(card.last_run_code) : undefined)) && (
-                              <Link
-                                href={`/impressoes/${
-                                  (runByItemId.get(card.id) ||
-                                    runByCode.get(card.last_run_code || ""))!.id
-                                }`}
-                                className="block mt-1 text-[11px] text-slate-400 hover:text-white underline underline-offset-2"
-                              >
-                                {
-                                  (
-                                    runByItemId.get(card.id) ||
-                                    runByCode.get(card.last_run_code || "")
-                                  )!.run_code
-                                }{" · acompanhar"}
-                              </Link>
-                            )}
-                        </td>
-                        <td className="p-3 text-slate-500">
-                          {card.batch_name || "—"}
-                        </td>
-                        <td className="p-3 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            {getPreviousStatus(card.status) && (
-                              <button
-                                type="button"
-                                onClick={() => handleGoBackStatus(card)}
-                                className="h-7 px-2 text-[11px] text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg"
-                                title={`Voltar para ${PRINT_CARD_STATUS_CONFIG[getPreviousStatus(card.status)!].label}`}
-                              >
-                                Voltar
-                              </button>
-                            )}
-                            {card.status !== "CONCLUIDO" && card.status !== "CANCELADO" && (
-                              <button
-                                type="button"
-                                onClick={() => handleQuickAdvanceStatus(card)}
-                                className="h-7 px-2.5 text-[11px] font-semibold bg-slate-100 hover:bg-white text-slate-900 rounded-lg"
-                              >
-                                Avançar
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
           </div>
         )}
 
@@ -1754,189 +1541,67 @@ export default function FilaPage() {
         </Dialog>
 
         {/* ==================================================================== */}
-        {/* MODAL 2: CRIAR LOTE / PLACA DE IMPRESSÃO */}
+        {/* MODAL 2: APAGAR PEDIDO (COM CONFIRMAÇÃO + AVISO SE IMPRIMINDO) */}
         {/* ==================================================================== */}
         <Dialog
-          open={isBatchModalOpen}
-          onOpenChange={setIsBatchModalOpen}
-          title="Criar Lote / Placa de Impressão"
+          open={Boolean(batchToDelete)}
+          onOpenChange={(open) => {
+            if (!open) setBatchToDelete(null);
+          }}
+          title="Apagar pedido"
         >
           <div className="space-y-4">
+            {batchToDelete?.isPrinting && (
+              <div className="bg-red-950/40 border border-red-900 rounded-xl p-3.5 flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                <div className="text-xs space-y-1">
+                  <p className="font-bold text-red-200">
+                    Atenção: este pedido está IMPRIMINDO
+                  </p>
+                  <p className="text-red-300/80">
+                    Apagar agora vai retirar os modelos da mesa em andamento e
+                    remover o pedido e seus itens da fila.
+                  </p>
+                </div>
+              </div>
+            )}
+
             <p className="text-xs text-slate-300">
-              Você selecionou <strong>{selectedCardIds.length} card(s)</strong> para agrupar em uma mesa/lote de impressão.
+              Tem certeza que deseja apagar{" "}
+              <strong>{batchToDelete?.title}</strong>? Serão removidos{" "}
+              <strong>
+                {batchToDelete?.items.length}{" "}
+                {batchToDelete && batchToDelete.items.length === 1 ? "item" : "itens"}
+              </strong>{" "}
+              da fila
+              {batchToDelete && batchToDelete.items.length > 0 && (
+                <>
+                  {" "}(
+                  {batchToDelete.items
+                    .slice(0, 5)
+                    .map((i) => i.patient_code)
+                    .join(", ")}
+                  {batchToDelete.items.length > 5 && ", ..."})
+                </>
+              )}
+              . Os pacientes são mantidos.
             </p>
-
-            <div>
-              <label className="text-xs font-medium text-slate-300 block mb-1">
-                Nome / Código do Lote *
-              </label>
-              <input
-                type="text"
-                required
-                value={newBatchName}
-                onChange={(e) => setNewBatchName(e.target.value)}
-                placeholder="Ex: Impressão #123 – 08/10 14:30 – Halot"
-                className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-cyan-400"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-slate-300 block mb-1">
-                Impressora 3D (Opcional)
-              </label>
-              <input
-                type="text"
-                value={newBatchPrinter}
-                onChange={(e) => setNewBatchPrinter(e.target.value)}
-                placeholder="Ex: Creality Halot Mage Pro 8K"
-                className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-cyan-400"
-              />
-            </div>
-
-            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-xs text-slate-400 space-y-1">
-              <p className="font-semibold text-slate-300">Benefício da gestão por lote:</p>
-              <p>• Permite rastrear todos os modelos juntos na mesma placa.</p>
-              <p>• Se a mesa descolar ou falhar, um único clique devolve todos os cards à fila com a tag Reimpressão.</p>
-            </div>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
               <Button
                 variant="outline"
-                onClick={() => setIsBatchModalOpen(false)}
-                className="border-slate-700 text-slate-300 rounded-full text-xs h-9"
+                onClick={() => setBatchToDelete(null)}
+                className="border-slate-700 text-slate-300 rounded-lg text-xs h-9"
               >
                 Cancelar
               </Button>
 
               <Button
-                disabled={isCreatingBatch}
-                onClick={handleCreateBatch}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-full text-xs h-9 px-5"
+                disabled={isDeletingBatch}
+                onClick={handleConfirmDeleteBatch}
+                className="bg-red-600 hover:bg-red-500 text-white font-semibold rounded-lg text-xs h-9 px-5"
               >
-                {isCreatingBatch ? "Criando Lote..." : "Confirmar Lote"}
-              </Button>
-            </div>
-          </div>
-        </Dialog>
-
-        {/* ==================================================================== */}
-        {/* MODAL 3: GERENCIAR LOTES & MARCAR LOTE COMO FALHOU */}
-        {/* ==================================================================== */}
-        <Dialog
-          open={isManageBatchesModalOpen}
-          onOpenChange={setIsManageBatchesModalOpen}
-          title="Lotes / Placas de Impressão Ativas"
-        >
-          <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
-            {batches.length === 0 ? (
-              <p className="text-xs text-slate-400 text-center py-6">
-                Nenhum lote criado ainda. Selecione cards na fila e clique em "Criar Lote/Placa".
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {batches.map((batch) => (
-                  <div
-                    key={batch.id}
-                    className="bg-slate-900 border border-slate-800 rounded-xl p-3.5 space-y-2.5"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="text-xs font-bold text-white">{batch.batch_name}</h4>
-                        <p className="text-[10px] text-slate-400 mt-0.5">
-                          Criado em {formatDate(batch.created_at)} &bull; {batch.items_count} cards vinculados
-                        </p>
-                      </div>
-
-                      <Badge
-                        variant="outline"
-                        className={
-                          batch.status === "FALHOU"
-                            ? "bg-rose-500/20 text-rose-300 border-rose-500/40 text-[10px]"
-                            : "bg-indigo-500/20 text-indigo-300 border-indigo-500/40 text-[10px]"
-                        }
-                      >
-                        {batch.status}
-                      </Badge>
-                    </div>
-
-                    {/* Ação Crítica: Marcar Lote Como Falhou */}
-                    {batch.status !== "FALHOU" && (
-                      <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between">
-                        <span className="text-[11px] text-slate-400">
-                          Houve falha na mesa/impressão deste lote?
-                        </span>
-                        <Button
-                          size="sm"
-                          onClick={() => {
-                            setBatchToFail(batch);
-                            setBatchFailReason("");
-                          }}
-                          className="bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white border border-rose-500/40 text-[10px] font-bold h-7 rounded-full px-3"
-                        >
-                          Marcar Lote como Falhou
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </Dialog>
-
-        {/* ==================================================================== */}
-        {/* MODAL 4: CONFIRMAÇÃO DE FALHA DO LOTE (RETORNA TODOS OS CARDS PARA A FILA) */}
-        {/* ==================================================================== */}
-        <Dialog
-          open={Boolean(batchToFail)}
-          onOpenChange={(open) => {
-            if (!open) setBatchToFail(null);
-          }}
-          title="Confirmar Falha do Lote / Placa"
-        >
-          <div className="space-y-4">
-            <div className="bg-rose-500/10 border border-rose-500/40 rounded-xl p-3.5 flex items-start gap-3">
-              <AlertOctagon className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-              <div className="text-xs space-y-1">
-                <p className="font-bold text-rose-200">
-                  Atenção: Ação de recuperação automática da fila
-                </p>
-                <p className="text-rose-300/80">
-                  Ao marcar este lote como falhou, <strong>TODOS os {batchToFail?.items_count} cards</strong> deste lote
-                  voltarão automaticamente para o status <strong>"Na fila"</strong> com a tag{" "}
-                  <strong>REIMPRESSÃO</strong> e contagem incrementada.
-                </p>
-              </div>
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-slate-300 block mb-1">
-                Motivo da Falha (Opcional)
-              </label>
-              <input
-                type="text"
-                value={batchFailReason}
-                onChange={(e) => setBatchFailReason(e.target.value)}
-                placeholder="Ex: Suporte descolou da mesa / falta de nivelamento"
-                className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-rose-400"
-              />
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
-              <Button
-                variant="outline"
-                onClick={() => setBatchToFail(null)}
-                className="border-slate-700 text-slate-300 rounded-full text-xs h-9"
-              >
-                Voltar
-              </Button>
-
-              <Button
-                disabled={isFailingBatch}
-                onClick={handleConfirmFailBatch}
-                className="bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-full text-xs h-9 px-5"
-              >
-                {isFailingBatch ? "Processando..." : "Confirmar Falha e Devolver à Fila"}
+                {isDeletingBatch ? "Apagando..." : "Sim, apagar pedido"}
               </Button>
             </div>
           </div>

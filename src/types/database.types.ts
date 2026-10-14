@@ -223,9 +223,10 @@ export interface AuditLog {
 export interface PrintBatch {
   id: string;
   batch_name: string;
+  batch_number?: number | null;
   printer_name?: string | null;
   printer_id?: string | null;
-  status: "EM_PREPARO" | "IMPRIMINDO" | "CONCLUIDO" | "FALHOU";
+  status: "AGUARDANDO" | "EM_PREPARO" | "IMPRIMINDO" | "CONCLUIDO" | "FALHOU";
   failure_reason?: string | null;
   created_by?: string | null;
   created_at: string;

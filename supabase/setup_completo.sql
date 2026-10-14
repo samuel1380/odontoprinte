@@ -262,6 +262,7 @@ ALTER TABLE public.print_job_items
 CREATE TABLE IF NOT EXISTS public.print_batches (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     batch_name TEXT NOT NULL,
+    batch_number INT,
     printer_name TEXT,
     printer_id UUID REFERENCES public.printers(id) ON DELETE SET NULL,
     status TEXT NOT NULL DEFAULT 'EM_PREPARO',
