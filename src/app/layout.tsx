@@ -8,7 +8,7 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "ODONTOPRINT | Sistema de Gestão e Produção 3D Odontológica",
-  description: "Controle e rastreabilidade de ponta a ponta do fluxo de impressão 3D e fresagem para laboratórios odontológicos.",
+  description: "Controle e rastreabilidade de ponta a ponta do fluxo de impressão 3D para laboratórios odontológicos.",
   icons: {
     icon: "/logo.jpg",
     apple: "/logo.jpg",

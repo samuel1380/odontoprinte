@@ -84,7 +84,7 @@ export const ROLE_PERMISSIONS: Record<string, { label: string; description: stri
   ADMIN: {
     label: "Administrador / Gestor",
     description: "Acesso irrestrito a todos os setores do laboratório, configurações e auditoria.",
-    paths: ["/dashboard", "/cadista/status", "/fila", "/impressoes", "/resinas", "/calibracoes", "/impressoras", "/historico", "/admin/usuarios", "/admin/configuracoes"],
+    paths: ["/dashboard", "/cadista/status", "/fila", "/resinas", "/calibracoes", "/impressoras", "/historico", "/admin/usuarios", "/admin/configuracoes"],
   },
   CADISTA: {
     label: "Cadista (Design / Modelagem)",
@@ -94,7 +94,7 @@ export const ROLE_PERMISSIONS: Record<string, { label: string; description: stri
   OPERADOR_IMPRESSAO: {
     label: "Operador de Impressão 3D & Resinas",
     description: "Gestão completa da esteira 3D: fila de impressão, envio de mesas, impressoras, resinas e calibrações.",
-    paths: ["/dashboard", "/fila", "/impressoes", "/impressoras", "/resinas", "/calibracoes", "/historico"],
+    paths: ["/dashboard", "/fila", "/impressoras", "/resinas", "/calibracoes", "/historico"],
   },
 };
 

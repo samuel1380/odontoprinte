@@ -14,8 +14,6 @@ import {
   Settings,
   Layers3,
   X,
-  Cog,
-  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -56,21 +54,6 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           title: "Novo Caso (Cadista)",
           href: "/cadista/status",
           icon: FileCheck2,
-        },
-      ],
-    },
-    {
-      group: "Produção 3D",
-      items: [
-        {
-          title: "Acabamento & CQ",
-          href: "/acabamento",
-          icon: Sparkles,
-        },
-        {
-          title: "Fresagem CNC",
-          href: "/fresagem",
-          icon: Cog,
         },
       ],
     },

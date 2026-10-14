@@ -110,7 +110,7 @@ export function buildActivityFeed(
   const items: ActivityItem[] = [];
 
   const linkFor = (log: RawLog): string | undefined => {
-    if (log.entity_type === "print_runs" && log.entity_id) return `/impressoes/${log.entity_id}`;
+    if (log.entity_type === "print_runs" && log.entity_id) return "/fila";
     if (log.entity_type === "printers" && log.entity_id) return `/impressoras/${log.entity_id}`;
     if (log.entity_type === "resin_batches" && log.entity_id) return `/resinas/${log.entity_id}`;
     if (
@@ -200,7 +200,7 @@ export function buildActivityFeed(
           detail: clinic || undefined,
           created_at: log.created_at,
           relative,
-          href: "/acabamento",
+          href: "/fila",
         });
         break;
       }

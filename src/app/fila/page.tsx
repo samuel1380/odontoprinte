@@ -1313,12 +1313,9 @@ export default function FilaPage() {
                               Modelos na Mesa ({activeGroup.items.length}):
                             </p>
                             {activeRun && (
-                              <Link
-                                href={`/impressoes/${activeRun.id}`}
-                                className="text-[10px] text-cyan-400 hover:text-cyan-300 font-semibold"
-                              >
-                                Ordem {activeRun.run_code} →
-                              </Link>
+                              <span className="text-[10px] text-slate-400 font-semibold">
+                                Ordem {activeRun.run_code}
+                              </span>
                             )}
                           </div>
 
@@ -1673,19 +1670,12 @@ export default function FilaPage() {
                 </span>
                 Executando na Impressora ({activeRuns.length})
               </h2>
-              <Link
-                href="/impressoes"
-                className="text-[11px] text-cyan-400 hover:text-cyan-300 underline underline-offset-2"
-              >
-                Gerenciar todas as ordens
-              </Link>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
               {activeRuns.map((run) => (
-                <Link
+                <div
                   key={run.id}
-                  href={`/impressoes/${run.id}`}
-                  className="bg-slate-950 border border-slate-800 hover:border-cyan-500 rounded-xl p-3 transition text-left"
+                  className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-left"
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-mono text-sm font-bold text-white">
@@ -1699,14 +1689,10 @@ export default function FilaPage() {
                     <Printer className="w-3.5 h-3.5 text-cyan-400" />
                     {run.printer_name}
                   </p>
-                  <div className="flex items-center justify-between pt-2 mt-2 border-t border-slate-800/80 text-[11px] text-slate-400">
+                  <div className="pt-2 mt-2 border-t border-slate-800/80 text-[11px] text-slate-400">
                     <span>{run.items_count} arquivo(s) na mesa</span>
-                    <span className="text-cyan-400 flex items-center gap-1 font-semibold">
-                      Acompanhar
-                      <ArrowRight className="w-3 h-3" />
-                    </span>
                   </div>
-                </Link>
+                </div>
               ))}
             </div>
           </div>
@@ -1823,14 +1809,9 @@ export default function FilaPage() {
                       </p>
 
                       {firstRun && (
-                        <Link
-                          href={`/impressoes/${firstRun.id}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-cyan-400 hover:text-cyan-300 underline underline-offset-2"
-                        >
-                          Ordem {firstRun.run_code} · Acompanhar execução
-                          <ArrowRight className="w-3 h-3" />
-                        </Link>
+                        <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400">
+                          Ordem {firstRun.run_code} · em execução
+                        </span>
                       )}
                     </div>
 

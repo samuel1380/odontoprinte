@@ -10,7 +10,7 @@
 O **ODONTOPRINT** digitaliza integralmente o fluxo de trabalho de confecção e impressão 3D de modelos odontológicos, substituindo anotações manuais e planilhas por uma plataforma SaaS de alta precisão, rastreabilidade e controle de qualidade.
 
 ### Fluxo Principal do Sistema:
-1. **Cadista**: Recebe o caso, define o código do paciente (ex: `PAC-100`), seleciona entre **Fresagem** e **Impressão 3D**, e seleciona visualmente quais dos 7 modelos anatômicos serão impressos. O sistema valida que pelo menos 1 item seja selecionado antes de despachar para a fila.
+1. **Cadista**: Recebe o caso, define o código do paciente (ex: `PAC-100`), e seleciona visualmente quais modelos anatômicos serão impressos. O sistema valida que pelo menos 1 item seja selecionado antes de despachar para a fila.
 2. **Fila de Impressão (FIFO)**: Organiza os pacientes e seus arquivos por ordem de entrada. Permite ao operador selecionar peças de múltiplos pacientes para compor a mesma mesa de fatiamento. Itens não selecionados permanecem na fila intactos.
 3. **Envio Direto da Mesa (na Fila)**: Aplica regras técnicas automaticamente:
    - Permite escolher **apenas impressoras ativas com manutenção preventiva aprovada nos últimos 7 dias**.
@@ -136,16 +136,11 @@ Para demonstrar o fluxo completo de ponta a ponta na reunião com a diretoria:
 2b. **Envio da Mesa (modal na Fila)**:
     - No modal, selecione a impressora e confirme o envio.
     - O sistema escolhe automaticamente a resina calibrada para aquela impressora e gera o código sequencial atômico (ex: `A003`, ou prefixo `00A` caso haja modelos de retentativa).
-    - A mesa entra em impressão e pode ser acompanhada em **Impressões**.
+    - A mesa entra em impressão e pode ser acompanhada na aba **Imprimindo** da Fila.
 
 4. **Execução & Apontamento de Falha**:
-   - O sistema abrirá a ordem de impressão em andamento (`/impressoes/[id]`).
-   - Clique no botão **IMPRESSÃO FINALIZADA**.
-   - O modal perguntará: *"Falhou algum modelo durante a impressão?"* -> Clique em **SIM (Houve Falha)**.
-   - Na lista que se abre:
-     - [x] Marque **PAC-100 • Antagonista** como falho (digite o motivo: *"Descolamento do suporte"*).
-     - Deixe o **Modelo de Trabalho** desmarcado (aprovado).
-   - Clique em **Confirmar Falhas e Concluir Ordem**.
+    - Na mesa em impressão, use **Marcar Falha** em um modelo específico (digite o motivo: *"Descolamento do suporte"*) ou **Falha na mesa** para a mesa toda.
+    - Modelos com falha voltam para a fila com prioridade; conclua a mesa com **Concluir Mesa**.
 
 5. **Verificação do Resultado**:
    - Acesse a **Fila de Impressão** (`/fila`):
@@ -153,7 +148,7 @@ Para demonstrar o fluxo completo de ponta a ponta na reunião com a diretoria:
      - O **Troquel** do `PAC-100` **continua intacto na fila**, pois nunca havia sido selecionado.
    - Acesse o **Histórico Completo** (`/historico`):
      - Pesquise por `PAC-100` e abra a **Linha do Tempo**.
-     - Toda a jornada estará registrada: Criação pelo Cadista -> Entrada na Fila -> Fatiamento -> Início da Impressão -> Modelo de Trabalho Concluído -> Falha do Antagonista e Retorno à Fila.
+      - Toda a jornada estará registrada: Criação pelo Cadista -> Entrada na Fila -> Início da Impressão -> Modelo de Trabalho Concluído -> Falha do Antagonista e Retorno à Fila.
 
 ---
 
