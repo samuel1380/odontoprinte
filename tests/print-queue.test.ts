@@ -35,9 +35,11 @@ describe("Fila de Impressão 3D - Cadastro, Lotes, Duplicidade e Backup", () => 
     expect(created?.clinic_name).toBe("Clínica Dental Prime");
     expect(created?.cadista_name).toBe("Lucas Cadista");
     expect(created?.status).toBe("NA_FILA");
-    expect(created?.backup_done).toBe(false);
-    expect(created?.backup_path).toContain("Clínica Dental Prime/PAC-001");
-    expect(created?.backup_path).toContain("PAC001_SUPERIOR.stl");
+    expect(created?.file_size).toBe(15400000);
+    expect(created?.file_hash).toBe("hash12345");
+    // Conteúdo do arquivo nunca vai ao banco: só metadados
+    expect(created?.file_url).toBeNull();
+    expect(created?.backup_path).toBeNull();
   });
 
   it("detecta duplicidade de paciente ignorando maiúsculas, minúsculas e acentos", async () => {
@@ -67,20 +69,27 @@ describe("Fila de Impressão 3D - Cadastro, Lotes, Duplicidade e Backup", () => 
     expect(dupCheck.matches[0].matched_item.patient_code).toBe("JOSÉ ALVES");
   });
 
-  it("marca backup_done automaticamente quando status avança para CONCLUIDO", async () => {
+  it("avança para CONCLUIDO sem gravar conteúdo de arquivo (só metadados)", async () => {
     await OdontoPrintService.createPrintCards([
       {
-        patient: "PAC-BACKUP",
+        patient: "PAC-META",
         clinic: "Clínica Alfa",
         cadista: "Cadista 2",
         work_type: "COROA",
         file_name: "coroa_alfa.stl",
+        file_size: 15234567,
+        file_hash: "hashmeta123",
       },
     ]);
 
     const cards = await OdontoPrintService.getPrintCards();
-    const item = cards.find((c) => c.patient_code === "PAC-BACKUP")!;
-    expect(item.backup_done).toBe(false);
+    const item = cards.find((c) => c.patient_code === "PAC-META")!;
+
+    // Só metadados: nome, tamanho, hash. Nenhum conteúdo/dataURL.
+    expect(item.file_name).toBe("coroa_alfa.stl");
+    expect(item.file_size).toBe(15234567);
+    expect(item.file_hash).toBe("hashmeta123");
+    expect(item.file_url).toBeNull();
 
     // Atualiza status para CONCLUIDO
     await OdontoPrintService.updateCardStatus(item.id, "CONCLUIDO");
@@ -89,8 +98,7 @@ describe("Fila de Impressão 3D - Cadastro, Lotes, Duplicidade e Backup", () => 
     const updatedItem = updatedCards.find((c) => c.id === item.id)!;
 
     expect(updatedItem.status).toBe("CONCLUIDO");
-    expect(updatedItem.backup_done).toBe(true);
-    expect(updatedItem.backup_done_at).toBeDefined();
+    expect(updatedItem.file_url).toBeNull();
   });
 
   it("agrupa cards em um lote e ao falhar o lote, TODOS os cards retornam para Na Fila com a tag Reimpressão", async () => {

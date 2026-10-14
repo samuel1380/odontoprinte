@@ -27,7 +27,6 @@ import {
   Filter,
   Layers,
   Printer,
-  Download,
   AlertTriangle,
   RefreshCw,
   Clock,
@@ -58,14 +57,13 @@ import { Dialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 
-// Interface do item em processo de upload
+// Interface do item em processo de upload (somente metadados: o conteúdo
+// do arquivo 3D fica na pasta do laboratório e nunca sobe ao banco)
 interface PendingUploadFile {
   id: string;
-  file: File;
   file_name: string;
   file_size: number;
   file_hash: string;
-  file_data?: string;
   patient: string;
   patient_name: string;
   clinic: string;
@@ -245,7 +243,7 @@ export default function FilaPage() {
       if (onlyReprints && !card.is_retry) return false;
       if (todayFilter) {
         const todayStr = new Date().toISOString().split("T")[0];
-        const isToday = card.created_at.startsWith(todayStr) || (card.backup_done_at && card.backup_done_at.startsWith(todayStr));
+        const isToday = card.created_at.startsWith(todayStr) || (card.updated_at && card.updated_at.startsWith(todayStr));
         if (!isToday) return false;
       }
       if (searchQuery.trim()) {
@@ -294,17 +292,8 @@ export default function FilaPage() {
     }
   };
 
-  // Helper para ler dataURL de preview/download
-  const readFileAsDataUrl = (file: File): Promise<string> => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = () => resolve("");
-      reader.readAsDataURL(file.slice(0, 500000)); // amostra
-    });
-  };
-
-  // Adicionar arquivos ao upload
+  // Adicionar arquivos ao upload (lê só nome, tamanho e hash; o conteúdo
+  // do arquivo permanece na pasta do laboratório)
   const handleFilesSelected = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
@@ -328,15 +317,12 @@ export default function FilaPage() {
       const patientSuggestion = nameWithoutExt.split(/[-_]/)[0] || nameWithoutExt;
 
       const hash = await computeFileHash(file);
-      const dataUrl = await readFileAsDataUrl(file);
 
       newItems.push({
         id: crypto.randomUUID(),
-        file,
         file_name: file.name,
         file_size: file.size,
         file_hash: hash,
-        file_data: dataUrl,
         patient: patientSuggestion.toUpperCase(),
         patient_name: "",
         clinic: defaultClinic,
@@ -461,7 +447,6 @@ export default function FilaPage() {
           file_name: item.file_name,
           file_size: item.file_size,
           file_hash: item.file_hash,
-          file_data: item.file_data,
           is_retry: item.reprint_decision === "REPRINT",
           reprint_reason: item.reprint_reason || undefined,
           parent_item_id: item.duplicate_match?.matched_item.id || undefined,
@@ -702,33 +687,6 @@ export default function FilaPage() {
       setCardHistoryEntries(history);
     } catch {
       toast.error("Erro ao carregar histórico do card.");
-    }
-  };
-
-  // Download do arquivo original do card
-  const handleDownloadFile = (card: PrintCardItem) => {
-    const fileData = OdontoPrintService.getUploadedFile(card.file_name);
-    if (fileData) {
-      const a = document.createElement("a");
-      a.href = fileData;
-      a.download = card.file_name;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      toast.success(`Baixando arquivo original: ${card.file_name}`);
-    } else {
-      // Cria um STL de demonstração/backup com o nome do arquivo
-      const dummyStlContent = `solid ${card.patient_code}\nfacet normal 0 0 0\nouter loop\nvertex 0 0 0\nvertex 1 0 0\nvertex 0 1 0\nendloop\nendfacet\nendsolid ${card.patient_code}\n`;
-      const blob = new Blob([dummyStlContent], { type: "application/sla" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = card.file_name;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast.success(`Baixando cópia de backup do STL: ${card.file_name}`);
     }
   };
 
@@ -1254,14 +1212,6 @@ export default function FilaPage() {
                           <div className="shrink-0 flex items-center gap-0.5 ml-auto">
                             <button
                               type="button"
-                              onClick={() => handleDownloadFile(card)}
-                              className="p-1.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded-md transition"
-                              title="Baixar arquivo"
-                            >
-                              <Download className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
                               onClick={() => handleOpenCardHistory(card)}
                               className="p-1.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded-md transition"
                               title="Histórico"
@@ -1356,19 +1306,9 @@ export default function FilaPage() {
                           {LAB_WORK_TYPE_LABELS[card.work_type] || card.work_type}
                         </td>
                         <td className="p-3">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-mono text-[11px] text-slate-400 truncate max-w-[140px]" title={card.file_name}>
-                              {card.file_name}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleDownloadFile(card)}
-                              className="text-slate-500 hover:text-white p-1"
-                              title="Baixar"
-                            >
-                              <Download className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
+                          <span className="font-mono text-[11px] text-slate-400 truncate max-w-[180px] block" title={card.file_name}>
+                            {card.file_name}
+                          </span>
                         </td>
                         <td className="p-3">
                           <span className="text-[11px] text-slate-300 bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5">

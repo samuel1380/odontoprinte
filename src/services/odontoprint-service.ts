@@ -600,9 +600,8 @@ export class OdontoPrintService {
       const cadistaName = item.cadista_name || "Cadista";
       const cardStatus = this.mapDbStatusToCardStatus(item.status);
       const fileName = item.file_name || `${patientCode}_${item.file_type || "MODELO"}.stl`;
-      const dateStr = (item.created_at || new Date().toISOString()).split("T")[0];
-      const backupPath = item.backup_path || `${clinicName}/${patientCode}/${dateStr}/${fileName}`;
-      const backupDone = item.backup_done ?? (cardStatus === "CONCLUIDO");
+      const backupPath = item.backup_path || null;
+      const backupDone = item.backup_done ?? false;
 
       return {
         id: item.id,
@@ -660,7 +659,7 @@ export class OdontoPrintService {
       }
       if (filters.today) {
         const todayStr = new Date().toISOString().split("T")[0];
-        filtered = filtered.filter((c) => c.created_at.startsWith(todayStr) || (c.backup_done_at && c.backup_done_at.startsWith(todayStr)));
+        filtered = filtered.filter((c) => c.created_at.startsWith(todayStr) || (c.updated_at && c.updated_at.startsWith(todayStr)));
       }
       if (filters.search && filters.search.trim()) {
         const q = this.normalizeText(filters.search);
@@ -778,7 +777,6 @@ export class OdontoPrintService {
       file_name: string;
       file_size?: number;
       file_hash?: string;
-      file_data?: string;
       is_retry?: boolean;
       reprint_reason?: string;
       parent_item_id?: string;
@@ -799,6 +797,8 @@ export class OdontoPrintService {
     const now = new Date().toISOString();
     const createdItems: PrintJobItem[] = [];
     const historyEntries: PrintItemHistory[] = [];
+    const newCaseIds: string[] = [];
+    const newJobIds: string[] = [];
 
     if (cardsToCreate[0]) {
       this.saveLastUsedPreferences(cardsToCreate[0].clinic, cardsToCreate[0].cadista);
@@ -811,6 +811,7 @@ export class OdontoPrintService {
       let caseId = existingCase?.id;
       if (!caseId) {
         caseId = crypto.randomUUID();
+        newCaseIds.push(caseId);
         const newCase: Case = {
           id: caseId,
           patient_code: patientCode,
@@ -823,6 +824,7 @@ export class OdontoPrintService {
       }
 
       const jobId = crypto.randomUUID();
+      newJobIds.push(jobId);
       const newJob: PrintJob = {
         id: jobId,
         case_id: caseId,
@@ -835,13 +837,9 @@ export class OdontoPrintService {
       mockPrintJobs.unshift(newJob);
 
       const itemId = crypto.randomUUID();
-      const dateStr = now.split("T")[0];
-      const backupPath = `${card.clinic.trim()}/${patientCode}/${dateStr}/${card.file_name}`;
 
-      if (card.file_data) {
-        this.saveUploadedFile(card.file_name, card.file_data);
-      }
-
+      // Somente metadados do arquivo vão ao banco central (nome, tamanho,
+      // hash). O conteúdo 3D nunca é armazenado: fica na pasta do laboratório.
       const newItem: PrintJobItem = {
         id: itemId,
         print_job_id: jobId,
@@ -860,8 +858,8 @@ export class OdontoPrintService {
         file_name: card.file_name,
         file_size: card.file_size || null,
         file_hash: card.file_hash || null,
-        file_url: card.file_data ? `data-url:${card.file_name}` : null,
-        backup_path: backupPath,
+        file_url: null,
+        backup_path: null,
         backup_done: false,
         parent_item_id: card.parent_item_id || null,
         reprint_count: card.is_retry ? 1 : 0,
@@ -894,12 +892,35 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        await client.from("cases").upsert(mockCases.slice(0, cardsToCreate.length));
-        await client.from("print_jobs").insert(mockPrintJobs.slice(0, cardsToCreate.length));
-        await client.from("print_job_items").insert(createdItems);
-        await client.from("print_item_history").insert(historyEntries);
-      } catch (err) {
-        console.warn("Supabase createPrintCards persist error (fallback mantido):", err);
+        // Gravação no banco central com checagem real de erro.
+        // Antes os erros eram ignorados e a fila só existia no aparelho local.
+        const { error: caseErr } = await client.from("cases").upsert(mockCases.slice(0, cardsToCreate.length));
+        if (caseErr) throw new Error(`Falha ao gravar pacientes: ${caseErr.message}`);
+        const { error: jobErr } = await client.from("print_jobs").insert(mockPrintJobs.slice(0, cardsToCreate.length));
+        if (jobErr) throw new Error(`Falha ao gravar trabalhos: ${jobErr.message}`);
+        const { error: itemErr } = await client.from("print_job_items").insert(createdItems);
+        if (itemErr) throw new Error(`Falha ao gravar itens da fila: ${itemErr.message}`);
+        const { error: histErr } = await client.from("print_item_history").insert(historyEntries);
+        if (histErr) console.warn("Supabase createPrintCards (histórico) error:", histErr);
+      } catch (err: any) {
+        console.warn("Supabase createPrintCards persist error:", err);
+        // Reverte o salvamento local para não criar fila fantasma
+        // visível só neste aparelho (causa do bug relatado).
+        const createdIds = new Set(createdItems.map((i) => i.id));
+        const histIds = new Set(historyEntries.map((h) => h.id));
+        mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems).filter((i) => !createdIds.has(i.id));
+        mockPrintJobs = loadLocal("odontoprint_jobs", mockPrintJobs).filter((j) => !newJobIds.includes(j.id));
+        mockCases = loadLocal("odontoprint_cases", mockCases).filter((c) => !newCaseIds.includes(c.id));
+        mockPrintItemHistory = loadLocal("odontoprint_item_history", mockPrintItemHistory).filter((h) => !histIds.has(h.id));
+        saveLocal("odontoprint_job_items", mockPrintJobItems);
+        saveLocal("odontoprint_jobs", mockPrintJobs);
+        saveLocal("odontoprint_cases", mockCases);
+        saveLocal("odontoprint_item_history", mockPrintItemHistory);
+        return {
+          success: false,
+          created_count: 0,
+          error: err?.message || "Não foi possível gravar no banco central. Verifique a conexão e tente de novo.",
+        };
       }
     }
 
@@ -925,28 +946,16 @@ export class OdontoPrintService {
     const oldStatus = this.mapDbStatusToCardStatus(item.status);
     const now = new Date().toISOString();
 
-    // Guarda contra duplo clique / transição repetida: se já está no destino,
-    // apenas garante backup_done quando CONCLUIDO e retorna sucesso.
+    // Guarda contra duplo clique / transição repetida.
     if (oldStatus === newStatus) {
-      if (newStatus === "CONCLUIDO" && !item.backup_done) {
-        item.backup_done = true;
-        item.backup_done_at = now;
-        item.updated_at = now;
-        saveLocal("odontoprint_job_items", mockPrintJobItems);
-      }
       return { success: true };
     }
 
     item.status = this.mapCardStatusToDbStatus(newStatus) as any;
     item.updated_at = now;
 
-    if (newStatus === "CONCLUIDO") {
-      item.backup_done = true;
-      item.backup_done_at = now;
-    }
-
     // VOLTAR ETAPA: se saiu de CONCLUIDO para uma etapa anterior,
-    // desfaz o backup automático e reabre a bancada se já tinha aprovado.
+    // reabre a bancada se já tinha aprovado.
     const order: Record<string, number> = {
       NA_FILA: 0,
       PREPARANDO: 1,
@@ -957,8 +966,6 @@ export class OdontoPrintService {
     const isStepBack =
       oldStatus in order && newStatus in order && order[newStatus] < order[oldStatus];
     if (isStepBack && oldStatus === "CONCLUIDO") {
-      item.backup_done = false;
-      item.backup_done_at = null;
       const finishing = mockFinishingItems.find((f) => f.id === item.id);
       if (finishing && finishing.status === "APROVADO_CQ") {
         finishing.status = "AGUARDANDO_MONTAGEM";
@@ -1037,7 +1044,7 @@ export class OdontoPrintService {
       entity_type: "print_job_items",
       entity_id: id,
       old_data: { status: oldStatus },
-      new_data: { status: newStatus, notes, backup_done: item.backup_done },
+      new_data: { status: newStatus, notes },
       created_at: now,
     });
 
@@ -1048,12 +1055,10 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        // Tenta o update completo; se o banco de produção ainda não rodou a
-        // migration 20261013 (colunas backup_*, etc.), cai para o mínimo.
+        // Tenta o update completo; se o banco ainda não tem as colunas
+        // da fila avançada, cai para o mínimo (status + updated_at).
         const fullPayload: Record<string, any> = {
           status: item.status,
-          backup_done: item.backup_done,
-          backup_done_at: item.backup_done_at,
           last_failure_reason: item.last_failure_reason,
           retry_count: item.retry_count,
           is_retry: item.is_retry,
@@ -1063,7 +1068,7 @@ export class OdontoPrintService {
         if (fullErr) {
           const msg = `${fullErr.message || ""} ${(fullErr as any).details || ""} ${(fullErr as any).hint || ""}`;
           const isMissingColumn =
-            /column|backup_done|backup_done_at|last_failure_reason|retry_count|is_retry|schema cache|PGRST/i.test(msg);
+            /column|last_failure_reason|retry_count|is_retry|schema cache|PGRST/i.test(msg);
           if (isMissingColumn) {
             const { error: minErr } = await client
               .from("print_job_items")
@@ -1312,28 +1317,6 @@ export class OdontoPrintService {
       .filter((h) => h.item_id === itemId)
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }
-
-  static saveUploadedFile(fileName: string, dataUrl: string): void {
-    if (typeof window !== "undefined") {
-      try {
-        sessionStorage.setItem(`odontoprint_file_${fileName}`, dataUrl);
-      } catch {
-        // quota excedida ou sem suporte
-      }
-    }
-  }
-
-  static getUploadedFile(fileName: string): string | null {
-    if (typeof window !== "undefined") {
-      try {
-        return sessionStorage.getItem(`odontoprint_file_${fileName}`);
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  }
-
 
   // --- IMPRESSORAS E MANUTENÇÕES ---
   static async getPrinters(): Promise<PrinterWithStatus[]> {
@@ -2831,8 +2814,6 @@ export class OdontoPrintService {
     const jobItem = mockPrintJobItems.find((i) => i.id === id);
     if (jobItem) {
       jobItem.status = "CONCLUIDO";
-      jobItem.backup_done = true;
-      jobItem.backup_done_at = jobItem.backup_done_at || now;
       jobItem.updated_at = now;
       saveLocal("odontoprint_job_items", mockPrintJobItems);
 
