@@ -1885,7 +1885,7 @@ export class OdontoPrintService {
   }
 
   /**
-   * Apaga um pedido (lote) e seus itens da fila.
+   * Apaga uma mesa (lote) e seus itens da fila.
    * Remove referências (mesas, histórico, acabamento) e os trabalhos
    * que ficarem vazios. Os pacientes (cases) são mantidos.
    */
@@ -1898,10 +1898,8 @@ export class OdontoPrintService {
     mockPrintJobs = loadLocal("odontoprint_jobs", mockPrintJobs);
 
     const batch = mockPrintBatches.find((b) => b.id === batchId);
-    if (!batch) return { success: false, removed_count: 0, error: "Pedido não encontrado." };
 
     const itemIds = new Set(mockPrintJobItems.filter((i) => i.batch_id === batchId).map((i) => i.id));
-    const removedCount = itemIds.size;
     const affectedJobIds = new Set(
       mockPrintJobItems.filter((i) => itemIds.has(i.id)).map((i) => i.print_job_id)
     );
@@ -1911,6 +1909,7 @@ export class OdontoPrintService {
     mockFinishingItems = mockFinishingItems.filter((f) => !itemIds.has(f.id));
     mockPrintJobItems = mockPrintJobItems.filter((i) => !itemIds.has(i.id));
     mockPrintBatches = mockPrintBatches.filter((b) => b.id !== batchId);
+
     // Trabalhos que ficaram sem nenhum item são removidos junto
     const remainingJobIds = new Set(mockPrintJobItems.map((i) => i.print_job_id));
     const emptiedJobIds = Array.from(affectedJobIds).filter((j) => !remainingJobIds.has(j));
@@ -1923,25 +1922,163 @@ export class OdontoPrintService {
     saveLocal("odontoprint_batches", mockPrintBatches);
     saveLocal("odontoprint_jobs", mockPrintJobs);
 
+    let totalRemoved = itemIds.size;
+
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        if (itemIds.size > 0) {
-          const ids = Array.from(itemIds);
-          await client.from("print_run_items").delete().in("print_job_item_id", ids);
-          await client.from("print_item_history").delete().in("item_id", ids);
-          await client.from("print_job_items").delete().in("id", ids);
+        // Busca todos os itens ligados a esta mesa no Supabase para garantir que nada fique órfão
+        const { data: supaItems } = await client
+          .from("print_job_items")
+          .select("id, print_job_id")
+          .eq("batch_id", batchId);
+
+        const supaItemIds = supaItems ? supaItems.map((i) => i.id) : [];
+        const allItemIds = Array.from(new Set([...Array.from(itemIds), ...supaItemIds]));
+        totalRemoved = Math.max(totalRemoved, allItemIds.length);
+
+        if (allItemIds.length > 0) {
+          await client.from("print_run_items").delete().in("print_job_item_id", allItemIds);
+          await client.from("print_item_history").delete().in("item_id", allItemIds);
+          await client.from("print_job_items").delete().in("id", allItemIds);
         }
-        await client.from("print_batches").delete().eq("id", batchId);
+
+        const { error: batchErr } = await client.from("print_batches").delete().eq("id", batchId);
+        if (batchErr) {
+          console.warn("Supabase deletePrintBatch error:", batchErr);
+          return { success: false, removed_count: totalRemoved, error: batchErr.message };
+        }
+
         if (emptiedJobIds.length > 0) {
           await client.from("print_jobs").delete().in("id", emptiedJobIds);
         }
-      } catch (err) {
+      } catch (err: any) {
         console.warn("Supabase deletePrintBatch error:", err);
+        return { success: false, removed_count: totalRemoved, error: err?.message || "Erro ao apagar mesa no banco." };
+      }
+    } else if (!batch && itemIds.size === 0) {
+      return { success: false, removed_count: 0, error: "Mesa não encontrada." };
+    }
+
+    return { success: true, removed_count: totalRemoved };
+  }
+
+  /**
+   * Esvazia uma mesa de impressão: desvincula todos os itens da mesa
+   * fazendo-os voltar para a fila como avulsos ("Sem mesa").
+   * A mesa continua existindo vazia.
+   */
+  static async emptyPrintBatch(
+    batchId: string,
+    user_id?: string,
+    user_name?: string
+  ): Promise<{ success: boolean; unlinked_count: number; error?: string }> {
+    mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
+    mockPrintBatches = loadLocal("odontoprint_batches", mockPrintBatches);
+    mockPrintItemHistory = loadLocal("odontoprint_item_history", mockPrintItemHistory);
+
+    const batch = mockPrintBatches.find((b) => b.id === batchId);
+    const batchTitle = batch ? batch.batch_name : "Mesa";
+
+    const items = mockPrintJobItems.filter((i) => i.batch_id === batchId);
+    const now = new Date().toISOString();
+
+    for (const item of items) {
+      item.batch_id = null;
+      item.batch_name = null;
+      item.updated_at = now;
+
+      mockPrintItemHistory.unshift({
+        id: crypto.randomUUID(),
+        item_id: item.id,
+        from_status: this.mapDbStatusToCardStatus(item.status),
+        to_status: this.mapDbStatusToCardStatus(item.status),
+        changed_by: user_id || null,
+        changed_by_name: user_name || "Operador",
+        notes: `Tirado da mesa "${batchTitle}" (retornado para avulso)`,
+        created_at: now,
+      });
+    }
+
+    saveLocal("odontoprint_job_items", mockPrintJobItems);
+    saveLocal("odontoprint_item_history", mockPrintItemHistory);
+
+    let totalCount = items.length;
+
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        const { error: updErr } = await client
+          .from("print_job_items")
+          .update({ batch_id: null, batch_name: null, updated_at: now })
+          .eq("batch_id", batchId);
+
+        if (updErr) {
+          console.warn("Supabase emptyPrintBatch error:", updErr);
+          return { success: false, unlinked_count: totalCount, error: updErr.message };
+        }
+      } catch (err: any) {
+        console.warn("Supabase emptyPrintBatch error:", err);
+        return { success: false, unlinked_count: totalCount, error: err?.message || "Erro ao esvaziar mesa no banco." };
       }
     }
 
-    return { success: true, removed_count: removedCount };
+    return { success: true, unlinked_count: totalCount };
+  }
+
+  /**
+   * Apaga um item/card individual de impressão permanentemente da mesa e da fila.
+   * Remove o item de print_job_items, print_run_items e print_item_history.
+   * Se o trabalho pai (print_job) ficar sem itens, remove também o print_job pai.
+   */
+  static async deletePrintCard(cardId: string): Promise<{ success: boolean; error?: string }> {
+    mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
+    mockPrintRunItems = loadLocal("odontoprint_print_run_items", mockPrintRunItems);
+    mockPrintItemHistory = loadLocal("odontoprint_item_history", mockPrintItemHistory);
+    mockFinishingItems = loadLocal("odontoprint_finishing_items", mockFinishingItems);
+    mockPrintJobs = loadLocal("odontoprint_jobs", mockPrintJobs);
+
+    const item = mockPrintJobItems.find((i) => i.id === cardId);
+    const parentJobId = item?.print_job_id;
+
+    mockPrintRunItems = mockPrintRunItems.filter((ri) => ri.print_job_item_id !== cardId);
+    mockPrintItemHistory = mockPrintItemHistory.filter((h) => h.item_id !== cardId);
+    mockFinishingItems = mockFinishingItems.filter((f) => f.id !== cardId);
+    mockPrintJobItems = mockPrintJobItems.filter((i) => i.id !== cardId);
+
+    const hasOtherItemsInJob = parentJobId
+      ? mockPrintJobItems.some((i) => i.print_job_id === parentJobId)
+      : false;
+    if (parentJobId && !hasOtherItemsInJob) {
+      mockPrintJobs = mockPrintJobs.filter((j) => j.id !== parentJobId);
+    }
+
+    saveLocal("odontoprint_print_run_items", mockPrintRunItems);
+    saveLocal("odontoprint_item_history", mockPrintItemHistory);
+    saveLocal("odontoprint_finishing_items", mockFinishingItems);
+    saveLocal("odontoprint_job_items", mockPrintJobItems);
+    saveLocal("odontoprint_jobs", mockPrintJobs);
+
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        await client.from("print_run_items").delete().eq("print_job_item_id", cardId);
+        await client.from("print_item_history").delete().eq("item_id", cardId);
+        const { error: delErr } = await client.from("print_job_items").delete().eq("id", cardId);
+        if (delErr) {
+          console.warn("Supabase deletePrintCard error:", delErr);
+          return { success: false, error: delErr.message };
+        }
+        if (parentJobId && !hasOtherItemsInJob) {
+          await client.from("print_jobs").delete().eq("id", parentJobId);
+        }
+      } catch (err: any) {
+        console.warn("Supabase deletePrintCard error:", err);
+        return { success: false, error: err?.message || "Erro ao apagar arquivo no banco." };
+      }
+    }
+
+    return { success: true };
   }
 
   static async getPrintBatches(): Promise<Array<PrintBatch & { items_count: number }>> {

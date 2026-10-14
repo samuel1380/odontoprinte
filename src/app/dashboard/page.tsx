@@ -16,8 +16,6 @@ import {
   ArrowUpRight,
   FileCheck2,
   Layers,
-  Sparkles,
-  Cog,
   PlusCircle,
   RefreshCw,
   Info,
@@ -149,13 +147,6 @@ export default function DashboardPage() {
             </div>
           </Link>
 
-          <Link href="/impressoes">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#0F172A] border border-slate-800 text-slate-300 text-xs font-medium hover:bg-slate-800 hover:text-white transition">
-              <Printer className="w-3.5 h-3.5 text-slate-400" />
-              <span>Impressões</span>
-            </div>
-          </Link>
-
           <Link href="/impressoras">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#0F172A] border border-slate-800 text-slate-300 text-xs font-medium hover:bg-slate-800 hover:text-white transition">
               <Layers className="w-3.5 h-3.5 text-slate-400" />
@@ -167,20 +158,6 @@ export default function DashboardPage() {
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#0F172A] border border-slate-800 text-slate-300 text-xs font-medium hover:bg-slate-800 hover:text-white transition">
               <FlaskConical className="w-3.5 h-3.5 text-slate-400" />
               <span>Resinas</span>
-            </div>
-          </Link>
-
-          <Link href="/acabamento">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#0F172A] border border-slate-800 text-slate-300 text-xs font-medium hover:bg-slate-800 hover:text-white transition">
-              <Sparkles className="w-3.5 h-3.5 text-slate-400" />
-              <span>Acabamento</span>
-            </div>
-          </Link>
-
-          <Link href="/fresagem">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#0F172A] border border-slate-800 text-slate-300 text-xs font-medium hover:bg-slate-800 hover:text-white transition">
-              <Cog className="w-3.5 h-3.5 text-slate-400" />
-              <span>Fresagem</span>
             </div>
           </Link>
         </div>
@@ -260,9 +237,9 @@ export default function DashboardPage() {
                 Cada mesa da máquina, de qual pedido ela é e há quanto tempo roda.
               </p>
             </div>
-            <Link href="/impressoes">
+            <Link href="/fila">
               <Button variant="ghost" size="sm" className="text-xs gap-1 text-slate-300 hover:text-white rounded-full">
-                Ver impressões
+                Ver fila
                 <ArrowUpRight className="w-3.5 h-3.5" />
               </Button>
             </Link>
@@ -274,7 +251,7 @@ export default function DashboardPage() {
               printing.printing.map((run) => (
                 <Link
                   key={run.id}
-                  href={`/impressoes/${run.id}`}
+                  href="/fila"
                   className="block bg-slate-950/60 border border-slate-800 hover:border-slate-600 rounded-xl p-3 transition"
                 >
                   <div className="flex items-center gap-2 min-w-0">

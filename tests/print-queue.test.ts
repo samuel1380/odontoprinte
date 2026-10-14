@@ -186,4 +186,56 @@ describe("Fila de Impressão 3D - Cadastro, Lotes, Duplicidade e Backup", () => 
     const updated = cardsAfter.find((c) => c.id === item.id)!;
     expect(updated.status).toBe("CONCLUIDO");
   });
+
+  it("apaga um arquivo individual de uma mesa e da fila com sucesso", async () => {
+    await OdontoPrintService.createPrintCards([
+      {
+        patient: "PAC-DEL-1",
+        clinic: "Clínica Teste",
+        cadista: "Operador 1",
+        work_type: "MODELO_COM_TROQUEL",
+        file_name: "modelo_para_apagar.stl",
+      },
+    ]);
+    const allCards = await OdontoPrintService.getPrintCards();
+    const item = allCards.find((c) => c.patient_code === "PAC-DEL-1")!;
+    expect(item).toBeDefined();
+
+    const deleteRes = await OdontoPrintService.deletePrintCard(item.id);
+    expect(deleteRes.success).toBe(true);
+
+    const cardsAfter = await OdontoPrintService.getPrintCards();
+    const remaining = cardsAfter.find((c) => c.id === item.id);
+    expect(remaining).toBeUndefined();
+  });
+
+  it("esvazia uma mesa desvinculando todos os seus arquivos de volta para avulsos", async () => {
+    await OdontoPrintService.createPrintCards([
+      {
+        patient: "PAC-EMPTY-1",
+        clinic: "Clínica Teste",
+        cadista: "Operador 1",
+        work_type: "MODELO_COM_TROQUEL",
+        file_name: "modelo_esvaziar.stl",
+      },
+    ]);
+    const cards = await OdontoPrintService.getPrintCards();
+    const item = cards.find((c) => c.patient_code === "PAC-EMPTY-1")!;
+    const batchRes = await OdontoPrintService.createPrintBatch({
+      batch_name: "Mesa Esvaziar",
+      item_ids: [item.id],
+      user_id: "user-1",
+      user_name: "Operador",
+    });
+    expect(batchRes.success).toBe(true);
+
+    const emptyRes = await OdontoPrintService.emptyPrintBatch(batchRes.batch!.id, "user-1", "Operador");
+    expect(emptyRes.success).toBe(true);
+    expect(emptyRes.unlinked_count).toBe(1);
+
+    const cardsAfter = await OdontoPrintService.getPrintCards();
+    const itemAfter = cardsAfter.find((c) => c.id === item.id)!;
+    expect(itemAfter.batch_id).toBeNull();
+  });
 });
+

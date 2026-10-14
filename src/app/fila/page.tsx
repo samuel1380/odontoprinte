@@ -154,6 +154,14 @@ export default function FilaPage() {
   const [batchToDelete, setBatchToDelete] = useState<OrderGroup | null>(null);
   const [isDeletingBatch, setIsDeletingBatch] = useState(false);
 
+  // Modal de Esvaziar Mesa
+  const [batchToEmpty, setBatchToEmpty] = useState<OrderGroup | null>(null);
+  const [isEmptyingBatch, setIsEmptyingBatch] = useState(false);
+
+  // Modal de Apagar Arquivo Individual
+  const [cardToDelete, setCardToDelete] = useState<PrintCardItem | null>(null);
+  const [isDeletingCard, setIsDeletingCard] = useState(false);
+
   // Modal de Falha de Card Individual
   const [cardToFail, setCardToFail] = useState<PrintCardItem | null>(null);
   const [cardFailReason, setCardFailReason] = useState("");
@@ -823,23 +831,67 @@ export default function FilaPage() {
     );
   };
 
-  // Apagar pedido (com confirmação; aviso extra se estiver imprimindo)
+  // Apagar mesa (com confirmação; aviso extra se estiver imprimindo)
   const handleConfirmDeleteBatch = async () => {
     if (!batchToDelete || !batchToDelete.batchId) return;
     setIsDeletingBatch(true);
     try {
       const res = await OdontoPrintService.deletePrintBatch(batchToDelete.batchId);
       if (res.success) {
-        toast.success(`Pedido apagado (${res.removed_count} item(ns) removidos da fila).`);
+        toast.success(`Mesa apagada (${res.removed_count} arquivo(s) removidos da fila).`);
         setBatchToDelete(null);
         loadData();
       } else {
-        toast.error(res.error || "Erro ao apagar pedido.");
+        toast.error(res.error || "Erro ao apagar mesa.");
       }
     } catch {
-      toast.error("Erro ao apagar pedido.");
+      toast.error("Erro ao apagar mesa.");
     } finally {
       setIsDeletingBatch(false);
+    }
+  };
+
+  // Esvaziar mesa (desvincular todos os arquivos de volta para avulsos)
+  const handleConfirmEmptyBatch = async () => {
+    if (!batchToEmpty || !batchToEmpty.batchId) return;
+    setIsEmptyingBatch(true);
+    try {
+      const res = await OdontoPrintService.emptyPrintBatch(
+        batchToEmpty.batchId,
+        user?.id,
+        user?.full_name || "Operador"
+      );
+      if (res.success) {
+        toast.success(`Mesa esvaziada (${res.unlinked_count} arquivo(s) retornados para a fila).`);
+        setBatchToEmpty(null);
+        loadData();
+      } else {
+        toast.error(res.error || "Erro ao esvaziar mesa.");
+      }
+    } catch {
+      toast.error("Erro ao esvaziar mesa.");
+    } finally {
+      setIsEmptyingBatch(false);
+    }
+  };
+
+  // Apagar arquivo individual permanentemente da mesa e fila
+  const handleConfirmDeleteCard = async () => {
+    if (!cardToDelete) return;
+    setIsDeletingCard(true);
+    try {
+      const res = await OdontoPrintService.deletePrintCard(cardToDelete.id);
+      if (res.success) {
+        toast.success(`Arquivo "${cardToDelete.file_name}" apagado com sucesso.`);
+        setCardToDelete(null);
+        loadData();
+      } else {
+        toast.error(res.error || "Erro ao apagar arquivo.");
+      }
+    } catch {
+      toast.error("Erro ao apagar arquivo.");
+    } finally {
+      setIsDeletingCard(false);
     }
   };
 
@@ -1322,6 +1374,14 @@ export default function FilaPage() {
                                         Falhou
                                       </button>
                                     )}
+                                    <button
+                                      type="button"
+                                      onClick={() => setCardToDelete(card)}
+                                      className="p-1 text-slate-500 hover:text-rose-400 hover:bg-slate-800 rounded transition"
+                                      title="Apagar este arquivo da mesa e da fila"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
                                   </div>
                                 </div>
                               );
@@ -1856,6 +1916,28 @@ export default function FilaPage() {
                           <ClipboardCheck className="w-3.5 h-3.5" />
                           Concluir todos
                         </button>
+                        {group.batchId && group.items.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setBatchToEmpty(group)}
+                            className="px-2.5 py-1 text-[11px] font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition flex items-center gap-1.5"
+                            title="Tirar todos os arquivos desta mesa e deixá-los avulsos na fila"
+                          >
+                            <Undo2 className="w-3.5 h-3.5" />
+                            Esvaziar mesa
+                          </button>
+                        )}
+                        {group.batchId && (
+                          <button
+                            type="button"
+                            onClick={() => setBatchToDelete(group)}
+                            className="px-2.5 py-1 text-[11px] font-medium text-rose-300 hover:text-white hover:bg-rose-950/60 rounded-md transition flex items-center gap-1.5"
+                            title="Apagar esta mesa e todos os seus arquivos da fila"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Apagar mesa
+                          </button>
+                        )}
                         <button
                           type="button"
                           disabled={
@@ -2014,6 +2096,19 @@ export default function FilaPage() {
                                     </button>
                                   )}
 
+                                  {/* Tirar da mesa direto com 1 clique se estiver em uma mesa */}
+                                  {card.batch_id && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleMoveItem(card, "avulsos")}
+                                      className="px-2 py-1 text-[11px] font-medium text-slate-400 hover:text-white hover:bg-slate-800 rounded-md flex items-center gap-1 whitespace-nowrap transition"
+                                      title="Tirar este arquivo da mesa (fica avulso na fila)"
+                                    >
+                                      <Undo2 className="w-3 h-3 shrink-0" />
+                                      Tirar da mesa
+                                    </button>
+                                  )}
+
                                   {/* Mover arquivo para outra mesa */}
                                   <select
                                     value=""
@@ -2042,6 +2137,17 @@ export default function FilaPage() {
                                     title="Ver histórico de movimentações deste arquivo"
                                   >
                                     <History className="w-3.5 h-3.5" />
+                                  </button>
+
+                                  {/* Botão de APAGAR arquivo individual */}
+                                  <button
+                                    type="button"
+                                    onClick={() => setCardToDelete(card)}
+                                    className="px-2 py-1 text-[11px] font-semibold text-rose-400 hover:text-white hover:bg-rose-900/60 border border-rose-950 hover:border-rose-800 rounded-md flex items-center gap-1 whitespace-nowrap transition"
+                                    title="Apagar este arquivo da mesa e da fila"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                                    Apagar
                                   </button>
                                 </div>
                               </div>
@@ -2430,14 +2536,14 @@ export default function FilaPage() {
         </Dialog>
 
         {/* ==================================================================== */}
-        {/* MODAL 2: APAGAR PEDIDO (COM CONFIRMAÇÃO + AVISO SE IMPRIMINDO) */}
+        {/* MODAL 2: APAGAR MESA DE IMPRESSÃO (COM CONFIRMAÇÃO + AVISO SE IMPRIMINDO) */}
         {/* ==================================================================== */}
         <Dialog
           open={Boolean(batchToDelete)}
           onOpenChange={(open) => {
             if (!open) setBatchToDelete(null);
           }}
-          title="Apagar pedido"
+          title="Apagar Mesa de Impressão"
         >
           <div className="space-y-4">
             {batchToDelete?.isPrinting && (
@@ -2445,11 +2551,11 @@ export default function FilaPage() {
                 <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
                 <div className="text-xs space-y-1">
                   <p className="font-bold text-red-200">
-                    Atenção: este pedido está IMPRIMINDO
+                    Atenção: esta mesa está IMPRIMINDO
                   </p>
                   <p className="text-red-300/80">
-                    Apagar agora vai retirar os modelos da mesa em andamento e
-                    remover o pedido e seus itens da fila.
+                    Apagar agora vai retirar os modelos da impressora em andamento e
+                    remover a mesa e seus arquivos da fila.
                   </p>
                 </div>
               </div>
@@ -2457,10 +2563,10 @@ export default function FilaPage() {
 
             <p className="text-xs text-slate-300">
               Tem certeza que deseja apagar{" "}
-              <strong>{batchToDelete?.title}</strong>? Serão removidos{" "}
-              <strong>
+              <strong className="text-white">{batchToDelete?.title}</strong>? Serão removidos{" "}
+              <strong className="text-white">
                 {batchToDelete?.items.length}{" "}
-                {batchToDelete && batchToDelete.items.length === 1 ? "item" : "itens"}
+                {batchToDelete && batchToDelete.items.length === 1 ? "arquivo" : "arquivos"}
               </strong>{" "}
               da fila
               {batchToDelete && batchToDelete.items.length > 0 && (
@@ -2488,9 +2594,94 @@ export default function FilaPage() {
               <Button
                 disabled={isDeletingBatch}
                 onClick={handleConfirmDeleteBatch}
-                className="bg-red-600 hover:bg-red-500 text-white font-semibold rounded-lg text-xs h-9 px-5"
+                className="bg-red-600 hover:bg-red-500 text-white font-semibold rounded-lg text-xs h-9 px-5 gap-1.5"
               >
-                {isDeletingBatch ? "Apagando..." : "Sim, apagar pedido"}
+                <Trash2 className="w-3.5 h-3.5" />
+                {isDeletingBatch ? "Apagando..." : "Sim, apagar mesa e arquivos"}
+              </Button>
+            </div>
+          </div>
+        </Dialog>
+
+        {/* ==================================================================== */}
+        {/* MODAL 2b: ESVAZIAR MESA (DESVINCULA TODOS OS ARQUIVOS PARA AVULSOS) */}
+        {/* ==================================================================== */}
+        <Dialog
+          open={Boolean(batchToEmpty)}
+          onOpenChange={(open) => {
+            if (!open) setBatchToEmpty(null);
+          }}
+          title="Esvaziar Mesa de Impressão"
+        >
+          <div className="space-y-4">
+            <p className="text-xs text-slate-300">
+              Deseja tirar todos os{" "}
+              <strong className="text-white">{batchToEmpty?.items.length} arquivo(s)</strong> da mesa{" "}
+              <strong className="text-white">{batchToEmpty?.title}</strong>?
+            </p>
+            <p className="text-xs text-slate-400">
+              Os arquivos voltarão para a fila como avulsos (&quot;Sem mesa&quot;) e você poderá montá-los em outra mesa depois. A mesa permanecerá vazia.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <Button
+                variant="outline"
+                onClick={() => setBatchToEmpty(null)}
+                className="border-slate-700 text-slate-300 rounded-lg text-xs h-9"
+              >
+                Cancelar
+              </Button>
+
+              <Button
+                disabled={isEmptyingBatch}
+                onClick={handleConfirmEmptyBatch}
+                className="bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-lg text-xs h-9 px-5 gap-1.5"
+              >
+                <Undo2 className="w-3.5 h-3.5" />
+                {isEmptyingBatch ? "Esvaziando..." : "Sim, esvaziar mesa"}
+              </Button>
+            </div>
+          </div>
+        </Dialog>
+
+        {/* ==================================================================== */}
+        {/* MODAL 2c: APAGAR ARQUIVO INDIVIDUAL (DA MESA / FILA) */}
+        {/* ==================================================================== */}
+        <Dialog
+          open={Boolean(cardToDelete)}
+          onOpenChange={(open) => {
+            if (!open) setCardToDelete(null);
+          }}
+          title="Apagar arquivo de impressão"
+        >
+          <div className="space-y-4">
+            <p className="text-xs text-slate-300">
+              Tem certeza que deseja apagar o arquivo{" "}
+              <strong className="text-white">{cardToDelete?.file_name}</strong>
+              {cardToDelete?.patient_code && (
+                <> (Paciente: <strong className="text-white">{cardToDelete.patient_code}</strong>)</>
+              )}?
+            </p>
+            <p className="text-xs text-slate-400">
+              Esta ação removerá este arquivo permanentemente desta mesa e da fila de impressão. O cadastro do paciente é mantido.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <Button
+                variant="outline"
+                onClick={() => setCardToDelete(null)}
+                className="border-slate-700 text-slate-300 rounded-lg text-xs h-9"
+              >
+                Cancelar
+              </Button>
+
+              <Button
+                disabled={isDeletingCard}
+                onClick={handleConfirmDeleteCard}
+                className="bg-red-600 hover:bg-red-500 text-white font-semibold rounded-lg text-xs h-9 px-5 gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {isDeletingCard ? "Apagando..." : "Sim, apagar arquivo"}
               </Button>
             </div>
           </div>
