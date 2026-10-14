@@ -125,6 +125,9 @@ export type PrintCardStatus =
 
 export type LabWorkType =
   | "MODELO_COM_TROQUEL"
+  | "MODELO_SEM_TROQUEL"
+  | "ANTAGONISTA"
+  | "GENGIVA"
   | "PLACA"
   | "COROA"
   | "COROA_SOBRE_DENTE"

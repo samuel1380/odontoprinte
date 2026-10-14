@@ -24,6 +24,9 @@ export const FILE_TYPE_LABELS: Record<string, string> = {
 
 export const LAB_WORK_TYPES = [
   { id: "MODELO_COM_TROQUEL", label: "Modelo com Troquel", description: "Modelo anatômico com alvéolos e troqueis destacados" },
+  { id: "MODELO_SEM_TROQUEL", label: "Modelo sem Troquel", description: "Modelo anatômico sólido, sem troqueis" },
+  { id: "ANTAGONISTA", label: "Antagonista", description: "Arco oponente para conferência e ajuste oclusal" },
+  { id: "GENGIVA", label: "Máscara Gengival", description: "Gengiva destacável / máscara flex" },
   { id: "PLACA", label: "Placa", description: "Placa miorrelaxante / bruxismo" },
   { id: "COROA", label: "Coroa", description: "Coroa unitária ou ponte fixa" },
   { id: "COROA_SOBRE_DENTE", label: "Coroa sobre Dente", description: "Preparo dental convencional" },
@@ -34,6 +37,8 @@ export const LAB_WORK_TYPES = [
 
 export const LAB_WORK_TYPE_LABELS: Record<string, string> = {
   MODELO_COM_TROQUEL: "Modelo com Troquel",
+  MODELO_SEM_TROQUEL: "Modelo sem Troquel",
+  GENGIVA: "Máscara Gengival",
   PLACA: "Placa",
   COROA: "Coroa",
   COROA_SOBRE_DENTE: "Coroa sobre Dente",

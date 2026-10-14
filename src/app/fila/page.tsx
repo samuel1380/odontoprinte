@@ -26,6 +26,7 @@ import {
   BatchDerivedStatus,
 } from "@/lib/batch-status";
 import { formatDate } from "@/lib/utils";
+import { parseFileName } from "@/lib/parse-filename";
 import { useAuth } from "@/lib/auth-context";
 import {
   Plus,
@@ -74,6 +75,8 @@ interface PendingUploadFile {
   duplicate_match?: DuplicateMatch;
   reprint_decision?: "REPRINT" | "CANCEL" | "OVERRIDE" | "NEW_VERSION";
   reprint_reason?: string;
+  // Clínica/tipo lidos automaticamente do nome do arquivo
+  parsed_from_name?: boolean;
 }
 
 export default function FilaPage() {
@@ -445,6 +448,14 @@ export default function FilaPage() {
     const prefs = OdontoPrintService.getLastUsedPreferences();
     const defaultClinic = bulkClinic || prefs.clinic;
     const defaultCadista = bulkCadista || prefs.cadista;
+    // Clínicas conhecidas para o leitor de nome de arquivo reconhecer
+    // "clínica/doutor" dentro do nome (ex: "OdontoPrime_PAC45_Troquel.stl").
+    const knownClinics = Array.from(
+      new Set([...uniqueClinics, defaultClinic].filter((c) => c && c.trim()))
+    );
+
+    let parsedClinics = 0;
+    let parsedWorks = 0;
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -454,9 +465,11 @@ export default function FilaPage() {
         continue;
       }
 
-      // Extrai sugestão de paciente do nome do arquivo (ex: "PAC123_MODELO.stl" -> "PAC123")
-      const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
-      const patientSuggestion = nameWithoutExt.split(/[-_]/)[0] || nameWithoutExt;
+      // Lê clínica/doutor, paciente e tipo de peça direto do nome do arquivo.
+      // O conteúdo do arquivo nunca é lido por inteiro (só 1MB p/ hash).
+      const parsed = parseFileName(file.name, knownClinics);
+      if (parsed.clinic) parsedClinics++;
+      if (parsed.workType) parsedWorks++;
 
       const hash = await computeFileHash(file);
 
@@ -465,11 +478,12 @@ export default function FilaPage() {
         file_name: file.name,
         file_size: file.size,
         file_hash: hash,
-        patient: patientSuggestion.toUpperCase(),
+        patient: (parsed.patient || file.name.replace(/\.[^/.]+$/, "")).toUpperCase(),
         patient_name: "",
-        clinic: defaultClinic,
+        clinic: parsed.clinic || defaultClinic,
         cadista: defaultCadista,
-        work_type: bulkWorkType,
+        work_type: parsed.workType || bulkWorkType,
+        parsed_from_name: Boolean(parsed.clinic || parsed.workType),
         priority: bulkPriority,
         due_date: bulkDueDate,
         material: bulkMaterial,
@@ -516,6 +530,12 @@ export default function FilaPage() {
     }
 
     setPendingFiles((prev) => [...prev, ...newItems]);
+    if (newItems.length > 0 && (parsedClinics > 0 || parsedWorks > 0)) {
+      const parts: string[] = [];
+      if (parsedClinics > 0) parts.push(`clínica em ${parsedClinics}`);
+      if (parsedWorks > 0) parts.push(`tipo de peça em ${parsedWorks}`);
+      toast.success(`Nome do arquivo lido: ${parts.join(" e ")} de ${newItems.length} arquivo(s). Confira os campos.`);
+    }
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -1852,6 +1872,14 @@ export default function FilaPage() {
                           <span className="text-[10px] text-slate-500">
                             ({(item.file_size / (1024 * 1024)).toFixed(2)} MB)
                           </span>
+                          {item.parsed_from_name && (
+                            <span
+                              className="text-[10px] font-semibold text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 px-2 py-0.5 rounded-full"
+                              title="Clínica e/ou tipo de peça identificados automaticamente pelo nome do arquivo. Confira os campos abaixo."
+                            >
+                              Lido do nome
+                            </span>
+                          )}
                         </div>
 
                         <button
