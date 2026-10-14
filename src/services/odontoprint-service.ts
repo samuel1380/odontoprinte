@@ -1001,6 +1001,7 @@ export class OdontoPrintService {
     if (newStatus === "FALHOU") {
       item.last_failure_reason = notes || "Falha técnica informada pelo operador.";
       item.is_retry = true;
+      item.priority = "URGENTE";
       item.retry_count = (item.retry_count || 0) + 1;
       item.reprint_count = (item.reprint_count || 0) + 1;
       item.reprint_reason = notes || "Falha na impressão";
@@ -1083,6 +1084,7 @@ export class OdontoPrintService {
         // da fila avançada, cai para o mínimo (status + updated_at).
         const fullPayload: Record<string, any> = {
           status: item.status,
+          priority: item.priority,
           last_failure_reason: item.last_failure_reason,
           retry_count: item.retry_count,
           is_retry: item.is_retry,
@@ -1287,12 +1289,50 @@ export class OdontoPrintService {
   }
 
   /**
-   * Cria um pedido (lote) para os itens recém-enviados.
-   * Cada pedido é independente: vincula SOMENTE os itens informados,
+   * Atualiza a impressora vinculada a uma mesa.
+   */
+  static async updateBatchPrinter(
+    batchId: string,
+    printerId: string,
+    printerName: string
+  ): Promise<{ success: boolean; error?: string }> {
+    mockPrintBatches = loadLocal("odontoprint_batches", mockPrintBatches);
+    const batch = mockPrintBatches.find((b) => b.id === batchId);
+    if (!batch) return { success: false, error: "Mesa não encontrada." };
+    const now = new Date().toISOString();
+    batch.printer_id = printerId;
+    batch.printer_name = printerName;
+    batch.updated_at = now;
+    saveLocal("odontoprint_batches", mockPrintBatches);
+
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        await client
+          .from("print_batches")
+          .update({
+            printer_id: printerId,
+            printer_name: printerName,
+            updated_at: now,
+          })
+          .eq("id", batchId);
+      } catch (err) {
+        console.warn("Supabase updateBatchPrinter error:", err);
+      }
+    }
+    return { success: true };
+  }
+
+  /**
+   * Cria um pedido/mesa para os itens recém-enviados.
+   * Cada mesa é independente: vincula SOMENTE os itens informados,
    * sem alterar o status deles (continuam Aguardando).
    */
   static async createOrderBatch(params: {
     item_ids: string[];
+    batch_name?: string;
+    printer_id?: string | null;
+    printer_name?: string | null;
     user_id?: string;
     user_name?: string;
   }): Promise<{ success: boolean; batch?: PrintBatch; error?: string }> {
@@ -1311,10 +1351,10 @@ export class OdontoPrintService {
 
     const newBatch: PrintBatch = {
       id: batchId,
-      batch_name: `Impressão #${nextNumber}`,
+      batch_name: params.batch_name?.trim() || `Impressão #${nextNumber}`,
       batch_number: nextNumber,
-      printer_name: null,
-      printer_id: null,
+      printer_name: params.printer_name?.trim() || null,
+      printer_id: params.printer_id || null,
       status: "AGUARDANDO",
       created_by: params.user_id || null,
       created_at: now,
@@ -1571,6 +1611,84 @@ export class OdontoPrintService {
       return { success: false, moved, skipped, error: "Nenhum item do grupo podia mudar para esse status." };
     }
     return { success: true, moved, skipped };
+  }
+
+  /**
+   * Inicia a impressão de uma mesa diretamente vinculando a uma impressora.
+   * Cria a ordem oficial (PrintRun), atualiza todos os itens para IMPRIMINDO
+   * e marca a mesa como em execução na máquina.
+   */
+  static async startPrintBatchDirectly(params: {
+    batch_id: string;
+    printer_id: string;
+    user_id?: string;
+    user_name?: string;
+  }): Promise<{ success: boolean; run_code?: string; run_id?: string; error?: string }> {
+    mockPrintBatches = loadLocal("odontoprint_batches", mockPrintBatches);
+    mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
+    mockPrinters = loadLocal("odontoprint_printers", mockPrinters);
+
+    const batch = mockPrintBatches.find((b) => b.id === params.batch_id);
+    if (!batch) return { success: false, error: "Mesa não encontrada." };
+
+    const printer = mockPrinters.find((p) => p.id === params.printer_id);
+    if (!printer) return { success: false, error: "Impressora não encontrada." };
+
+    const items = mockPrintJobItems.filter((i) => i.batch_id === params.batch_id);
+    const printableItems = items.filter((i) =>
+      ["AGUARDANDO_FILA", "EM_PREPARO", "FALHOU_REIMPRESSAO"].includes(i.status)
+    );
+
+    if (printableItems.length === 0) {
+      return { success: false, error: "Não há modelos prontos para imprimir nesta mesa." };
+    }
+
+    const hasRetry = printableItems.some((i) => i.is_retry);
+    const runCode = await this.generatePrintCode(hasRetry);
+
+    const options = await this.getEligibleOptions();
+    const resin =
+      options.resins.find((r) => r.printer_id === params.printer_id) || options.resins[0];
+
+    const runRes = await this.startPrintRun({
+      run_code: runCode,
+      printer_id: printer.id,
+      resin_batch_id: resin?.resin_batch_id || "mock-resin",
+      calibration_id: resin?.calibration_id || "mock-calib",
+      item_ids: printableItems.map((i) => i.id),
+      supports_confirmed: true,
+      resin_manipulated: true,
+      user_id: params.user_id,
+    });
+
+    if (!runRes.success) {
+      return { success: false, error: runRes.error || "Erro ao iniciar execução da impressão." };
+    }
+
+    batch.printer_id = printer.id;
+    batch.printer_name = printer.name;
+    batch.status = "IMPRIMINDO";
+    batch.updated_at = new Date().toISOString();
+    saveLocal("odontoprint_batches", mockPrintBatches);
+
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        await client
+          .from("print_batches")
+          .update({
+            printer_id: printer.id,
+            printer_name: printer.name,
+            status: "IMPRIMINDO",
+            updated_at: batch.updated_at,
+          })
+          .eq("id", batch.id);
+      } catch (err) {
+        console.warn("Supabase startPrintBatchDirectly error:", err);
+      }
+    }
+
+    return { success: true, run_code: runCode, run_id: runRes.run?.id };
   }
 
   /**

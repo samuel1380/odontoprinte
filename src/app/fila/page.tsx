@@ -12,6 +12,7 @@ import {
   DuplicateMatch,
   DuplicateCheckResult,
   ActiveRunInfo,
+  PrinterWithStatus,
 } from "@/types/domain";
 import { PrintBatch, PrintItemHistory } from "@/types/database.types";
 import {
@@ -43,6 +44,8 @@ import {
   Sparkles,
   FileText,
   Check,
+  Printer,
+  Layers,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -78,11 +81,19 @@ export default function FilaPage() {
   const { user } = useAuth();
   const router = useRouter();
 
-  // Estados principais (fila organizada em pedidos/lotes)
+  // Estados principais (fila organizada em mesas de impressão)
   const [cards, setCards] = useState<PrintCardItem[]>([]);
   const [batches, setBatches] = useState<Array<PrintBatch & { items_count: number }>>([]);
+  const [printers, setPrinters] = useState<PrinterWithStatus[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedBatchIds, setExpandedBatchIds] = useState<string[]>([]);
+
+  // Abas principais do operador: Mesas na Fila | Imprimindo agora | Todas | Concluídas
+  type ViewTab = "FILA" | "IMPRIMINDO" | "TODAS" | "CONCLUIDAS";
+  const [viewTab, setViewTab] = useState<ViewTab>("FILA");
+
+  // Drag and drop direto na tela
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
 
   // Filtros e busca
   const [searchQuery, setSearchQuery] = useState("");
@@ -93,6 +104,9 @@ export default function FilaPage() {
 
   // Modais
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [newMesaName, setNewMesaName] = useState("");
+  const [newMesaPrinterId, setNewMesaPrinterId] = useState("");
+
   const [isPatientHistoryModalOpen, setIsPatientHistoryModalOpen] = useState(false);
   const [selectedPatientForHistory, setSelectedPatientForHistory] = useState<string | null>(null);
   const [patientHistoryCards, setPatientHistoryCards] = useState<PrintCardItem[]>([]);
@@ -100,7 +114,12 @@ export default function FilaPage() {
   const [selectedCardForHistory, setSelectedCardForHistory] = useState<PrintCardItem | null>(null);
   const [cardHistoryEntries, setCardHistoryEntries] = useState<PrintItemHistory[]>([]);
 
-  // Modal de Apagar Pedido
+  // Modal de Iniciar Impressão Direto na Mesa (vincular à impressora)
+  const [batchToPrintDirectly, setBatchToPrintDirectly] = useState<OrderGroup | null>(null);
+  const [selectedPrinterForBatch, setSelectedPrinterForBatch] = useState<string>("");
+  const [isStartingBatchPrint, setIsStartingBatchPrint] = useState(false);
+
+  // Modal de Apagar Mesa
   const [batchToDelete, setBatchToDelete] = useState<OrderGroup | null>(null);
   const [isDeletingBatch, setIsDeletingBatch] = useState(false);
 
@@ -126,7 +145,7 @@ export default function FilaPage() {
   const [bulkDueDate, setBulkDueDate] = useState("");
   const [bulkMaterial, setBulkMaterial] = useState("Resina Standard Cinza");
 
-  // Destino do upload: novo pedido ou pedido existente. Falhas pendentes
+  // Destino do upload: nova mesa ou mesa existente. Falhas pendentes
   // (prioridade para a próxima impressão) e ações em grupo.
   const [uploadDest, setUploadDest] = useState<string>("new");
   const [failedPendingCount, setFailedPendingCount] = useState(0);
@@ -159,16 +178,18 @@ export default function FilaPage() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [cardsData, batchesData, runsData, failedData] = await Promise.all([
+      const [cardsData, batchesData, runsData, failedData, printersData] = await Promise.all([
         OdontoPrintService.getPrintCards(),
         OdontoPrintService.getPrintBatches(),
         OdontoPrintService.getActiveRunsWithItems(),
         OdontoPrintService.getFailedPendingItems(),
+        OdontoPrintService.getPrinters(),
       ]);
       setCards(cardsData);
       setBatches(batchesData);
       setActiveRuns(runsData);
       setFailedPendingCount(failedData.length);
+      setPrinters(printersData);
     } catch {
       toast.error("Erro ao carregar fila de impressão.");
     } finally {
@@ -195,6 +216,40 @@ export default function FilaPage() {
       clearInterval(refresher);
     };
   }, []);
+
+  // Iniciar impressão direto na mesa
+  const handleDirectBatchPrint = async () => {
+    if (!batchToPrintDirectly || !batchToPrintDirectly.batchId) return;
+    if (!selectedPrinterForBatch) {
+      toast.error("Selecione uma impressora para enviar a mesa.");
+      return;
+    }
+    setIsStartingBatchPrint(true);
+    try {
+      const chosen = printers.find((p) => p.id === selectedPrinterForBatch);
+      const res = await OdontoPrintService.startPrintBatchDirectly({
+        batch_id: batchToPrintDirectly.batchId,
+        printer_id: selectedPrinterForBatch,
+        user_id: user?.id,
+        user_name: user?.full_name || "Operador",
+      });
+      if (res.success) {
+        toast.success(
+          `Mesa ${batchToPrintDirectly.title} iniciada na impressora ${chosen?.name || ""} (${res.run_code})!`
+        );
+        setBatchToPrintDirectly(null);
+        setSelectedPrinterForBatch("");
+        setViewTab("IMPRIMINDO");
+        loadData();
+      } else {
+        toast.error(res.error || "Erro ao iniciar impressão.");
+      }
+    } catch {
+      toast.error("Erro inesperado ao iniciar impressão.");
+    } finally {
+      setIsStartingBatchPrint(false);
+    }
+  };
 
   // Mapa código -> ordem ativa e item -> ordem ativa (para o chip "ver impressão")
   const runByCode = useMemo(() => {
@@ -227,6 +282,8 @@ export default function FilaPage() {
     batchId: string | null;
     title: string;
     batchNumber: number | null;
+    printer_name?: string | null;
+    printer_id?: string | null;
     createdAt: string;
     items: PrintCardItem[];
     derived: BatchDerivedStatus;
@@ -234,8 +291,7 @@ export default function FilaPage() {
     isPrinting: boolean;
   }
 
-  // Pedidos (lotes): cada pedido agrupa só os itens dele, mais recentes primeiro.
-  // Itens sem lote (pedidos antigos) ficam no grupo "Sem lote", por último.
+  // Mesas de Impressão: cada mesa agrupa os arquivos a serem impressos juntos na impressora.
   const orderGroups = useMemo<OrderGroup[]>(() => {
     const byBatch = new Map<string, PrintCardItem[]>();
     const loose: PrintCardItem[] = [];
@@ -253,11 +309,16 @@ export default function FilaPage() {
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .map((b) => {
         const items = byBatch.get(b.id) || [];
+        const cleanTitle =
+          b.batch_name?.replace(/^Impressão\b/i, "Mesa") ||
+          `Mesa #${(b as any).batch_number ?? ""}`;
         return {
           key: b.id,
           batchId: b.id,
-          title: batchTitle(b.batch_name, (b as any).batch_number ?? null),
+          title: cleanTitle,
           batchNumber: (b as any).batch_number ?? null,
+          printer_name: b.printer_name,
+          printer_id: b.printer_id,
           createdAt: b.created_at,
           items,
           derived: deriveBatchStatus(items.map((i) => i.status)),
@@ -272,8 +333,10 @@ export default function FilaPage() {
       groups.push({
         key: "avulsos",
         batchId: null,
-        title: "Sem lote — pedidos antigos",
+        title: "Arquivos avulsos (sem mesa)",
         batchNumber: null,
+        printer_name: null,
+        printer_id: null,
         createdAt: loose.map((i) => i.created_at).sort()[0] || new Date().toISOString(),
         items: loose,
         derived: deriveBatchStatus(loose.map((i) => i.status)),
@@ -286,6 +349,20 @@ export default function FilaPage() {
     return groups;
   }, [cards, batches]);
 
+  // Contadores das 4 grandes abas de visão do operador
+  const tabCounts = useMemo(() => {
+    let fila = 0;
+    let imprimindo = 0;
+    let todas = orderGroups.length;
+    let concluidas = 0;
+    for (const g of orderGroups) {
+      if (["AGUARDANDO", "PREPARANDO", "ERRO"].includes(g.derived)) fila++;
+      if (g.derived === "IMPRIMINDO" || g.isPrinting) imprimindo++;
+      if (g.derived === "CONCLUIDO") concluidas++;
+    }
+    return { fila, imprimindo, todas, concluidas };
+  }, [orderGroups]);
+
   const cardMatchesQuery = (card: PrintCardItem, q: string): boolean => {
     return (
       card.patient_code.toLowerCase().includes(q) ||
@@ -297,11 +374,25 @@ export default function FilaPage() {
     );
   };
 
-  // Pedidos filtrados
+  // Mesas filtradas por aba + busca + filtros secundários
   const filteredGroups = useMemo(() => {
     return orderGroups.filter((g) => {
+      // 1. Filtro principal por Aba
+      if (viewTab === "FILA") {
+        if (!["AGUARDANDO", "PREPARANDO", "ERRO"].includes(g.derived)) return false;
+      } else if (viewTab === "IMPRIMINDO") {
+        if (g.derived !== "IMPRIMINDO" && !g.isPrinting) return false;
+      } else if (viewTab === "CONCLUIDAS") {
+        if (g.derived !== "CONCLUIDO") return false;
+      }
+
+      // 2. Filtros secundários
       if (statusFilter !== "TODAS" && g.derived !== statusFilter) return false;
-      if (clinicFilter !== "TODAS" && !g.items.some((c) => c.clinic_name.toLowerCase() === clinicFilter.toLowerCase())) return false;
+      if (
+        clinicFilter !== "TODAS" &&
+        !g.items.some((c) => c.clinic_name.toLowerCase() === clinicFilter.toLowerCase())
+      )
+        return false;
       if (onlyReprints && !g.items.some((c) => c.is_retry)) return false;
       if (todayFilter) {
         const todayStr = new Date().toISOString().split("T")[0];
@@ -310,11 +401,12 @@ export default function FilaPage() {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const inTitle = g.title.toLowerCase().includes(q);
-        if (!inTitle && !g.items.some((c) => cardMatchesQuery(c, q))) return false;
+        const inPrinter = g.printer_name ? g.printer_name.toLowerCase().includes(q) : false;
+        if (!inTitle && !inPrinter && !g.items.some((c) => cardMatchesQuery(c, q))) return false;
       }
       return true;
     });
-  }, [orderGroups, statusFilter, clinicFilter, onlyReprints, todayFilter, searchQuery]);
+  }, [orderGroups, viewTab, statusFilter, clinicFilter, onlyReprints, todayFilter, searchQuery]);
 
   // Contadores por status do pedido
   const statusCounts = useMemo(() => {
@@ -528,29 +620,35 @@ export default function FilaPage() {
           if (m.success) moved++;
         }
         const dest = orderGroups.find((g) => g.key === uploadDest);
-        toast.success(`${moved} arquivo(s) adicionados ao pedido ${dest?.title || ""}!`);
+        toast.success(`${moved} arquivo(s) adicionados à mesa ${dest?.title || ""}!`);
         setExpandedBatchIds([uploadDest]);
       } else {
-        // Cada pedido vira um lote separado com somente os itens dele
+        // Cada envio vira uma Mesa de Impressão na impressora
         const batchRes = await OdontoPrintService.createOrderBatch({
           item_ids: res.created_ids,
+          batch_name: newMesaName.trim() || undefined,
+          printer_id: newMesaPrinterId || undefined,
+          printer_name: printers.find((p) => p.id === newMesaPrinterId)?.name,
           user_id: user?.id,
           user_name: user?.full_name || bulkCadista,
         });
 
         if (batchRes.success && batchRes.batch) {
-          const title = batchTitle(batchRes.batch.batch_name, (batchRes.batch as any).batch_number ?? null);
+          const title = batchRes.batch.batch_name?.replace(/^Impressão\b/i, "Mesa");
           toast.success(
-            `${res.created_count} arquivo(s) salvos no pedido ${title}!`
+            `${res.created_count} arquivo(s) organizados na ${title}!`
           );
+          setViewTab("FILA");
           setExpandedBatchIds([batchRes.batch.id]);
         } else {
           toast.success(
-            `${res.created_count} arquivo(s) cadastrado(s) com sucesso na Fila de Impressão!`
+            `${res.created_count} arquivo(s) cadastrado(s) com sucesso na Fila!`
           );
         }
       }
       setUploadDest("new");
+      setNewMesaName("");
+      setNewMesaPrinterId("");
       setPendingFiles([]);
       setIsUploadModalOpen(false);
       loadData();
@@ -855,35 +953,213 @@ export default function FilaPage() {
   return (
     <AppShell>
       <div className="space-y-4 max-w-[1400px] mx-auto">
-        {/* Cabeçalho simples */}
+        {/* Cabeçalho */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-lg sm:text-xl font-semibold text-white tracking-tight">
-                Fila de impressão
+              <h1 className="text-lg sm:text-xl font-semibold text-white tracking-tight flex items-center gap-2">
+                <Layers className="w-5 h-5 text-cyan-400" />
+                Fila de Impressão 3D — Mesas de Produção
               </h1>
               <span className="text-xs text-slate-400 bg-slate-900 border border-slate-800 rounded-md px-2 py-0.5">
-                {filteredGroups.length} pedido(s)
+                {orderGroups.length} {orderGroups.length === 1 ? "mesa" : "mesas"}
               </span>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Cada pedido é um lote separado. Toque para expandir.
+            <p className="text-xs text-slate-400 mt-0.5">
+              Cada arquivo fica organizado na mesa de impressão da sua impressora. Acompanhe a produção e falhas.
             </p>
           </div>
 
           <div className="flex items-center gap-2">
             <Button
               onClick={() => setIsUploadModalOpen(true)}
-              className="bg-white hover:bg-slate-200 text-slate-900 rounded-lg text-xs font-semibold px-3 h-9 gap-1.5"
+              className="bg-white hover:bg-slate-200 text-slate-900 rounded-lg text-xs font-semibold px-3 h-9 gap-1.5 shadow"
             >
               <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">Nova impressão</span>
-              <span className="sm:hidden">Novo</span>
+              <span>Nova Mesa de Impressão</span>
             </Button>
           </div>
         </div>
 
-        {/* Barra de busca + filtros */}
+        {/* Zona de Drop direto de arquivos para criar Mesa de Impressão */}
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setIsDraggingOver(true);
+          }}
+          onDragLeave={() => setIsDraggingOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setIsDraggingOver(false);
+            handleFilesSelected(e.dataTransfer.files);
+            setIsUploadModalOpen(true);
+          }}
+          onClick={() => fileInputRef.current?.click()}
+          className={`border-2 border-dashed rounded-2xl p-4 sm:p-5 text-center cursor-pointer transition ${
+            isDraggingOver
+              ? "border-cyan-400 bg-cyan-950/40 ring-2 ring-cyan-400/50 scale-[1.005]"
+              : "border-slate-800 hover:border-slate-600 bg-slate-900/40 hover:bg-slate-900/70"
+          }`}
+        >
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-slate-800 text-cyan-400 flex items-center justify-center shrink-0">
+                <Upload className="w-5 h-5" />
+              </div>
+              <div className="text-left">
+                <p className="text-xs sm:text-sm font-semibold text-white">
+                  Solte arquivos STL/OBJ aqui para montar uma nova Mesa de Impressão
+                </p>
+                <p className="text-[11px] text-slate-400">
+                  Cada envio agrupa os arquivos na mesa da impressora · Clique para selecionar
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              className="bg-white hover:bg-slate-200 text-slate-950 font-bold text-xs h-8 px-3.5 gap-1.5 shrink-0"
+              onClick={(e) => {
+                e.stopPropagation();
+                fileInputRef.current?.click();
+              }}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Selecionar Arquivos
+            </Button>
+          </div>
+        </div>
+
+        {/* 4 Grandes Abas de Visão do Operador */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <button
+            type="button"
+            onClick={() => setViewTab("FILA")}
+            className={`p-3 rounded-xl border text-left transition flex items-center justify-between ${
+              viewTab === "FILA"
+                ? "bg-slate-800/90 border-cyan-500/60 ring-1 ring-cyan-500/40"
+                : "bg-slate-900/50 border-slate-800 hover:border-slate-700"
+            }`}
+          >
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                Mesas na Fila
+              </p>
+              <p className="text-base font-bold text-white mt-0.5">
+                {tabCounts.fila} {tabCounts.fila === 1 ? "mesa" : "mesas"}
+              </p>
+            </div>
+            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+              Aguardando
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setViewTab("IMPRIMINDO")}
+            className={`p-3 rounded-xl border text-left transition flex items-center justify-between ${
+              viewTab === "IMPRIMINDO"
+                ? "bg-slate-800/90 border-cyan-400/80 ring-1 ring-cyan-400/50"
+                : "bg-slate-900/50 border-slate-800 hover:border-slate-700"
+            }`}
+          >
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                {tabCounts.imprimindo > 0 && (
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-400"></span>
+                  </span>
+                )}
+                Em Impressão
+              </p>
+              <p className="text-base font-bold text-white mt-0.5">
+                {tabCounts.imprimindo} {tabCounts.imprimindo === 1 ? "mesa" : "mesas"}
+              </p>
+            </div>
+            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
+              Na Máquina
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setViewTab("TODAS")}
+            className={`p-3 rounded-xl border text-left transition flex items-center justify-between ${
+              viewTab === "TODAS"
+                ? "bg-slate-800/90 border-cyan-500/60 ring-1 ring-cyan-500/40"
+                : "bg-slate-900/50 border-slate-800 hover:border-slate-700"
+            }`}
+          >
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                Todas as Mesas
+              </p>
+              <p className="text-base font-bold text-white mt-0.5">
+                {tabCounts.todas} {tabCounts.todas === 1 ? "mesa" : "mesas"}
+              </p>
+            </div>
+            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+              Geral
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setViewTab("CONCLUIDAS")}
+            className={`p-3 rounded-xl border text-left transition flex items-center justify-between ${
+              viewTab === "CONCLUIDAS"
+                ? "bg-slate-800/90 border-emerald-500/60 ring-1 ring-emerald-500/40"
+                : "bg-slate-900/50 border-slate-800 hover:border-slate-700"
+            }`}
+          >
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                Concluídas
+              </p>
+              <p className="text-base font-bold text-white mt-0.5">
+                {tabCounts.concluidas} {tabCounts.concluidas === 1 ? "mesa" : "mesas"}
+              </p>
+            </div>
+            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+              Prontas
+            </span>
+          </button>
+        </div>
+
+        {/* Banner de Prioridade Máxima: Falhas aguardando próxima mesa */}
+        {!isLoading && failedPendingCount > 0 && (
+          <div className="bg-gradient-to-r from-rose-950/70 to-amber-950/60 border-2 border-rose-800/80 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-900/80 text-rose-300 flex items-center justify-center shrink-0 mt-0.5">
+                <AlertTriangle className="w-5 h-5 text-rose-300" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs sm:text-sm font-bold text-white">
+                    {failedPendingCount} arquivo(s) com falha aguardando reimpressão
+                  </h3>
+                  <Badge variant="outline" className="bg-rose-900/80 text-rose-200 border-rose-600 font-bold text-[10px]">
+                    PRIORIDADE
+                  </Badge>
+                </div>
+                <p className="text-xs text-rose-200/80 mt-0.5">
+                  Estes modelos falharam na impressora e entram como prioridade urgente na próxima mesa de impressão.
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              onClick={handleCollectFailed}
+              className="bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold text-xs h-9 px-4 shrink-0 shadow-md gap-1.5"
+            >
+              <Sparkles className="w-4 h-4" />
+              Criar Nova Mesa com as Falhas
+            </Button>
+          </div>
+        )}
+
+        {/* Barra de busca + filtros secundários */}
         <div className="bg-slate-900/60 border border-slate-800 rounded-xl">
           <div className="flex items-center gap-2 p-2.5">
             <div className="relative flex-1 min-w-0">
@@ -892,7 +1168,7 @@ export default function FilaPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar paciente, clínica, arquivo..."
+                placeholder="Buscar paciente, clínica, arquivo, impressora..."
                 className="w-full pl-9 pr-8 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-slate-600 transition"
               />
               {searchQuery && (
@@ -922,34 +1198,6 @@ export default function FilaPage() {
                 <span className="w-1.5 h-1.5 rounded-full bg-white" />
               )}
             </button>
-          </div>
-
-          {/* Abas de status do pedido — rolagem horizontal no mobile */}
-          <div className="flex items-center gap-1 px-2.5 pb-2.5 overflow-x-auto">
-            {(
-              [
-                ["TODAS", `Todos (${orderGroups.length})`],
-                ["AGUARDANDO", `Aguardando (${statusCounts.AGUARDANDO})`],
-                ["PREPARANDO", `Preparando (${statusCounts.PREPARANDO})`],
-                ["IMPRIMINDO", `Imprimindo (${statusCounts.IMPRIMINDO})`],
-                ["IMPRESSO", `Impressos (${statusCounts.IMPRESSO})`],
-                ["CONCLUIDO", `Concluídos (${statusCounts.CONCLUIDO})`],
-                ["ERRO", `Erros (${statusCounts.ERRO})`],
-              ] as Array<[BatchDerivedStatus | "TODAS", string]>
-            ).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setStatusFilter(value)}
-                className={`shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-medium transition ${
-                  statusFilter === value
-                    ? "bg-slate-100 text-slate-900"
-                    : "text-slate-400 hover:text-white hover:bg-slate-800"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
           </div>
 
           {showFilters && (
@@ -1001,88 +1249,84 @@ export default function FilaPage() {
           )}
         </div>
 
-        {/* Andamento das impressões — ordens EM_IMPRESSAO vinculadas à fila */}
-        {!isLoading && activeRuns.length > 0 && (
-          <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-2.5">
+        {/* Andamento das impressões na máquina — ordens ativas */}
+        {!isLoading && activeRuns.length > 0 && viewTab === "IMPRIMINDO" && (
+          <div className="bg-slate-900/60 border border-cyan-800/60 rounded-xl p-3">
             <div className="flex items-center justify-between px-1 pb-2">
-              <h2 className="text-xs font-semibold text-slate-200 flex items-center gap-2">
+              <h2 className="text-xs font-semibold text-cyan-300 flex items-center gap-2">
                 <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-60"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-400"></span>
                 </span>
-                Imprimindo agora ({activeRuns.length})
+                Executando na Impressora ({activeRuns.length})
               </h2>
               <Link
                 href="/impressoes"
-                className="text-[11px] text-slate-400 hover:text-white underline underline-offset-2"
+                className="text-[11px] text-cyan-400 hover:text-cyan-300 underline underline-offset-2"
               >
-                Ver todas
+                Gerenciar todas as ordens
               </Link>
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
               {activeRuns.map((run) => (
                 <Link
                   key={run.id}
                   href={`/impressoes/${run.id}`}
-                  className="shrink-0 min-w-0 w-[240px] bg-slate-950 border border-slate-800 hover:border-slate-600 rounded-lg p-2.5 transition text-left"
-                  title={`Acompanhar ordem ${run.run_code}`}
+                  className="bg-slate-950 border border-slate-800 hover:border-cyan-500 rounded-xl p-3 transition text-left"
                 >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="font-mono text-sm font-bold text-white truncate">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-sm font-bold text-white">
                       {run.run_code}
                     </span>
-                    <span className="ml-auto shrink-0 text-[10px] text-slate-400 whitespace-nowrap">
+                    <span className="text-[10px] text-slate-400">
                       {formatElapsed(run.started_at)}
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-400 truncate mt-0.5">
-                    {run.printer_name} · {run.items_count} modelo(s)
+                  <p className="text-xs text-slate-300 mt-1 flex items-center gap-1.5 font-medium">
+                    <Printer className="w-3.5 h-3.5 text-cyan-400" />
+                    {run.printer_name}
                   </p>
-                  <span className="inline-flex items-center gap-1 mt-1.5 text-[11px] font-medium text-slate-300">
-                    Acompanhar
-                    <ArrowRight className="w-3 h-3" />
-                  </span>
+                  <div className="flex items-center justify-between pt-2 mt-2 border-t border-slate-800/80 text-[11px] text-slate-400">
+                    <span>{run.items_count} arquivo(s) na mesa</span>
+                    <span className="text-cyan-400 flex items-center gap-1 font-semibold">
+                      Acompanhar
+                      <ArrowRight className="w-3 h-3" />
+                    </span>
+                  </div>
                 </Link>
               ))}
             </div>
           </div>
         )}
 
-        {/* Falhas aguardando a próxima impressão (prioridade) */}
-        {!isLoading && failedPendingCount > 0 && (
-          <div className="bg-amber-950/40 border border-amber-900 rounded-xl px-3 py-2.5 flex flex-col sm:flex-row sm:items-center gap-2">
-            <p className="text-xs text-amber-200 flex-1">
-              <strong>{failedPendingCount} modelo(s) com falha</strong> aguardando — entram com
-              prioridade na próxima impressão.
-            </p>
-            <button
-              type="button"
-              onClick={handleCollectFailed}
-              className="shrink-0 px-3 h-8 text-[11px] font-semibold bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-lg"
-            >
-              Criar próxima impressão com as falhas
-            </button>
-          </div>
-        )}
-
         {/* Estado vazio */}
         {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-            {[1, 2, 3, 4, 5].map((i) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {[1, 2, 3, 4].map((i) => (
               <div key={i} className="space-y-2">
-                <Skeleton className="h-9 w-full rounded-lg bg-slate-800/60" />
-                <Skeleton className="h-28 w-full rounded-lg bg-slate-800/40" />
-                <Skeleton className="h-28 w-full rounded-lg bg-slate-800/40" />
+                <Skeleton className="h-10 w-full rounded-xl bg-slate-800/60" />
+                <Skeleton className="h-32 w-full rounded-xl bg-slate-800/40" />
               </div>
             ))}
           </div>
         ) : filteredGroups.length === 0 ? (
-          <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-8 text-center">
-            <h3 className="text-sm font-semibold text-white">Nada por aqui</h3>
-            <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
+          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-8 text-center">
+            <div className="w-12 h-12 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center mx-auto mb-3">
+              <Layers className="w-6 h-6" />
+            </div>
+            <h3 className="text-sm font-semibold text-white">
+              {viewTab === "FILA"
+                ? "Nenhuma mesa aguardando na fila"
+                : viewTab === "IMPRIMINDO"
+                ? "Nenhuma mesa imprimindo no momento"
+                : viewTab === "CONCLUIDAS"
+                ? "Nenhuma mesa concluída ainda"
+                : "Nenhuma mesa encontrada"}
+            </h3>
+            <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1 mb-4">
               {hasActiveFilters
                 ? "Nenhum item corresponde aos filtros. Ajuste a busca ou limpe os filtros."
-                : "Cadastre um modelo para começar a fila."}
+                : "Solte arquivos STL na tela ou clique abaixo para montar a primeira Mesa de Impressão."}
             </p>
             <div className="flex items-center justify-center gap-2">
               {hasActiveFilters && (
@@ -1098,13 +1342,13 @@ export default function FilaPage() {
                 onClick={() => setIsUploadModalOpen(true)}
                 className="bg-white hover:bg-slate-200 text-slate-900 rounded-lg text-xs font-semibold px-4 h-9"
               >
-                Nova impressão
+                Nova Mesa de Impressão
               </Button>
             </div>
           </div>
         ) : (
-          /* Pedidos (lotes) — um cartão por pedido, mais recentes primeiro */
-          <div className="space-y-2.5">
+          /* Lista das Mesas de Impressão */
+          <div className="space-y-3">
             {filteredGroups.map((group) => {
               const cfg = BATCH_STATUS_CONFIG[group.derived];
               const expanded = expandedBatchIds.includes(group.key);
@@ -1120,61 +1364,106 @@ export default function FilaPage() {
               return (
                 <div
                   key={group.key}
-                  className="bg-slate-900/40 border border-slate-800 rounded-xl overflow-hidden"
+                  className={`bg-slate-900/50 border rounded-2xl overflow-hidden transition ${
+                    group.isPrinting
+                      ? "border-cyan-500/70 shadow-md shadow-cyan-950/20"
+                      : group.derived === "ERRO"
+                      ? "border-rose-900/80 bg-rose-950/10"
+                      : "border-slate-800 hover:border-slate-700"
+                  }`}
                 >
-                  {/* Cabeçalho do pedido */}
+                  {/* Cabeçalho da Mesa de Impressão */}
                   <div
                     onClick={() => toggleExpandBatch(group.key)}
-                    className="w-full text-left p-3 flex items-center gap-3 hover:bg-slate-800/30 transition cursor-pointer"
+                    className="w-full text-left p-3.5 sm:p-4 flex items-center gap-3 hover:bg-slate-800/30 transition cursor-pointer select-none"
                   >
                     <ChevronDown
                       className={`w-4 h-4 shrink-0 text-slate-400 transition-transform ${
                         expanded ? "" : "-rotate-90"
                       }`}
                     />
+
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-semibold text-white">{group.title}</span>
+                        <span className="text-sm sm:text-base font-bold text-white flex items-center gap-1.5">
+                          <Layers className="w-4 h-4 text-cyan-400 shrink-0" />
+                          {group.title}
+                        </span>
+
+                        {group.printer_name && (
+                          <span className="text-[11px] font-semibold text-cyan-300 bg-cyan-950/80 border border-cyan-800 rounded-md px-2 py-0.5 flex items-center gap-1">
+                            <Printer className="w-3 h-3 text-cyan-400" />
+                            {group.printer_name}
+                          </span>
+                        )}
+
                         <span
-                          className={`text-[10px] font-medium border rounded px-1.5 py-0.5 ${cfg.chip}`}
+                          className={`text-[10px] font-bold border rounded-md px-2 py-0.5 ${cfg.chip}`}
                         >
                           {cfg.label}
                         </span>
+
+                        {group.isPrinting && (
+                          <span className="text-[10px] font-bold text-cyan-300 bg-cyan-950 border border-cyan-700 rounded-md px-2 py-0.5 flex items-center gap-1 animate-pulse">
+                            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                            IMPRIMINDO NA MÁQUINA
+                          </span>
+                        )}
                       </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        {formatDate(group.createdAt)} · {group.items.length}{" "}
-                        {group.items.length === 1 ? "item" : "itens"}
+
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        {formatDate(group.createdAt)} · <strong>{group.items.length}</strong>{" "}
+                        {group.items.length === 1 ? "arquivo na mesa" : "arquivos na mesa"}
                       </p>
+
                       {firstRun && (
                         <Link
                           href={`/impressoes/${firstRun.id}`}
                           onClick={(e) => e.stopPropagation()}
-                          className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-slate-300 hover:text-white underline underline-offset-2"
+                          className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-cyan-400 hover:text-cyan-300 underline underline-offset-2"
                         >
-                          Mesa {firstRun.run_code} · acompanhar
+                          Ordem {firstRun.run_code} · Acompanhar execução
                           <ArrowRight className="w-3 h-3" />
                         </Link>
                       )}
                     </div>
+
+                    {/* Botões de Ação na Mesa */}
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handlePrintBatch(group);
-                        }}
-                        disabled={group.printableCount === 0}
-                        className="h-8 px-3 text-[11px] font-semibold bg-slate-100 hover:bg-white text-slate-900 rounded-lg flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
-                        title={
-                          group.printableCount === 0
-                            ? "Nada pronto para imprimir neste pedido"
-                            : `Imprimir ${group.printableCount} item(ns) deste pedido`
-                        }
-                      >
-                        <Play className="w-3 h-3" />
-                        Imprimir
-                        {group.printableCount > 0 && <span>· {group.printableCount}</span>}
-                      </button>
+                      {group.isPrinting ? (
+                        <Button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setGroupConfirmTarget({ group, to: "CONCLUIDO" });
+                          }}
+                          size="sm"
+                          className="h-8 px-3 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg flex items-center gap-1 shadow"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          Concluir Mesa
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setBatchToPrintDirectly(group);
+                            setSelectedPrinterForBatch(
+                              group.printer_id || (printers[0]?.id || "")
+                            );
+                          }}
+                          disabled={group.printableCount === 0}
+                          size="sm"
+                          className="h-8 px-3.5 text-[11px] font-bold bg-white hover:bg-slate-200 text-slate-950 rounded-lg flex items-center gap-1.5 shadow disabled:opacity-40"
+                          title={`Colocar ${group.printableCount} arquivo(s) na impressora`}
+                        >
+                          <Play className="w-3.5 h-3.5 fill-current" />
+                          Iniciar Impressão
+                          {group.printableCount > 0 && <span>({group.printableCount})</span>}
+                        </Button>
+                      )}
+
                       {group.batchId && (
                         <button
                           type="button"
@@ -1182,8 +1471,8 @@ export default function FilaPage() {
                             e.stopPropagation();
                             setBatchToDelete(group);
                           }}
-                          className="h-8 px-2.5 text-[11px] font-medium text-slate-400 hover:text-red-300 hover:bg-slate-800 rounded-lg flex items-center gap-1"
-                          title="Apagar pedido"
+                          className="h-8 px-2.5 text-[11px] font-medium text-slate-400 hover:text-red-300 hover:bg-slate-800 rounded-lg flex items-center gap-1 transition"
+                          title="Apagar mesa de impressão"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                           <span className="hidden sm:inline">Apagar</span>
@@ -1192,13 +1481,13 @@ export default function FilaPage() {
                     </div>
                   </div>
 
-                  {/* Itens do pedido (recolhidos por padrão) */}
+                  {/* Arquivos contidos nesta Mesa (expandido) */}
                   {expanded && (
                     <div className="border-t border-slate-800">
-                      {/* Ações no grupo inteiro */}
-                      <div className="flex items-center flex-wrap gap-1.5 px-3 sm:px-4 py-2 bg-slate-950/50 border-b border-slate-800/60">
-                        <span className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold mr-1">
-                          Grupo
+                      {/* Ações em lote na mesa */}
+                      <div className="flex items-center flex-wrap gap-1.5 px-3 sm:px-4 py-2 bg-slate-950/60 border-b border-slate-800/80">
+                        <span className="text-[10px] uppercase tracking-wide text-slate-400 font-bold mr-1">
+                          Ações na Mesa
                         </span>
                         <button
                           type="button"
@@ -1207,8 +1496,7 @@ export default function FilaPage() {
                             !group.items.some((i) => i.status === "NA_FILA")
                           }
                           onClick={() => setGroupConfirmTarget({ group, to: "PREPARANDO" })}
-                          className="px-2 py-1 text-[11px] font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-md disabled:opacity-40 disabled:cursor-not-allowed"
-                          title="Mover todos os itens Na fila para Preparando"
+                          className="px-2.5 py-1 text-[11px] font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-md disabled:opacity-40 disabled:cursor-not-allowed transition"
                         >
                           Preparar todos
                         </button>
@@ -1219,8 +1507,7 @@ export default function FilaPage() {
                             !group.items.some((i) => i.status === "IMPRESSO")
                           }
                           onClick={() => setGroupConfirmTarget({ group, to: "CONCLUIDO" })}
-                          className="px-2 py-1 text-[11px] font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-md disabled:opacity-40 disabled:cursor-not-allowed"
-                          title="Mover todos os itens Impressos para Concluído"
+                          className="px-2.5 py-1 text-[11px] font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-md disabled:opacity-40 disabled:cursor-not-allowed transition"
                         >
                           Concluir todos
                         </button>
@@ -1236,129 +1523,180 @@ export default function FilaPage() {
                             setGroupFailTarget(group);
                             setGroupFailReason("");
                           }}
-                          className="px-2 py-1 text-[11px] font-medium text-slate-400 hover:text-red-300 hover:bg-slate-800 rounded-md disabled:opacity-40 disabled:cursor-not-allowed"
-                          title="Marcar todos como falha (voltam como prioridade)"
+                          className="px-2.5 py-1 text-[11px] font-semibold text-rose-300 hover:bg-rose-950/60 rounded-md disabled:opacity-40 disabled:cursor-not-allowed transition ml-auto"
                         >
-                          Falhar todos
+                          Marcar falha na mesa toda
                         </button>
                       </div>
+
+                      {/* Lista de Arquivos da Mesa */}
                       <div className="divide-y divide-slate-800/60">
-                      {[...group.items]
-                        .sort((a, b) => Number(b.is_retry) - Number(a.is_retry))
-                        .map((card) => {
-                        const statusCfg = PRINT_CARD_STATUS_CONFIG[card.status];
-                        const itemRun =
-                          runByItemId.get(card.id) ||
-                          (card.last_run_code ? runByCode.get(card.last_run_code) : undefined);
-                        return (
-                          <div key={card.id} className="p-2.5 pl-4 sm:pl-5 min-w-0">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <button
-                                type="button"
-                                onClick={() => handleOpenPatientHistory(card.patient_code)}
-                                className="min-w-0 flex-1 truncate text-left text-[13px] font-semibold text-white hover:underline underline-offset-2"
-                                title="Ver histórico do paciente"
-                              >
-                                {card.patient_code}
-                              </button>
-                              {card.priority === "URGENTE" && (
-                                <span className="shrink-0 text-[10px] font-semibold text-red-300 bg-red-950 border border-red-900 rounded px-1.5 py-0.5">
-                                  Urgente
-                                </span>
-                              )}
-                              {card.priority !== "URGENTE" && card.is_retry && (
-                                <span className="shrink-0 text-[10px] font-medium text-amber-300 bg-amber-950/60 border border-amber-900 rounded px-1.5 py-0.5">
-                                  {card.retry_count > 1 ? `${card.retry_count}ª tent.` : "Reimpressão"}
-                                </span>
-                              )}
-                              <span className="shrink-0 text-[10px] text-slate-300 bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5">
-                                {statusCfg.label}
-                              </span>
-                            </div>
+                        {[...group.items]
+                          .sort((a, b) => Number(b.is_retry || b.status === "FALHOU") - Number(a.is_retry || a.status === "FALHOU"))
+                          .map((card) => {
+                            const statusCfg = PRINT_CARD_STATUS_CONFIG[card.status];
+                            const isFailed = card.status === "FALHOU";
+                            const isUrgent = card.priority === "URGENTE";
 
-                            {card.patient_name && (
-                              <p className="text-[11px] text-slate-400 truncate mt-0.5">
-                                {card.patient_name}
-                              </p>
-                            )}
-                            <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                              {card.clinic_name} ·{" "}
-                              {LAB_WORK_TYPE_LABELS[card.work_type] || card.work_type}
-                            </p>
-                            <p
-                              className="text-[11px] text-slate-600 font-mono truncate"
-                              title={card.file_name}
-                            >
-                              {card.file_name}
-                            </p>
+                            return (
+                              <div
+                                key={card.id}
+                                className={`p-3 pl-4 sm:pl-5 min-w-0 transition ${
+                                  isFailed ? "bg-rose-950/20" : ""
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenPatientHistory(card.patient_code)}
+                                    className="text-[13px] font-bold text-white hover:underline underline-offset-2 truncate"
+                                    title="Ver histórico do paciente"
+                                  >
+                                    {card.patient_code}
+                                  </button>
 
-                            <div className="flex items-center flex-wrap gap-y-1 gap-x-1 mt-1.5 min-w-0">
-                              {getPreviousStatus(card.status) && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleGoBackStatus(card)}
-                                  className="shrink-0 px-2 py-1 text-[11px] font-medium text-slate-400 hover:text-white hover:bg-slate-800 rounded-md flex items-center gap-1 whitespace-nowrap"
-                                  title={`Voltar para ${
-                                    PRINT_CARD_STATUS_CONFIG[getPreviousStatus(card.status)!].label
-                                  }`}
+                                  {card.patient_name && (
+                                    <span className="text-xs text-slate-400 truncate">
+                                      ({card.patient_name})
+                                    </span>
+                                  )}
+
+                                  {/* Badges de Destaque / Falha / Prioridade */}
+                                  {isFailed ? (
+                                    <span className="shrink-0 text-[11px] font-bold text-rose-200 bg-rose-950 border border-rose-500 rounded-md px-2 py-0.5 flex items-center gap-1 animate-pulse">
+                                      <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                                      PRIORIDADE (FALHOU)
+                                    </span>
+                                  ) : isUrgent ? (
+                                    <span className="shrink-0 text-[10px] font-bold text-red-200 bg-red-950 border border-red-700 rounded px-1.5 py-0.5">
+                                      PRIORIDADE
+                                    </span>
+                                  ) : card.is_retry ? (
+                                    <span className="shrink-0 text-[10px] font-semibold text-amber-300 bg-amber-950/70 border border-amber-800 rounded px-1.5 py-0.5">
+                                      {card.retry_count > 1 ? `${card.retry_count}ª tentativa` : "Reimpressão"}
+                                    </span>
+                                  ) : null}
+
+                                  <span className="shrink-0 text-[10px] text-slate-300 bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5">
+                                    {statusCfg.label}
+                                  </span>
+                                </div>
+
+                                <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
+                                  <span>Clínica: <strong>{card.clinic_name}</strong></span>
+                                  <span>·</span>
+                                  <span>Tipo: <strong>{LAB_WORK_TYPE_LABELS[card.work_type] || card.work_type}</strong></span>
+                                  {card.material && (
+                                    <>
+                                      <span>·</span>
+                                      <span className="text-slate-500 font-mono">{card.material}</span>
+                                    </>
+                                  )}
+                                </div>
+
+                                <p
+                                  className="text-[11px] text-slate-500 font-mono truncate mt-0.5 flex items-center gap-1.5"
+                                  title={card.file_name}
                                 >
-                                  <Undo2 className="w-3 h-3 shrink-0" />
-                                  Voltar
-                                </button>
-                              )}
-                              {card.status !== "CONCLUIDO" && card.status !== "CANCELADO" && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleQuickAdvanceStatus(card)}
-                                  className="shrink-0 px-2.5 py-1 text-[11px] font-semibold bg-slate-100 hover:bg-white text-slate-900 rounded-md flex items-center gap-1 whitespace-nowrap"
-                                >
-                                  Avançar
-                                  <ArrowRight className="w-3 h-3 shrink-0" />
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => handleOpenCardHistory(card)}
-                                className="shrink-0 p-1.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded-md transition"
-                                title="Histórico"
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                              </button>
-                              <select
-                                value=""
-                                onChange={(e) => {
-                                  if (e.target.value) handleMoveItem(card, e.target.value);
-                                  e.target.value = "";
-                                }}
-                                className="shrink-0 max-w-[110px] bg-transparent text-[11px] text-slate-500 hover:text-white border border-transparent hover:border-slate-700 rounded-md px-1 py-1 focus:outline-none focus:border-slate-600"
-                                title="Mover modelo para outro pedido"
-                              >
-                                <option value="">Mover…</option>
-                                {orderGroups
-                                  .filter((g) => g.batchId && g.batchId !== card.batch_id)
-                                  .map((g) => (
-                                    <option key={g.key} value={g.batchId || ""}>
-                                      {g.title}
-                                    </option>
-                                  ))}
-                                {card.batch_id && <option value="avulsos">Sem lote</option>}
-                              </select>
-                              {card.status !== "CONCLUIDO" && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setCardToFail(card);
-                                    setCardFailReason("");
-                                  }}
-                                  className="shrink-0 text-[11px] text-slate-600 hover:text-red-400"
-                                >
-                                  Marcar falha
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
+                                  <FileText className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                                  {card.file_name}
+                                </p>
+
+                                {card.last_failure_reason && (
+                                  <p className="text-[11px] text-rose-300 bg-rose-950/40 border border-rose-900/60 rounded-md px-2 py-1 mt-1.5 inline-block">
+                                    <strong>Motivo da falha:</strong> {card.last_failure_reason}
+                                  </p>
+                                )}
+
+                                {/* Barra de ações em linha no arquivo */}
+                                <div className="flex items-center flex-wrap gap-1.5 mt-2 min-w-0">
+                                  {/* Botão de Marcar Falha com destaque */}
+                                  {card.status !== "CONCLUIDO" && !isFailed && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setCardToFail(card);
+                                        setCardFailReason("");
+                                      }}
+                                      className="px-2.5 py-1 text-xs font-semibold text-rose-300 bg-rose-950/70 hover:bg-rose-900 border border-rose-800 rounded-md flex items-center gap-1 transition shadow-sm"
+                                      title="Marcar este arquivo como falha (vira prioridade para reimpressão)"
+                                    >
+                                      <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                                      Marcar Falha
+                                    </button>
+                                  )}
+
+                                  {/* Se já falhou, botão para voltar à fila como prioridade */}
+                                  {isFailed && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleQuickAdvanceStatus(card)}
+                                      className="px-2.5 py-1 text-xs font-bold text-amber-950 bg-amber-400 hover:bg-amber-300 rounded-md flex items-center gap-1 shadow transition"
+                                      title="Retornar arquivo para a fila como prioridade"
+                                    >
+                                      <Sparkles className="w-3.5 h-3.5" />
+                                      Reimprimir (Prioritário)
+                                    </button>
+                                  )}
+
+                                  {/* Avançar status */}
+                                  {card.status !== "CONCLUIDO" && card.status !== "CANCELADO" && !isFailed && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleQuickAdvanceStatus(card)}
+                                      className="px-2.5 py-1 text-xs font-semibold bg-slate-100 hover:bg-white text-slate-900 rounded-md flex items-center gap-1 whitespace-nowrap transition"
+                                    >
+                                      Avançar
+                                      <ArrowRight className="w-3 h-3 shrink-0" />
+                                    </button>
+                                  )}
+
+                                  {/* Voltar status */}
+                                  {getPreviousStatus(card.status) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleGoBackStatus(card)}
+                                      className="px-2 py-1 text-[11px] font-medium text-slate-400 hover:text-white hover:bg-slate-800 rounded-md flex items-center gap-1 whitespace-nowrap transition"
+                                      title="Desfazer e voltar etapa"
+                                    >
+                                      <Undo2 className="w-3 h-3 shrink-0" />
+                                      Voltar
+                                    </button>
+                                  )}
+
+                                  {/* Mover arquivo para outra mesa */}
+                                  <select
+                                    value=""
+                                    onChange={(e) => {
+                                      if (e.target.value) handleMoveItem(card, e.target.value);
+                                      e.target.value = "";
+                                    }}
+                                    className="max-w-[130px] bg-slate-950 text-[11px] text-slate-300 border border-slate-800 hover:border-slate-700 rounded-md px-1.5 py-1 focus:outline-none focus:border-slate-600"
+                                    title="Mover este arquivo para outra mesa de impressão"
+                                  >
+                                    <option value="">Mover de mesa…</option>
+                                    {orderGroups
+                                      .filter((g) => g.batchId && g.batchId !== card.batch_id)
+                                      .map((g) => (
+                                        <option key={g.key} value={g.batchId || ""}>
+                                          {g.title}
+                                        </option>
+                                      ))}
+                                    {card.batch_id && <option value="avulsos">Sem mesa (avulso)</option>}
+                                  </select>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenCardHistory(card)}
+                                    className="p-1.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded-md transition"
+                                    title="Ver histórico de movimentações deste arquivo"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
                       </div>
                     </div>
                   )}
@@ -1723,27 +2061,66 @@ export default function FilaPage() {
               </div>
             )}
 
+            {/* CONFIGURAÇÃO DA MESA DE IMPRESSÃO */}
+            <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 space-y-3">
+              <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-cyan-400" />
+                Mesa de Impressão de Destino
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                <div>
+                  <label className="text-[11px] text-slate-400 font-medium block mb-1">Destino *</label>
+                  <select
+                    value={uploadDest}
+                    onChange={(e) => setUploadDest(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none focus:border-slate-600"
+                  >
+                    <option value="new">Criar Nova Mesa de Impressão</option>
+                    {orderGroups
+                      .filter((g) => g.batchId && g.derived !== "CONCLUIDO")
+                      .map((g) => (
+                        <option key={g.key} value={g.key}>
+                          Adicionar à {g.title} ({g.items.length} itens)
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                {uploadDest === "new" && (
+                  <div>
+                    <label className="text-[11px] text-slate-400 font-medium block mb-1">Nome da Mesa</label>
+                    <input
+                      type="text"
+                      value={newMesaName}
+                      onChange={(e) => setNewMesaName(e.target.value)}
+                      placeholder={`Mesa #${batches.length + 1}`}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none focus:border-slate-600"
+                    />
+                  </div>
+                )}
+
+                {uploadDest === "new" && (
+                  <div>
+                    <label className="text-[11px] text-slate-400 font-medium block mb-1">Impressora da Mesa (Opcional)</label>
+                    <select
+                      value={newMesaPrinterId}
+                      onChange={(e) => setNewMesaPrinterId(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none focus:border-slate-600"
+                    >
+                      <option value="">Definir ao imprimir...</option>
+                      {printers.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} ({p.model})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* BOTÕES DE SALVAMENTO */}
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 pt-3 border-t border-slate-800">
-              <label className="flex items-center gap-2 text-xs text-slate-300 flex-1 min-w-0">
-                <span className="shrink-0 text-slate-400">Salvar em:</span>
-                <select
-                  value={uploadDest}
-                  onChange={(e) => setUploadDest(e.target.value)}
-                  className="flex-1 min-w-0 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-slate-600"
-                  title="Novo pedido ou juntar a um pedido existente"
-                >
-                  <option value="new">Novo pedido (cria Impressão nova)</option>
-                  {orderGroups
-                    .filter((g) => g.batchId && g.derived !== "CONCLUIDO")
-                    .map((g) => (
-                      <option key={g.key} value={g.key}>
-                        {g.title} ({g.items.length} itens)
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <div className="flex items-center justify-end gap-2.5">
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-800">
               <Button
                 variant="outline"
                 onClick={() => {
@@ -1758,21 +2135,24 @@ export default function FilaPage() {
               <Button
                 disabled={pendingFiles.length === 0 || isSavingCards || isCheckingDuplicates}
                 onClick={handleSaveUpload}
-                className="bg-white hover:bg-slate-200 text-slate-950 font-bold rounded-full text-xs h-9 px-5 gap-1.5"
+                className="bg-white hover:bg-slate-200 text-slate-950 font-bold rounded-full text-xs h-9 px-5 gap-1.5 shadow"
               >
                 {isSavingCards ? (
                   <>
                     <div className="w-3.5 h-3.5 border-2 border-slate-950/30 border-t-slate-950 rounded-full animate-spin" />
-                    <span>Salvando na esteira...</span>
+                    <span>Salvando na mesa...</span>
                   </>
                 ) : (
                   <>
                     <Check className="w-3.5 h-3.5" />
-                    <span>Cadastrar {pendingFiles.length} item(ns) na Fila</span>
+                    <span>
+                      {uploadDest === "new"
+                        ? `Criar Mesa com ${pendingFiles.length} arquivo(s)`
+                        : `Adicionar ${pendingFiles.length} arquivo(s) à Mesa`}
+                    </span>
                   </>
                 )}
               </Button>
-              </div>
             </div>
           </div>
         </Dialog>
@@ -1976,31 +2356,60 @@ export default function FilaPage() {
         </Dialog>
 
         {/* ==================================================================== */}
-        {/* MODAL 5: FALHA DE CARD INDIVIDUAL */}
+        {/* MODAL 5: FALHA DE ARQUIVO INDIVIDUAL (MOVE PARA PRIORIDADE) */}
         {/* ==================================================================== */}
         <Dialog
           open={Boolean(cardToFail)}
           onOpenChange={(open) => {
             if (!open) setCardToFail(null);
           }}
-          title="Marcar Card Individual como Falhou"
+          title="Marcar Arquivo como Falha na Impressão"
         >
           <div className="space-y-4">
-            <p className="text-xs text-slate-300">
-              Você está marcando o modelo <strong>{cardToFail?.file_name}</strong> (Paciente:{" "}
-              <strong>{cardToFail?.patient_code}</strong>) como FALHOU.
-            </p>
+            <div className="bg-rose-950/40 border border-rose-900/60 rounded-xl p-3 text-xs text-rose-200">
+              <p>
+                Você está marcando o modelo <strong>{cardToFail?.file_name}</strong> (Paciente:{" "}
+                <strong>{cardToFail?.patient_code}</strong>) como <strong>FALHOU</strong>.
+              </p>
+              <p className="mt-1.5 text-rose-300 font-semibold flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-400" />
+                Este arquivo entrará automaticamente como PRIORIDADE para a próxima mesa de impressão.
+              </p>
+            </div>
 
             <div>
-              <label className="text-xs font-medium text-slate-300 block mb-1">
-                Motivo da Falha *
+              <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+                Selecione ou informe o motivo da falha *
               </label>
+              <div className="flex flex-wrap gap-1.5 mb-2.5">
+                {[
+                  "Descolou da mesa",
+                  "Suporte quebrou",
+                  "Delaminação de camada",
+                  "Falta de resina no tanque",
+                  "Distorção / erro dimensional",
+                  "Peça quebrou no acabamento",
+                ].map((reason) => (
+                  <button
+                    key={reason}
+                    type="button"
+                    onClick={() => setCardFailReason(reason)}
+                    className={`text-[11px] px-2.5 py-1 rounded-full border transition ${
+                      cardFailReason === reason
+                        ? "bg-rose-900 border-rose-500 text-white font-bold"
+                        : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700"
+                    }`}
+                  >
+                    {reason}
+                  </button>
+                ))}
+              </div>
               <input
                 type="text"
                 value={cardFailReason}
                 onChange={(e) => setCardFailReason(e.target.value)}
-                placeholder="Ex: Dente quebrou / delaminação de camada"
-                className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-rose-400"
+                placeholder="Ex: Descolou da mesa de impressão"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-400"
               />
             </div>
 
@@ -2015,10 +2424,84 @@ export default function FilaPage() {
 
               <Button
                 onClick={handleConfirmCardFailure}
-                className="bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-full text-xs h-9 px-5"
+                className="bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-full text-xs h-9 px-5 gap-1.5 shadow"
               >
-                Confirmar Falha
+                <AlertTriangle className="w-3.5 h-3.5" />
+                Confirmar Falha & Priorizar
               </Button>
+            </div>
+          </div>
+        </Dialog>
+
+        {/* ==================================================================== */}
+        {/* MODAL: INICIAR IMPRESSÃO DIRETO NA MESA */}
+        {/* ==================================================================== */}
+        <Dialog
+          open={Boolean(batchToPrintDirectly)}
+          onOpenChange={(open) => {
+            if (!open) setBatchToPrintDirectly(null);
+          }}
+          title={`Enviar ${batchToPrintDirectly?.title || "Mesa"} para Impressora`}
+        >
+          <div className="space-y-4">
+            <p className="text-xs text-slate-300">
+              Você está prestes a colocar a <strong>{batchToPrintDirectly?.title}</strong> em impressão.
+              Todos os {batchToPrintDirectly?.printableCount} arquivos prontos desta mesa serão impressos juntos na impressora selecionada.
+            </p>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-200 block">
+                Selecione a Impressora da Mesa *
+              </label>
+              {printers.length === 0 ? (
+                <p className="text-xs text-amber-400">Nenhuma impressora cadastrada ou ativa.</p>
+              ) : (
+                <select
+                  value={selectedPrinterForBatch}
+                  onChange={(e) => setSelectedPrinterForBatch(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-cyan-400"
+                >
+                  <option value="">Selecione uma impressora...</option>
+                  {printers.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} — {p.brand} {p.model}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  if (batchToPrintDirectly) {
+                    const ids = batchToPrintDirectly.items
+                      .filter((i) => ["NA_FILA", "PREPARANDO", "FALHOU"].includes(i.status))
+                      .map((i) => i.id);
+                    router.push(`/fatiador?items=${ids.join(",")}`);
+                  }
+                }}
+                className="text-xs text-slate-400 hover:text-white underline underline-offset-2"
+              >
+                Opções avançadas (Abrir no Fatiador)
+              </button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setBatchToPrintDirectly(null)}
+                  className="border-slate-700 text-slate-300 rounded-full text-xs h-9"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleDirectBatchPrint}
+                  disabled={!selectedPrinterForBatch || isStartingBatchPrint}
+                  className="bg-white hover:bg-slate-200 text-slate-950 font-bold rounded-full text-xs h-9 px-5 gap-1.5 shadow"
+                >
+                  {isStartingBatchPrint ? "Iniciando..." : "Iniciar Impressão"}
+                </Button>
+              </div>
             </div>
           </div>
         </Dialog>
