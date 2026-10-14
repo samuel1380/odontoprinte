@@ -7,8 +7,6 @@ import {
   LayoutDashboard,
   FileCheck2,
   ListOrdered,
-  Scissors,
-  Printer,
   FlaskConical,
   Compass,
   History,
@@ -64,16 +62,6 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
     {
       group: "Produção 3D",
       items: [
-        {
-          title: "Preparar Impressão",
-          href: "/fatiador",
-          icon: Scissors,
-        },
-        {
-          title: "Impressões em Andamento",
-          href: "/impressoes",
-          icon: Printer,
-        },
         {
           title: "Acabamento & CQ",
           href: "/acabamento",
