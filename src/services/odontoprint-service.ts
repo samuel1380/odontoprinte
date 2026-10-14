@@ -1401,6 +1401,179 @@ export class OdontoPrintService {
   }
 
   /**
+   * Move um modelo de um pedido para outro (ou para "Sem lote" com null).
+   * Usado para juntar modelos no mesmo grupo = mesma impressão da máquina.
+   */
+  static async moveItemToBatch(
+    itemId: string,
+    targetBatchId: string | null,
+    user_id?: string,
+    user_name?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
+    mockPrintBatches = loadLocal("odontoprint_batches", mockPrintBatches);
+    mockPrintItemHistory = loadLocal("odontoprint_item_history", mockPrintItemHistory);
+
+    const item = mockPrintJobItems.find((i) => i.id === itemId);
+    if (!item) return { success: false, error: "Modelo não encontrado." };
+    if (item.status === "EM_IMPRESSAO") {
+      return { success: false, error: "Modelo está imprimindo na máquina e não pode trocar de grupo agora." };
+    }
+
+    const now = new Date().toISOString();
+    const target = targetBatchId ? mockPrintBatches.find((b) => b.id === targetBatchId) : null;
+    if (targetBatchId && !target) return { success: false, error: "Pedido de destino não encontrado." };
+
+    const fromName = item.batch_name || "Sem lote";
+    item.batch_id = target ? target.id : null;
+    item.batch_name = target ? target.batch_name : null;
+    item.updated_at = now;
+
+    mockPrintItemHistory.unshift({
+      id: crypto.randomUUID(),
+      item_id: itemId,
+      from_status: this.mapDbStatusToCardStatus(item.status),
+      to_status: this.mapDbStatusToCardStatus(item.status),
+      changed_by: user_id || null,
+      changed_by_name: user_name || "Operador",
+      notes: `Movido de "${fromName}" para "${item.batch_name || "Sem lote"}"`,
+      created_at: now,
+    });
+
+    saveLocal("odontoprint_job_items", mockPrintJobItems);
+    saveLocal("odontoprint_item_history", mockPrintItemHistory);
+
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        const { error: itemErr } = await client.from("print_job_items").update({
+          batch_id: item.batch_id,
+          batch_name: item.batch_name,
+          updated_at: now,
+        }).eq("id", itemId);
+        if (itemErr) console.warn("Supabase moveItemToBatch (item) error:", itemErr);
+        try {
+          await client.from("print_item_history").insert(
+            mockPrintItemHistory.filter((h) => h.item_id === itemId).slice(0, 1)
+          );
+        } catch (histErr) {
+          console.warn("Supabase moveItemToBatch (history) error:", histErr);
+        }
+      } catch (err) {
+        console.warn("Supabase moveItemToBatch error:", err);
+      }
+    }
+
+    return { success: true };
+  }
+
+  /** Itens com falha aguardando a próxima impressão (prioridade). */
+  static async getFailedPendingItems(): Promise<PrintJobItem[]> {
+    mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        const { data, error } = await client
+          .from("print_job_items")
+          .select("*")
+          .or("status.eq.FALHOU_REIMPRESSAO,and(is_retry.eq.true,status.in.(AGUARDANDO_FILA,EM_PREPARO))");
+        if (!error && data) {
+          mockPrintJobItems = mergeById(data, mockPrintJobItems);
+          saveLocal("odontoprint_job_items", mockPrintJobItems);
+        }
+      } catch (err) {
+        console.warn("Supabase getFailedPendingItems error:", err);
+      }
+    }
+    return mockPrintJobItems.filter(
+      (i) =>
+        i.status === "FALHOU_REIMPRESSAO" ||
+        (i.is_retry && (i.status === "AGUARDANDO_FILA" || i.status === "EM_PREPARO"))
+    );
+  }
+
+  /**
+   * Junta todas as falhas pendentes num novo pedido = próxima impressão.
+   * Falhados voltam à fila como prioridade (mantêm a contagem de tentativas).
+   */
+  static async collectFailedIntoNewBatch(params?: {
+    user_id?: string;
+    user_name?: string;
+  }): Promise<{ success: boolean; batch?: PrintBatch; count?: number; error?: string }> {
+    const failed = await this.getFailedPendingItems();
+    if (failed.length === 0) {
+      return { success: false, error: "Não há modelos com falha aguardando." };
+    }
+    const res = await this.createOrderBatch({
+      item_ids: failed.map((i) => i.id),
+      user_id: params?.user_id,
+      user_name: params?.user_name || "Operador",
+    });
+    if (!res.success || !res.batch) {
+      return { success: false, error: res.error || "Não foi possível juntar as falhas." };
+    }
+    // Falhados retornam à fila dentro do novo pedido (prioridade)
+    for (const item of failed) {
+      if (item.status === "FALHOU_REIMPRESSAO") {
+        await this.updateCardStatus(item.id, "NA_FILA", "Retornou como prioridade da próxima impressão", params?.user_id, params?.user_name || "Operador");
+      }
+    }
+    return { success: true, batch: res.batch, count: failed.length };
+  }
+
+  /** Transições em lote permitidas por item (grupo inteiro de uma vez). */
+  private static bulkEligibleFrom(to: "PREPARANDO" | "IMPRESSO" | "CONCLUIDO" | "FALHOU"): string[] {
+    switch (to) {
+      case "PREPARANDO":
+        return ["NA_FILA"];
+      case "IMPRESSO":
+        return ["IMPRIMINDO"];
+      case "CONCLUIDO":
+        return ["IMPRESSO"];
+      case "FALHOU":
+        return ["NA_FILA", "PREPARANDO", "IMPRIMINDO", "IMPRESSO"];
+    }
+  }
+
+  /**
+   * Move o grupo inteiro para um status (só itens elegíveis mudam).
+   * "IMPRIMINDO" não entra aqui de propósito: impressão de verdade nasce
+   * no fatiador (cria mesa/código); a UI direciona para lá.
+   */
+  static async bulkUpdateGroupStatus(
+    itemIds: string[],
+    to: "PREPARANDO" | "IMPRESSO" | "CONCLUIDO" | "FALHOU",
+    opts?: { reason?: string; user_id?: string; user_name?: string }
+  ): Promise<{ success: boolean; moved: number; skipped: number; error?: string }> {
+    if (!itemIds || itemIds.length === 0) {
+      return { success: false, moved: 0, skipped: 0, error: "Grupo sem itens." };
+    }
+    mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
+    const eligible = OdontoPrintService.bulkEligibleFrom(to);
+    let moved = 0;
+    let skipped = 0;
+    for (const id of itemIds) {
+      const item = mockPrintJobItems.find((i) => i.id === id);
+      if (!item) {
+        skipped++;
+        continue;
+      }
+      const current = OdontoPrintService.mapDbStatusToCardStatus(item.status);
+      if (!eligible.includes(current)) {
+        skipped++;
+        continue;
+      }
+      const res = await OdontoPrintService.updateCardStatus(id, to, opts?.reason, opts?.user_id, opts?.user_name);
+      if (res.success) moved++;
+      else skipped++;
+    }
+    if (moved === 0) {
+      return { success: false, moved, skipped, error: "Nenhum item do grupo podia mudar para esse status." };
+    }
+    return { success: true, moved, skipped };
+  }
+
+  /**
    * Apaga um pedido (lote) e seus itens da fila.
    * Remove referências (mesas, histórico, acabamento) e os trabalhos
    * que ficarem vazios. Os pacientes (cases) são mantidos.
@@ -2479,6 +2652,73 @@ export class OdontoPrintService {
         (a, b) =>
           new Date(a.started_at || 0).getTime() - new Date(b.started_at || 0).getTime()
       );
+  }
+
+  /**
+   * Visão geral das impressões para a Dashboard, explicada em linguagem
+   * simples: o que está imprimindo (mesa + pedidos + impressora + tempo),
+   * quantos pedidos aguardam e quantas falhas têm prioridade.
+   */
+  static async getPrintingOverview(): Promise<{
+    printing: Array<{
+      id: string;
+      run_code: string;
+      printer_name: string;
+      started_at?: string | null;
+      items_count: number;
+      group_titles: string[];
+    }>;
+    waitingGroups: number;
+    waitingModels: number;
+    failedCount: number;
+  }> {
+    const [runs, cards, batches] = await Promise.all([
+      this.getActiveRunsWithItems(),
+      this.getPrintCards(),
+      this.getPrintBatches(),
+    ]);
+
+    const cardById = new Map(cards.map((c) => [c.id, c]));
+    const titleByBatchId = new Map<string, string>();
+    for (const b of batches) {
+      const n = (b as any).batch_number;
+      titleByBatchId.set(b.id, n ? `Impressão #${n}` : b.batch_name);
+    }
+
+    const printing = runs.map((r) => {
+      const titles = new Set<string>();
+      for (const itemId of r.item_ids) {
+        const card = cardById.get(itemId);
+        if (card?.batch_id && titleByBatchId.has(card.batch_id)) {
+          titles.add(titleByBatchId.get(card.batch_id)!);
+        }
+      }
+      return {
+        id: r.id,
+        run_code: r.run_code,
+        printer_name: r.printer_name,
+        started_at: r.started_at,
+        items_count: r.item_ids.length,
+        group_titles: Array.from(titles),
+      };
+    });
+
+    const waiting = cards.filter((c) => c.status === "NA_FILA" || c.status === "PREPARANDO");
+    const waitingBatchIds = new Set(
+      waiting.map((c) => c.batch_id || "avulsos")
+    );
+    const failed = cards.filter(
+      (c) =>
+        c.status === "FALHOU" ||
+        (c.is_retry && (c.status === "NA_FILA" || c.status === "PREPARANDO"))
+    );
+
+    return {
+      printing,
+      waitingGroups: waitingBatchIds.size,
+      waitingModels: waiting.length,
+      failedCount: failed.length,
+    };
   }
 
   static async getPrintRunById(id: string) {

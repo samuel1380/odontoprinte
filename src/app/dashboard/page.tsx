@@ -30,25 +30,42 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [printing, setPrinting] = useState<Awaited<
+    ReturnType<typeof OdontoPrintService.getPrintingOverview>
+  > | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showAll, setShowAll] = useState(false);
+  const [, setTick] = useState(0);
 
   useEffect(() => {
     async function load() {
       setIsLoading(true);
       try {
-        const [m, a] = await Promise.all([
+        const [m, a, p] = await Promise.all([
           OdontoPrintService.getDashboardMetrics(),
           OdontoPrintService.getRecentActivities(15),
+          OdontoPrintService.getPrintingOverview(),
         ]);
         setMetrics(m);
         setActivities(a);
+        setPrinting(p);
       } finally {
         setIsLoading(false);
       }
     }
     load();
+    const timer = setInterval(() => setTick((t) => t + 1), 30000);
+    return () => clearInterval(timer);
   }, []);
+
+  const elapsed = (startedAt?: string | null): string => {
+    if (!startedAt) return "";
+    const mins = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 60000));
+    if (mins < 1) return "começou agora";
+    if (mins < 60) return `há ${mins} min imprimindo`;
+    const h = Math.floor(mins / 60);
+    return `há ${h} h${mins % 60 ? ` ${mins % 60} min` : ""} imprimindo`;
+  };
 
   const visibleActivities = showAll ? activities : activities.slice(0, 10);
 
@@ -238,6 +255,98 @@ export default function DashboardPage() {
             </div>
           </Card>
         </div>
+
+        {/* O que está imprimindo — explicado */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Printer className="w-4 h-4 text-cyan-400" />
+                O que está imprimindo
+              </CardTitle>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Cada mesa da máquina, de qual pedido ela é e há quanto tempo roda.
+              </p>
+            </div>
+            <Link href="/impressoes">
+              <Button variant="ghost" size="sm" className="text-xs gap-1 text-slate-300 hover:text-white rounded-full">
+                Ver impressões
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </Button>
+            </Link>
+          </CardHeader>
+          <CardContent className="space-y-2.5">
+            {isLoading ? (
+              <Skeleton className="h-16 w-full rounded-xl bg-slate-800" />
+            ) : printing && printing.printing.length > 0 ? (
+              printing.printing.map((run) => (
+                <Link
+                  key={run.id}
+                  href={`/impressoes/${run.id}`}
+                  className="block bg-slate-950/60 border border-slate-800 hover:border-slate-600 rounded-xl p-3 transition"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="relative flex h-2 w-2 shrink-0">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+                    </span>
+                    <span className="font-mono text-sm font-bold text-white">
+                      Mesa {run.run_code}
+                    </span>
+                    <span className="ml-auto shrink-0 text-[11px] text-slate-400">
+                      {elapsed(run.started_at)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-1">
+                    {run.group_titles.length > 0
+                      ? run.group_titles.join(" + ")
+                      : "Pedido sem lote"}{" "}
+                    <span className="text-slate-500">
+                      · {run.printer_name} · {run.items_count} modelo(s)
+                    </span>
+                  </p>
+                </Link>
+              ))
+            ) : (
+              <p className="text-xs text-slate-500 py-2">
+                Nenhuma máquina imprimindo agora.{" "}
+                <Link href="/fila" className="text-slate-300 hover:text-white underline underline-offset-2">
+                  Monte um pedido na fila
+                </Link>
+                .
+              </p>
+            )}
+
+            {!isLoading && printing && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                <Link
+                  href="/fila"
+                  className="bg-slate-950/60 border border-slate-800 hover:border-slate-600 rounded-xl p-3 transition"
+                >
+                  <p className="text-[11px] text-slate-500">Aguardando na fila</p>
+                  <p className="text-sm font-semibold text-white mt-0.5">
+                    {printing.waitingGroups} pedido(s) · {printing.waitingModels} modelo(s)
+                  </p>
+                </Link>
+                <Link
+                  href="/fila"
+                  className={`rounded-xl p-3 transition border ${
+                    printing.failedCount > 0
+                      ? "bg-amber-950/40 border-amber-900 hover:border-amber-700"
+                      : "bg-slate-950/60 border-slate-800 hover:border-slate-600"
+                  }`}
+                >
+                  <p className="text-[11px] text-slate-500">Prioridade da próxima impressão</p>
+                  <p className={`text-sm font-semibold mt-0.5 ${printing.failedCount > 0 ? "text-amber-200" : "text-white"}`}>
+                    {printing.failedCount > 0
+                      ? `${printing.failedCount} modelo(s) com falha`
+                      : "Nenhuma falha pendente"}
+                  </p>
+                </Link>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Atividades Recentes */}
         <Card>

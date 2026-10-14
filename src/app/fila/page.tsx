@@ -126,6 +126,19 @@ export default function FilaPage() {
   const [bulkDueDate, setBulkDueDate] = useState("");
   const [bulkMaterial, setBulkMaterial] = useState("Resina Standard Cinza");
 
+  // Destino do upload: novo pedido ou pedido existente. Falhas pendentes
+  // (prioridade para a próxima impressão) e ações em grupo.
+  const [uploadDest, setUploadDest] = useState<string>("new");
+  const [failedPendingCount, setFailedPendingCount] = useState(0);
+  const [groupFailTarget, setGroupFailTarget] = useState<OrderGroup | null>(null);
+  const [groupFailReason, setGroupFailReason] = useState("");
+  const [isFailingGroup, setIsFailingGroup] = useState(false);
+  const [groupConfirmTarget, setGroupConfirmTarget] = useState<{
+    group: OrderGroup;
+    to: "PREPARANDO" | "CONCLUIDO";
+  } | null>(null);
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+
   // Impressões em andamento (ordens EM_IMPRESSAO vinculadas à fila)
   const [activeRuns, setActiveRuns] = useState<ActiveRunInfo[]>([]);
   const [nowTick, setNowTick] = useState(() => Date.now());
@@ -146,14 +159,16 @@ export default function FilaPage() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [cardsData, batchesData, runsData] = await Promise.all([
+      const [cardsData, batchesData, runsData, failedData] = await Promise.all([
         OdontoPrintService.getPrintCards(),
         OdontoPrintService.getPrintBatches(),
         OdontoPrintService.getActiveRunsWithItems(),
+        OdontoPrintService.getFailedPendingItems(),
       ]);
       setCards(cardsData);
       setBatches(batchesData);
       setActiveRuns(runsData);
+      setFailedPendingCount(failedData.length);
     } catch {
       toast.error("Erro ao carregar fila de impressão.");
     } finally {
@@ -500,24 +515,42 @@ export default function FilaPage() {
         return;
       }
 
-      // Cada pedido vira um lote separado com somente os itens dele
-      const batchRes = await OdontoPrintService.createOrderBatch({
-        item_ids: res.created_ids,
-        user_id: user?.id,
-        user_name: user?.full_name || bulkCadista,
-      });
-
-      if (batchRes.success && batchRes.batch) {
-        const title = batchTitle(batchRes.batch.batch_name, (batchRes.batch as any).batch_number ?? null);
-        toast.success(
-          `${res.created_count} arquivo(s) salvos no pedido ${title}!`
-        );
-        setExpandedBatchIds([batchRes.batch.id]);
+      if (uploadDest !== "new") {
+        // Jogar modelos num pedido existente (mesma impressão da máquina)
+        let moved = 0;
+        for (const id of res.created_ids) {
+          const m = await OdontoPrintService.moveItemToBatch(
+            id,
+            uploadDest,
+            user?.id,
+            user?.full_name || bulkCadista
+          );
+          if (m.success) moved++;
+        }
+        const dest = orderGroups.find((g) => g.key === uploadDest);
+        toast.success(`${moved} arquivo(s) adicionados ao pedido ${dest?.title || ""}!`);
+        setExpandedBatchIds([uploadDest]);
       } else {
-        toast.success(
-          `${res.created_count} arquivo(s) cadastrado(s) com sucesso na Fila de Impressão!`
-        );
+        // Cada pedido vira um lote separado com somente os itens dele
+        const batchRes = await OdontoPrintService.createOrderBatch({
+          item_ids: res.created_ids,
+          user_id: user?.id,
+          user_name: user?.full_name || bulkCadista,
+        });
+
+        if (batchRes.success && batchRes.batch) {
+          const title = batchTitle(batchRes.batch.batch_name, (batchRes.batch as any).batch_number ?? null);
+          toast.success(
+            `${res.created_count} arquivo(s) salvos no pedido ${title}!`
+          );
+          setExpandedBatchIds([batchRes.batch.id]);
+        } else {
+          toast.success(
+            `${res.created_count} arquivo(s) cadastrado(s) com sucesso na Fila de Impressão!`
+          );
+        }
       }
+      setUploadDest("new");
       setPendingFiles([]);
       setIsUploadModalOpen(false);
       loadData();
@@ -564,6 +597,99 @@ export default function FilaPage() {
       toast.error("Erro ao apagar pedido.");
     } finally {
       setIsDeletingBatch(false);
+    }
+  };
+
+  // Mover modelo para outro pedido
+  const handleMoveItem = async (card: PrintCardItem, targetBatchId: string) => {
+    const target = targetBatchId === "avulsos" ? null : targetBatchId;
+    try {
+      const res = await OdontoPrintService.moveItemToBatch(
+        card.id,
+        target,
+        user?.id,
+        user?.full_name || "Operador"
+      );
+      if (res.success) {
+        toast.success(`${card.patient_code} movido de pedido.`);
+        loadData();
+      } else {
+        toast.error(res.error || "Erro ao mover modelo.");
+      }
+    } catch {
+      toast.error("Erro ao mover modelo.");
+    }
+  };
+
+  // Ações no grupo inteiro (preparar / concluir / falhar)
+  const handleBulkGroup = async (
+    group: OrderGroup,
+    to: "PREPARANDO" | "IMPRESSO" | "CONCLUIDO" | "FALHOU",
+    reason?: string
+  ) => {
+    setIsBulkUpdating(true);
+    try {
+      const res = await OdontoPrintService.bulkUpdateGroupStatus(
+        group.items.map((i) => i.id),
+        to,
+        { reason, user_id: user?.id, user_name: user?.full_name || "Operador" }
+      );
+      if (res.success) {
+        const label = PRINT_CARD_STATUS_CONFIG[to === "FALHOU" ? "FALHOU" : to].label;
+        toast.success(
+          `Pedido ${group.title}: ${res.moved} modelo(s) → ${label}${res.skipped > 0 ? ` (${res.skipped} já estavam em outra etapa)` : ""}.`
+        );
+        loadData();
+      } else {
+        toast.error(res.error || "Nada para mover neste pedido.");
+      }
+    } catch {
+      toast.error("Erro ao mover pedido.");
+    } finally {
+      setIsBulkUpdating(false);
+    }
+  };
+
+  const handleConfirmGroupFail = async () => {
+    if (!groupFailTarget) return;
+    setIsFailingGroup(true);
+    try {
+      await handleBulkGroup(
+        groupFailTarget,
+        "FALHOU",
+        groupFailReason.trim() || "Falha na impressão"
+      );
+      setGroupFailTarget(null);
+      setGroupFailReason("");
+    } finally {
+      setIsFailingGroup(false);
+    }
+  };
+
+  const handleConfirmGroupBulk = async () => {
+    if (!groupConfirmTarget) return;
+    const { group, to } = groupConfirmTarget;
+    setGroupConfirmTarget(null);
+    await handleBulkGroup(group, to);
+  };
+
+  // Juntar falhas: novo pedido = próxima impressão (prioridade)
+  const handleCollectFailed = async () => {
+    try {
+      const res = await OdontoPrintService.collectFailedIntoNewBatch({
+        user_id: user?.id,
+        user_name: user?.full_name || "Operador",
+      });
+      if (res.success && res.batch) {
+        const title = batchTitle(res.batch.batch_name, (res.batch as any).batch_number ?? null);
+        toast.success(`Próxima impressão criada: ${title} com ${res.count} modelo(s) prioritário(s)!`);
+        setExpandedBatchIds([res.batch.id]);
+        loadData();
+      } else {
+        toast.error(res.error || "Erro ao juntar falhas.");
+      }
+    } catch {
+      toast.error("Erro ao juntar falhas.");
     }
   };
 
@@ -922,6 +1048,23 @@ export default function FilaPage() {
           </div>
         )}
 
+        {/* Falhas aguardando a próxima impressão (prioridade) */}
+        {!isLoading && failedPendingCount > 0 && (
+          <div className="bg-amber-950/40 border border-amber-900 rounded-xl px-3 py-2.5 flex flex-col sm:flex-row sm:items-center gap-2">
+            <p className="text-xs text-amber-200 flex-1">
+              <strong>{failedPendingCount} modelo(s) com falha</strong> aguardando — entram com
+              prioridade na próxima impressão.
+            </p>
+            <button
+              type="button"
+              onClick={handleCollectFailed}
+              className="shrink-0 px-3 h-8 text-[11px] font-semibold bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-lg"
+            >
+              Criar próxima impressão com as falhas
+            </button>
+          </div>
+        )}
+
         {/* Estado vazio */}
         {isLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
@@ -1051,8 +1194,58 @@ export default function FilaPage() {
 
                   {/* Itens do pedido (recolhidos por padrão) */}
                   {expanded && (
-                    <div className="border-t border-slate-800 divide-y divide-slate-800/60">
-                      {group.items.map((card) => {
+                    <div className="border-t border-slate-800">
+                      {/* Ações no grupo inteiro */}
+                      <div className="flex items-center flex-wrap gap-1.5 px-3 sm:px-4 py-2 bg-slate-950/50 border-b border-slate-800/60">
+                        <span className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold mr-1">
+                          Grupo
+                        </span>
+                        <button
+                          type="button"
+                          disabled={
+                            isBulkUpdating ||
+                            !group.items.some((i) => i.status === "NA_FILA")
+                          }
+                          onClick={() => setGroupConfirmTarget({ group, to: "PREPARANDO" })}
+                          className="px-2 py-1 text-[11px] font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-md disabled:opacity-40 disabled:cursor-not-allowed"
+                          title="Mover todos os itens Na fila para Preparando"
+                        >
+                          Preparar todos
+                        </button>
+                        <button
+                          type="button"
+                          disabled={
+                            isBulkUpdating ||
+                            !group.items.some((i) => i.status === "IMPRESSO")
+                          }
+                          onClick={() => setGroupConfirmTarget({ group, to: "CONCLUIDO" })}
+                          className="px-2 py-1 text-[11px] font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-md disabled:opacity-40 disabled:cursor-not-allowed"
+                          title="Mover todos os itens Impressos para Concluído"
+                        >
+                          Concluir todos
+                        </button>
+                        <button
+                          type="button"
+                          disabled={
+                            isBulkUpdating ||
+                            !group.items.some((i) =>
+                              ["NA_FILA", "PREPARANDO", "IMPRIMINDO", "IMPRESSO"].includes(i.status)
+                            )
+                          }
+                          onClick={() => {
+                            setGroupFailTarget(group);
+                            setGroupFailReason("");
+                          }}
+                          className="px-2 py-1 text-[11px] font-medium text-slate-400 hover:text-red-300 hover:bg-slate-800 rounded-md disabled:opacity-40 disabled:cursor-not-allowed"
+                          title="Marcar todos como falha (voltam como prioridade)"
+                        >
+                          Falhar todos
+                        </button>
+                      </div>
+                      <div className="divide-y divide-slate-800/60">
+                      {[...group.items]
+                        .sort((a, b) => Number(b.is_retry) - Number(a.is_retry))
+                        .map((card) => {
                         const statusCfg = PRINT_CARD_STATUS_CONFIG[card.status];
                         const itemRun =
                           runByItemId.get(card.id) ||
@@ -1131,6 +1324,25 @@ export default function FilaPage() {
                               >
                                 <Eye className="w-3.5 h-3.5" />
                               </button>
+                              <select
+                                value=""
+                                onChange={(e) => {
+                                  if (e.target.value) handleMoveItem(card, e.target.value);
+                                  e.target.value = "";
+                                }}
+                                className="shrink-0 max-w-[110px] bg-transparent text-[11px] text-slate-500 hover:text-white border border-transparent hover:border-slate-700 rounded-md px-1 py-1 focus:outline-none focus:border-slate-600"
+                                title="Mover modelo para outro pedido"
+                              >
+                                <option value="">Mover…</option>
+                                {orderGroups
+                                  .filter((g) => g.batchId && g.batchId !== card.batch_id)
+                                  .map((g) => (
+                                    <option key={g.key} value={g.batchId || ""}>
+                                      {g.title}
+                                    </option>
+                                  ))}
+                                {card.batch_id && <option value="avulsos">Sem lote</option>}
+                              </select>
                               {card.status !== "CONCLUIDO" && (
                                 <button
                                   type="button"
@@ -1147,6 +1359,7 @@ export default function FilaPage() {
                           </div>
                         );
                       })}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1163,6 +1376,7 @@ export default function FilaPage() {
           onOpenChange={(open) => {
             if (!open) {
               setPendingFiles([]);
+              setUploadDest("new");
             }
             setIsUploadModalOpen(open);
           }}
@@ -1510,10 +1724,32 @@ export default function FilaPage() {
             )}
 
             {/* BOTÕES DE SALVAMENTO */}
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-800">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 pt-3 border-t border-slate-800">
+              <label className="flex items-center gap-2 text-xs text-slate-300 flex-1 min-w-0">
+                <span className="shrink-0 text-slate-400">Salvar em:</span>
+                <select
+                  value={uploadDest}
+                  onChange={(e) => setUploadDest(e.target.value)}
+                  className="flex-1 min-w-0 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-slate-600"
+                  title="Novo pedido ou juntar a um pedido existente"
+                >
+                  <option value="new">Novo pedido (cria Impressão nova)</option>
+                  {orderGroups
+                    .filter((g) => g.batchId && g.derived !== "CONCLUIDO")
+                    .map((g) => (
+                      <option key={g.key} value={g.key}>
+                        {g.title} ({g.items.length} itens)
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <div className="flex items-center justify-end gap-2.5">
               <Button
                 variant="outline"
-                onClick={() => setIsUploadModalOpen(false)}
+                onClick={() => {
+                  setIsUploadModalOpen(false);
+                  setUploadDest("new");
+                }}
                 className="border-slate-700 text-slate-300 rounded-full text-xs h-9"
               >
                 Cancelar
@@ -1536,6 +1772,7 @@ export default function FilaPage() {
                   </>
                 )}
               </Button>
+              </div>
             </div>
           </div>
         </Dialog>
@@ -1602,6 +1839,101 @@ export default function FilaPage() {
                 className="bg-red-600 hover:bg-red-500 text-white font-semibold rounded-lg text-xs h-9 px-5"
               >
                 {isDeletingBatch ? "Apagando..." : "Sim, apagar pedido"}
+              </Button>
+            </div>
+          </div>
+        </Dialog>
+
+        {/* ==================================================================== */}
+        {/* MODAL 2b: FALHAR GRUPO INTEIRO (VIRA PRIORIDADE DA PRÓXIMA IMPRESSÃO) */}
+        {/* ==================================================================== */}
+        <Dialog
+          open={Boolean(groupFailTarget)}
+          onOpenChange={(open) => {
+            if (!open) setGroupFailTarget(null);
+          }}
+          title="Marcar pedido inteiro como falha?"
+        >
+          <div className="space-y-4">
+            <p className="text-xs text-slate-300">
+              Todos os modelos elegíveis de <strong>{groupFailTarget?.title}</strong> voltarão
+              para a fila como <strong>reimpressão prioritária</strong> para a próxima impressão.
+            </p>
+            <div>
+              <label className="text-xs font-medium text-slate-300 block mb-1">
+                Motivo da falha
+              </label>
+              <input
+                type="text"
+                value={groupFailReason}
+                onChange={(e) => setGroupFailReason(e.target.value)}
+                placeholder="Ex: Mesa descolou no meio da impressão"
+                className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-rose-400"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <Button
+                variant="outline"
+                onClick={() => setGroupFailTarget(null)}
+                className="border-slate-700 text-slate-300 rounded-lg text-xs h-9"
+              >
+                Cancelar
+              </Button>
+              <Button
+                disabled={isFailingGroup}
+                onClick={handleConfirmGroupFail}
+                className="bg-red-600 hover:bg-red-500 text-white font-semibold rounded-lg text-xs h-9 px-5"
+              >
+                {isFailingGroup ? "Marcando..." : "Confirmar falha do grupo"}
+              </Button>
+            </div>
+          </div>
+        </Dialog>
+
+        {/* ==================================================================== */}
+        {/* MODAL 2c: CONFIRMAR AÇÃO EM GRUPO (PREPARAR / CONCLUIR TODOS) */}
+        {/* ==================================================================== */}
+        <Dialog
+          open={Boolean(groupConfirmTarget)}
+          onOpenChange={(open) => {
+            if (!open) setGroupConfirmTarget(null);
+          }}
+          title={
+            groupConfirmTarget?.to === "CONCLUIDO"
+              ? "Concluir pedido inteiro?"
+              : "Preparar pedido inteiro?"
+          }
+        >
+          <div className="space-y-4">
+            <p className="text-xs text-slate-300">
+              {groupConfirmTarget?.to === "CONCLUIDO" ? (
+                <>
+                  Todos os modelos <strong>Impressos</strong> de{" "}
+                  <strong>{groupConfirmTarget?.group.title}</strong> serão marcados como{" "}
+                  <strong>Concluídos</strong>.
+                </>
+              ) : (
+                <>
+                  Todos os modelos <strong>Na fila</strong> de{" "}
+                  <strong>{groupConfirmTarget?.group.title}</strong> irão para{" "}
+                  <strong>Preparando</strong>.
+                </>
+              )}
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <Button
+                variant="outline"
+                onClick={() => setGroupConfirmTarget(null)}
+                className="border-slate-700 text-slate-300 rounded-lg text-xs h-9"
+              >
+                Cancelar
+              </Button>
+              <Button
+                disabled={isBulkUpdating}
+                onClick={handleConfirmGroupBulk}
+                className="bg-white hover:bg-slate-200 text-slate-900 font-semibold rounded-lg text-xs h-9 px-5"
+              >
+                {isBulkUpdating ? "Movendo..." : "Confirmar"}
               </Button>
             </div>
           </div>

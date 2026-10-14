@@ -65,4 +65,58 @@ describe("AUDIT fila por pedidos (scratch)", () => {
     const del2 = await OdontoPrintService.deletePrintBatch("00000000-0000-0000-0000-000000000000");
     expect(del2.success).toBe(false);
   });
+
+  it("move modelo entre pedidos, faz bulk do grupo e junta falhas", async () => {
+    const upA = await OdontoPrintService.createPrintCards([
+      { patient: "PA", clinic: "Cli", cadista: "Cad", work_type: "COROA", file_name: "pa.stl" },
+    ]);
+    const upB = await OdontoPrintService.createPrintCards([
+      { patient: "PB", clinic: "Cli", cadista: "Cad", work_type: "COROA", file_name: "pb.stl" },
+    ]);
+    const oA = await OdontoPrintService.createOrderBatch({ item_ids: upA.created_ids });
+    const oB = await OdontoPrintService.createOrderBatch({ item_ids: upB.created_ids });
+
+    // Mover modelo do pedido B para o A
+    const mv = await OdontoPrintService.moveItemToBatch(upB.created_ids[0], oA.batch!.id);
+    expect(mv.success).toBe(true);
+    let cards = await OdontoPrintService.getPrintCards();
+    expect(cards.find((c) => c.id === upB.created_ids[0])!.batch_id).toBe(oA.batch!.id);
+
+    // Bulk: preparar todos do pedido A
+    const bulk = await OdontoPrintService.bulkUpdateGroupStatus(
+      [upA.created_ids[0], upB.created_ids[0]],
+      "PREPARANDO"
+    );
+    expect(bulk.success).toBe(true);
+    expect(bulk.moved).toBe(2);
+
+    // Falha em um -> vira prioridade; juntar falhas cria a próxima impressão
+    await OdontoPrintService.updateCardStatus(upA.created_ids[0], "FALHOU", "teste");
+    const failed = await OdontoPrintService.getFailedPendingItems();
+    expect(failed.some((i) => i.id === upA.created_ids[0])).toBe(true);
+
+    const col = await OdontoPrintService.collectFailedIntoNewBatch();
+    expect(col.success).toBe(true);
+    expect(col.count).toBe(1);
+    cards = await OdontoPrintService.getPrintCards();
+    const collected = cards.find((c) => c.id === upA.created_ids[0])!;
+    expect(collected.batch_id).toBe(col.batch!.id);
+    // Falhados voltam à fila como prioridade (mantêm tentativas)
+    expect(collected.status).toBe("NA_FILA");
+    expect(collected.is_retry).toBe(true);
+
+    // Sem falhas pendentes -> erro claro
+    await OdontoPrintService.updateCardStatus(upA.created_ids[0], "CONCLUIDO");
+    const col2 = await OdontoPrintService.collectFailedIntoNewBatch();
+    expect(col2.success).toBe(false);
+
+    // Visão da dashboard explica os grupos
+    const overview = await OdontoPrintService.getPrintingOverview();
+    expect(overview.waitingModels).toBeGreaterThanOrEqual(1);
+
+    // Modelo imprimindo não troca de grupo
+    await OdontoPrintService.updateCardStatus(upB.created_ids[0], "IMPRIMINDO");
+    const blocked = await OdontoPrintService.moveItemToBatch(upB.created_ids[0], oB.batch!.id);
+    expect(blocked.success).toBe(false);
+  });
 });
