@@ -150,11 +150,40 @@ describe("Fila de Impressão 3D - Cadastro, Lotes, Duplicidade e Backup", () => 
 
     expect(item1After.status).toBe("NA_FILA");
     expect(item1After.is_retry).toBe(true);
+    expect(item1After.priority).toBe("URGENTE");
     expect(item1After.retry_count).toBeGreaterThanOrEqual(1);
     expect(item1After.reprint_reason).toContain("Mesa descolou");
 
     expect(item2After.status).toBe("NA_FILA");
     expect(item2After.is_retry).toBe(true);
+    expect(item2After.priority).toBe("URGENTE");
     expect(item2After.reprint_reason).toContain("Mesa descolou");
+  });
+
+  it("conclui a mesa de impressão com sucesso, marcando a mesa e os itens como CONCLUIDO", async () => {
+    await OdontoPrintService.createPrintCards([
+      {
+        patient: "PAC-CONCLUIR-1",
+        clinic: "Clínica Teste",
+        cadista: "Operador 1",
+        work_type: "MODELO_COM_TROQUEL",
+        file_name: "modelo_ok.stl",
+      },
+    ]);
+    const allCards = await OdontoPrintService.getPrintCards();
+    const item = allCards.find((c) => c.patient_code === "PAC-CONCLUIR-1")!;
+    const batchRes = await OdontoPrintService.createPrintBatch({
+      batch_name: "Mesa Sucesso #1",
+      item_ids: [item.id],
+      printer_name: "Halot Mage",
+    });
+    expect(batchRes.success).toBe(true);
+    const finishRes = await OdontoPrintService.finishPrintBatch(batchRes.batch!.id, "user-1", "Operador");
+    expect(finishRes.success).toBe(true);
+    expect(finishRes.completed_count).toBe(1);
+
+    const cardsAfter = await OdontoPrintService.getPrintCards();
+    const updated = cardsAfter.find((c) => c.id === item.id)!;
+    expect(updated.status).toBe("CONCLUIDO");
   });
 });

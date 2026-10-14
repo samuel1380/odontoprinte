@@ -79,6 +79,20 @@ interface PendingUploadFile {
   parsed_from_name?: boolean;
 }
 
+export interface OrderGroup {
+  key: string;
+  batchId: string | null;
+  title: string;
+  batchNumber: number | null;
+  printer_name?: string | null;
+  printer_id?: string | null;
+  createdAt: string;
+  items: PrintCardItem[];
+  derived: BatchDerivedStatus;
+  printableCount: number;
+  isPrinting: boolean;
+}
+
 export default function FilaPage() {
   const { user } = useAuth();
 
@@ -119,6 +133,16 @@ export default function FilaPage() {
   const [batchToPrintDirectly, setBatchToPrintDirectly] = useState<OrderGroup | null>(null);
   const [selectedPrinterForBatch, setSelectedPrinterForBatch] = useState<string>("");
   const [isStartingBatchPrint, setIsStartingBatchPrint] = useState(false);
+
+  // Painel de Bancada: Vincular Mesa da Fila à Impressora Disponível
+  const [printerToAssignBatch, setPrinterToAssignBatch] = useState<PrinterWithStatus | null>(null);
+  const [selectedBatchForFreePrinter, setSelectedBatchForFreePrinter] = useState<string>("");
+  const [isAssigningBatch, setIsAssigningBatch] = useState(false);
+
+  // Painel de Bancada: Falha da Mesa Inteira
+  const [batchToFailWhole, setBatchToFailWhole] = useState<OrderGroup | null>(null);
+  const [failReasonWhole, setFailReasonWhole] = useState("");
+  const [isFailingBatch, setIsFailingBatch] = useState(false);
 
   // Modal de Apagar Mesa
   const [batchToDelete, setBatchToDelete] = useState<OrderGroup | null>(null);
@@ -278,20 +302,6 @@ export default function FilaPage() {
     return Array.from(set).sort();
   }, [cards]);
 
-  interface OrderGroup {
-    key: string;
-    batchId: string | null;
-    title: string;
-    batchNumber: number | null;
-    printer_name?: string | null;
-    printer_id?: string | null;
-    createdAt: string;
-    items: PrintCardItem[];
-    derived: BatchDerivedStatus;
-    printableCount: number;
-    isPrinting: boolean;
-  }
-
   // Mesas de Impressão: cada mesa agrupa os arquivos a serem impressos juntos na impressora.
   const orderGroups = useMemo<OrderGroup[]>(() => {
     const byBatch = new Map<string, PrintCardItem[]>();
@@ -349,6 +359,110 @@ export default function FilaPage() {
     }
     return groups;
   }, [cards, batches]);
+
+  // Mapa de Status em Tempo Real por Impressora (Painel de Bancada)
+  const printerStatusMap = useMemo(() => {
+    return printers.map((p) => {
+      const activeGroup = orderGroups.find((g) => {
+        const isBatchPrinting = g.isPrinting || g.derived === "IMPRIMINDO";
+        if (!isBatchPrinting) return false;
+        if (g.printer_id && g.printer_id === p.id) return true;
+        if (g.printer_name && g.printer_name.toLowerCase().trim() === p.name.toLowerCase().trim()) return true;
+        return false;
+      });
+
+      let activeRun = activeRuns.find(
+        (r) => r.printer_name.toLowerCase().trim() === p.name.toLowerCase().trim()
+      );
+      let groupFromRun = activeGroup;
+      if (!groupFromRun && activeRun) {
+        groupFromRun = orderGroups.find((g) =>
+          g.items.some((i) => activeRun!.item_ids.includes(i.id))
+        );
+      }
+
+      return {
+        printer: p,
+        activeGroup: groupFromRun || null,
+        activeRun: activeRun || null,
+      };
+    });
+  }, [printers, orderGroups, activeRuns]);
+
+  // Ações de Mesa do Painel de Máquinas
+  const handleFinishBatch = async (batchId: string) => {
+    try {
+      const res = await OdontoPrintService.finishPrintBatch(
+        batchId,
+        user?.id,
+        user?.full_name || "Operador"
+      );
+      if (res.success) {
+        toast.success(`Mesa concluída com sucesso! ${res.completed_count} modelo(s) finalizados.`);
+        loadData();
+      } else {
+        toast.error(res.error || "Erro ao concluir mesa.");
+      }
+    } catch {
+      toast.error("Erro inesperado ao concluir mesa.");
+    }
+  };
+
+  const handleConfirmFailWholeBatch = async () => {
+    if (!batchToFailWhole || !batchToFailWhole.batchId) return;
+    setIsFailingBatch(true);
+    try {
+      const res = await OdontoPrintService.failPrintBatch(
+        batchToFailWhole.batchId,
+        failReasonWhole.trim() || "Falha técnica na mesa inteira",
+        user?.id,
+        user?.full_name || "Operador"
+      );
+      if (res.success) {
+        toast.warning(
+          `Mesa ${batchToFailWhole.title} marcada como falha. ${res.affected_count} modelo(s) voltaram para a fila com prioridade URGENTE.`
+        );
+        setBatchToFailWhole(null);
+        setFailReasonWhole("");
+        loadData();
+      } else {
+        toast.error("Erro ao registrar falha na mesa.");
+      }
+    } catch {
+      toast.error("Erro inesperado ao registrar falha.");
+    } finally {
+      setIsFailingBatch(false);
+    }
+  };
+
+  const handleAssignBatchToFreePrinter = async () => {
+    if (!printerToAssignBatch || !selectedBatchForFreePrinter) return;
+    setIsAssigningBatch(true);
+    try {
+      const chosenGroup = orderGroups.find((g) => g.batchId === selectedBatchForFreePrinter);
+      const res = await OdontoPrintService.startPrintBatchDirectly({
+        batch_id: selectedBatchForFreePrinter,
+        printer_id: printerToAssignBatch.id,
+        user_id: user?.id,
+        user_name: user?.full_name || "Operador",
+      });
+      if (res.success) {
+        toast.success(
+          `Mesa ${chosenGroup?.title || ""} enviada para ${printerToAssignBatch.name} (${res.run_code})!`
+        );
+        setPrinterToAssignBatch(null);
+        setSelectedBatchForFreePrinter("");
+        setViewTab("IMPRIMINDO");
+        loadData();
+      } else {
+        toast.error(res.error || "Erro ao iniciar impressão.");
+      }
+    } catch {
+      toast.error("Erro ao vincular mesa à impressora.");
+    } finally {
+      setIsAssigningBatch(false);
+    }
+  };
 
   // Contadores das 4 grandes abas de visão do operador
   const tabCounts = useMemo(() => {
@@ -653,10 +767,29 @@ export default function FilaPage() {
 
         if (batchRes.success && batchRes.batch) {
           const title = batchRes.batch.batch_name?.replace(/^Impressão\b/i, "Mesa");
-          toast.success(
-            `${res.created_count} arquivo(s) organizados na ${title}!`
-          );
-          setViewTab("FILA");
+          if (newMesaPrinterId) {
+            const printRes = await OdontoPrintService.startPrintBatchDirectly({
+              batch_id: batchRes.batch.id,
+              printer_id: newMesaPrinterId,
+              user_id: user?.id,
+              user_name: user?.full_name || bulkCadista,
+            });
+            const chosenPrinter = printers.find((p) => p.id === newMesaPrinterId);
+            if (printRes.success) {
+              toast.success(
+                `${title} criada e colocada em impressão na ${chosenPrinter?.name || "impressora"} (${printRes.run_code})!`
+              );
+              setViewTab("IMPRIMINDO");
+            } else {
+              toast.success(`${title} criada na Fila! (Inicie quando a máquina estiver pronta)`);
+              setViewTab("FILA");
+            }
+          } else {
+            toast.success(
+              `${res.created_count} arquivo(s) organizados na ${title}!`
+            );
+            setViewTab("FILA");
+          }
           setExpandedBatchIds([batchRes.batch.id]);
         } else {
           toast.success(
@@ -1033,6 +1166,227 @@ export default function FilaPage() {
               <Plus className="w-3.5 h-3.5" />
               Selecionar Arquivos
             </Button>
+          </div>
+        </div>
+
+        {/* ==================================================================== */}
+        {/* PAINEL AO VIVO: MÁQUINAS DO LABORATÓRIO — STATUS EM TEMPO REAL */}
+        {/* ==================================================================== */}
+        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-cyan-950/80 border border-cyan-800/60 text-cyan-400 flex items-center justify-center">
+                <Printer className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                  Máquinas do Laboratório — Status em Tempo Real
+                  <span className="text-[11px] font-normal text-slate-400 hidden sm:inline">
+                    (Responda na hora quais modelos estão imprimindo)
+                  </span>
+                </h2>
+                <p className="text-[11px] text-slate-400">
+                  Acompanhe o que cada impressora está rodando, conclua mesas ou reporte falhas de modelos individuais.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <span className="text-xs px-2.5 py-1 rounded-md bg-cyan-950/60 border border-cyan-800/60 text-cyan-300 font-semibold">
+                {printerStatusMap.filter((m) => m.activeGroup).length} em produção
+              </span>
+              <span className="text-xs px-2.5 py-1 rounded-md bg-slate-800 border border-slate-700 text-slate-300">
+                {printerStatusMap.filter((m) => !m.activeGroup).length} disponíveis
+              </span>
+            </div>
+          </div>
+
+          {/* Grid de Impressoras */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {printerStatusMap.map(({ printer, activeGroup, activeRun }) => {
+              const isPrinting = Boolean(activeGroup);
+
+              return (
+                <div
+                  key={printer.id}
+                  className={`rounded-xl border p-4 flex flex-col justify-between transition ${
+                    isPrinting
+                      ? "bg-gradient-to-b from-slate-900 to-slate-900/90 border-cyan-500/60 shadow-lg shadow-cyan-950/30 ring-1 ring-cyan-500/30"
+                      : "bg-slate-900/40 border-slate-800/80 hover:border-slate-700"
+                  }`}
+                >
+                  {/* Topo do Card da Impressora */}
+                  <div>
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="min-w-0">
+                        <h3 className="text-sm font-bold text-white flex items-center gap-1.5 truncate">
+                          <Printer className="w-4 h-4 text-cyan-400 shrink-0" />
+                          {printer.name}
+                        </h3>
+                        <p className="text-[11px] text-slate-400 truncate">
+                          {printer.brand} {printer.model}
+                        </p>
+                      </div>
+
+                      {isPrinting ? (
+                        <span className="text-[10px] font-bold text-cyan-300 bg-cyan-950 border border-cyan-700 rounded-md px-2 py-0.5 flex items-center gap-1 shrink-0 animate-pulse">
+                          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                          IMPRIMINDO
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-950/70 border border-emerald-800 rounded-md px-2 py-0.5 flex items-center gap-1 shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                          DISPONÍVEL
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Conteúdo do Card */}
+                    {isPrinting && activeGroup ? (
+                      <div className="space-y-2.5 mt-3 pt-2.5 border-t border-slate-800/80">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-white flex items-center gap-1 truncate">
+                            <Layers className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                            {activeGroup.title}
+                          </span>
+                          <span className="text-[11px] text-slate-400 font-mono shrink-0">
+                            {formatElapsed(activeRun?.started_at || activeGroup.createdAt)}
+                          </span>
+                        </div>
+
+                        {/* Lista de Modelos na Mesa */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
+                              Modelos na Mesa ({activeGroup.items.length}):
+                            </p>
+                            {activeRun && (
+                              <Link
+                                href={`/impressoes/${activeRun.id}`}
+                                className="text-[10px] text-cyan-400 hover:text-cyan-300 font-semibold"
+                              >
+                                Ordem {activeRun.run_code} →
+                              </Link>
+                            )}
+                          </div>
+
+                          <div className="space-y-1 max-h-[140px] overflow-y-auto pr-1">
+                            {activeGroup.items.map((card) => {
+                              const isFailed = card.status === "FALHOU";
+                              const isConcluded = card.status === "CONCLUIDO";
+
+                              return (
+                                <div
+                                  key={card.id}
+                                  className={`flex items-center justify-between gap-1.5 text-xs p-1.5 rounded-lg border transition ${
+                                    isFailed
+                                      ? "bg-rose-950/40 border-rose-800/60 text-rose-200"
+                                      : isConcluded
+                                      ? "bg-emerald-950/30 border-emerald-900/40 text-emerald-200"
+                                      : "bg-slate-950/60 border-slate-800 text-slate-200"
+                                  }`}
+                                >
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-1.5 truncate">
+                                      <span className="font-bold text-white truncate">
+                                        {card.patient_code}
+                                      </span>
+                                      <span className="text-[11px] text-slate-400 truncate">
+                                        · {card.clinic_name}
+                                      </span>
+                                    </div>
+                                    <p className="text-[10px] text-slate-400 truncate">
+                                      {LAB_WORK_TYPE_LABELS[card.work_type] || card.work_type}
+                                    </p>
+                                  </div>
+
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    {isFailed ? (
+                                      <span className="text-[9px] font-bold text-rose-300 bg-rose-950 border border-rose-700 rounded px-1.5 py-0.5">
+                                        FALHOU
+                                      </span>
+                                    ) : isConcluded ? (
+                                      <span className="text-[9px] font-bold text-emerald-300 bg-emerald-950 border border-emerald-800 rounded px-1.5 py-0.5">
+                                        CONCLUÍDO
+                                      </span>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setCardToFail(card);
+                                          setCardFailReason("");
+                                        }}
+                                        className="text-[10px] font-semibold text-rose-300 hover:text-white bg-rose-950/60 hover:bg-rose-900 border border-rose-800/80 rounded px-1.5 py-0.5 transition"
+                                        title="Marcar falha apenas neste modelo (vira prioridade para próxima mesa)"
+                                      >
+                                        Falhou
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="py-5 text-center">
+                        <p className="text-xs text-slate-400">
+                          Nenhuma mesa rodando nesta impressora no momento.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Rodapé / Ações da Impressora */}
+                  <div className="pt-3 mt-3 border-t border-slate-800/80">
+                    {isPrinting && activeGroup ? (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => handleFinishBatch(activeGroup.batchId || activeGroup.key)}
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs h-8 rounded-lg gap-1 shadow"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          Concluir Mesa
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setBatchToFailWhole(activeGroup);
+                            setFailReasonWhole("");
+                          }}
+                          className="border-rose-800/80 text-rose-300 hover:bg-rose-950/60 text-xs h-8 rounded-lg px-2.5"
+                          title="Marcar mesa inteira como falha (modelos viram prioridade)"
+                        >
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                          Falha Geral
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          setPrinterToAssignBatch(printer);
+                          const readyBatch = orderGroups.find(
+                            (g) => g.batchId && ["AGUARDANDO", "PREPARANDO", "ERRO"].includes(g.derived)
+                          );
+                          setSelectedBatchForFreePrinter(readyBatch?.batchId || "");
+                        }}
+                        className="w-full bg-white hover:bg-slate-200 text-slate-950 font-bold text-xs h-8 rounded-lg gap-1.5 shadow"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        Carregar Mesa da Fila
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -1713,7 +2067,8 @@ export default function FilaPage() {
         )}
 
         {/* ==================================================================== */}
-        {/* MODAL 1: CADASTRAR IMPRESSÃO (UPLOAD RÁPIDO & DRAG AND DROP) */}
+        {/* ==================================================================== */}
+        {/* MODAL: NOVA MESA DE IMPRESSÃO (MODO BANCADA / ZERO UPLOAD PESADO) */}
         {/* ==================================================================== */}
         <Dialog
           open={isUploadModalOpen}
@@ -1721,12 +2076,27 @@ export default function FilaPage() {
             if (!open) {
               setPendingFiles([]);
               setUploadDest("new");
+              setNewMesaPrinterId("");
+              setNewMesaName("");
             }
             setIsUploadModalOpen(open);
           }}
-          title="Cadastrar Impressão 3D — Upload Rápido de STL"
+          title="Montar Mesa de Impressão 3D"
         >
-          <div className="space-y-4 max-h-[80vh] overflow-y-auto pr-1">
+          <div className="space-y-4 max-h-[82vh] overflow-y-auto pr-1">
+            {/* Aviso de Modo Bancada / Arquivos Locais */}
+            <div className="bg-cyan-950/40 border border-cyan-800/80 rounded-xl p-3 flex items-start gap-2.5">
+              <Sparkles className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+              <div className="text-xs">
+                <p className="font-bold text-cyan-200">
+                  Modo Bancada: Zero Upload Pesado
+                </p>
+                <p className="text-cyan-300/80 mt-0.5">
+                  Os arquivos 3D (.stl) permanecem seguros no seu computador/Drive. O sistema lê apenas os nomes dos arquivos para preencher automaticamente o Doutor/Clínica e Paciente de cada modelo da mesa.
+                </p>
+              </div>
+            </div>
+
             {/* ÁREA DE DRAG AND DROP */}
             <div
               onDragOver={(e) => e.preventDefault()}
@@ -1735,7 +2105,7 @@ export default function FilaPage() {
                 handleFilesSelected(e.dataTransfer.files);
               }}
               onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-slate-700 hover:border-cyan-400 bg-slate-900/60 hover:bg-slate-900 rounded-2xl p-6 text-center cursor-pointer transition group"
+              className="border-2 border-dashed border-slate-700 hover:border-cyan-400 bg-slate-900/60 hover:bg-slate-900 rounded-2xl p-5 text-center cursor-pointer transition group"
             >
               <input
                 ref={fileInputRef}
@@ -1745,105 +2115,58 @@ export default function FilaPage() {
                 onChange={(e) => handleFilesSelected(e.target.files)}
                 className="hidden"
               />
-              <div className="w-12 h-12 rounded-full bg-slate-800 text-cyan-400 group-hover:scale-110 flex items-center justify-center mx-auto mb-2.5 transition">
-                <Upload className="w-6 h-6" />
+              <div className="w-10 h-10 rounded-full bg-slate-800 text-cyan-400 group-hover:scale-110 flex items-center justify-center mx-auto mb-2 transition">
+                <Upload className="w-5 h-5" />
               </div>
-              <h4 className="text-sm font-semibold text-white">
-                Arraste seus arquivos STL aqui ou clique para selecionar
+              <h4 className="text-xs sm:text-sm font-semibold text-white">
+                Arraste seus arquivos STL da pasta da clínica aqui ou clique para selecionar
               </h4>
-              <p className="text-xs text-slate-400 mt-1">
-                Suporta múltiplos arquivos simultâneos (.stl, .obj, .3mf, .ply de até 250MB cada)
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Suporta múltiplos arquivos simultâneos (.stl, .obj, .3mf)
               </p>
             </div>
 
-            {/* PREENCHIMENTO RÁPIDO EM LOTE ("APLICAR A TODOS") */}
-            {pendingFiles.length > 0 && (
-              <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                    Preencher UMA vez e aplicar a todos os {pendingFiles.length} arquivos
-                  </span>
-                  <Button
-                    size="sm"
-                    onClick={handleApplyToAll}
-                    className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs h-7 rounded-full px-3"
-                  >
-                    Aplicar a Todos
-                  </Button>
+            {/* Configurações Rápidas da Mesa */}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div>
+                  <label className="text-xs font-semibold text-white block mb-1">
+                    Nome da Mesa
+                  </label>
+                  <input
+                    type="text"
+                    value={newMesaName}
+                    onChange={(e) => setNewMesaName(e.target.value)}
+                    placeholder={`Mesa #${batches.length + 1}`}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder:text-slate-500 focus:outline-none focus:border-cyan-400 text-xs font-medium"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Identificação da mesa montada no Halot Box ou ChiTuBox.
+                  </p>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
-                  <div>
-                    <label className="text-[11px] text-slate-400 font-medium block mb-1">Clínica *</label>
-                    <input
-                      type="text"
-                      value={bulkClinic}
-                      onChange={(e) => setBulkClinic(e.target.value)}
-                      placeholder="Ex: Odonto Dental Prime"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-cyan-400"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] text-slate-400 font-medium block mb-1">Cadista *</label>
-                    <input
-                      type="text"
-                      value={bulkCadista}
-                      onChange={(e) => setBulkCadista(e.target.value)}
-                      placeholder="Ex: Lucas Cadista"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-cyan-400"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] text-slate-400 font-medium block mb-1">Tipo de Trabalho *</label>
-                    <select
-                      value={bulkWorkType}
-                      onChange={(e) => setBulkWorkType(e.target.value as any)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white focus:outline-none focus:ring-1 focus:ring-cyan-400"
-                    >
-                      {LAB_WORK_TYPES.map((t) => (
-                        <option key={t.id} value={t.id}>{t.label}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] text-slate-400 font-medium block mb-1">Prioridade</label>
-                    <select
-                      value={bulkPriority}
-                      onChange={(e) => setBulkPriority(e.target.value as any)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white focus:outline-none focus:ring-1 focus:ring-cyan-400"
-                    >
-                      <option value="NORMAL">Normal</option>
-                      <option value="URGENTE">Urgente</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] text-slate-400 font-medium block mb-1">Material / Resina</label>
-                    <input
-                      type="text"
-                      value={bulkMaterial}
-                      onChange={(e) => setBulkMaterial(e.target.value)}
-                      placeholder="Ex: Resina Cosmos Dental"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-cyan-400"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] text-slate-400 font-medium block mb-1">Data de Entrega</label>
-                    <input
-                      type="date"
-                      value={bulkDueDate}
-                      onChange={(e) => setBulkDueDate(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white focus:outline-none focus:ring-1 focus:ring-cyan-400"
-                    />
-                  </div>
+                <div>
+                  <label className="text-xs font-semibold text-white block mb-1">
+                    Impressora da Mesa (Opcional)
+                  </label>
+                  <select
+                    value={newMesaPrinterId}
+                    onChange={(e) => setNewMesaPrinterId(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-cyan-400 text-xs"
+                  >
+                    <option value="">Apenas salvar na Fila (escolher impressora depois)</option>
+                    {printers.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.brand} {p.model})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Se escolher a impressora agora, a mesa já entra em impressão imediatamente.
+                  </p>
                 </div>
               </div>
-            )}
+            </div>
 
             {/* LISTA EDITÁVEL DE ITENS A CADASTRAR */}
             {pendingFiles.length > 0 && (
@@ -2075,73 +2398,18 @@ export default function FilaPage() {
               </div>
             )}
 
-            {/* CONFIGURAÇÃO DA MESA DE IMPRESSÃO */}
-            <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 space-y-3">
-              <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                <Layers className="w-3.5 h-3.5 text-cyan-400" />
-                Mesa de Impressão de Destino
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
-                <div>
-                  <label className="text-[11px] text-slate-400 font-medium block mb-1">Destino *</label>
-                  <select
-                    value={uploadDest}
-                    onChange={(e) => setUploadDest(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none focus:border-slate-600"
-                  >
-                    <option value="new">Criar Nova Mesa de Impressão</option>
-                    {orderGroups
-                      .filter((g) => g.batchId && g.derived !== "CONCLUIDO")
-                      .map((g) => (
-                        <option key={g.key} value={g.key}>
-                          Adicionar à {g.title} ({g.items.length} itens)
-                        </option>
-                      ))}
-                  </select>
-                </div>
-
-                {uploadDest === "new" && (
-                  <div>
-                    <label className="text-[11px] text-slate-400 font-medium block mb-1">Nome da Mesa</label>
-                    <input
-                      type="text"
-                      value={newMesaName}
-                      onChange={(e) => setNewMesaName(e.target.value)}
-                      placeholder={`Mesa #${batches.length + 1}`}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none focus:border-slate-600"
-                    />
-                  </div>
-                )}
-
-                {uploadDest === "new" && (
-                  <div>
-                    <label className="text-[11px] text-slate-400 font-medium block mb-1">Impressora da Mesa (Opcional)</label>
-                    <select
-                      value={newMesaPrinterId}
-                      onChange={(e) => setNewMesaPrinterId(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none focus:border-slate-600"
-                    >
-                      <option value="">Definir ao imprimir...</option>
-                      {printers.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} ({p.model})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
-            </div>
-
             {/* BOTÕES DE SALVAMENTO */}
             <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-800">
               <Button
                 variant="outline"
                 onClick={() => {
                   setIsUploadModalOpen(false);
+                  setPendingFiles([]);
+                  setNewMesaName("");
+                  setNewMesaPrinterId("");
                   setUploadDest("new");
                 }}
-                className="border-slate-700 text-slate-300 rounded-full text-xs h-9"
+                className="border-slate-700 text-slate-300 rounded-lg text-xs h-9"
               >
                 Cancelar
               </Button>
@@ -2149,20 +2417,20 @@ export default function FilaPage() {
               <Button
                 disabled={pendingFiles.length === 0 || isSavingCards || isCheckingDuplicates}
                 onClick={handleSaveUpload}
-                className="bg-white hover:bg-slate-200 text-slate-950 font-bold rounded-full text-xs h-9 px-5 gap-1.5 shadow"
+                className="bg-white hover:bg-slate-200 text-slate-950 font-bold rounded-lg text-xs h-9 px-5 gap-1.5 shadow"
               >
                 {isSavingCards ? (
                   <>
                     <div className="w-3.5 h-3.5 border-2 border-slate-950/30 border-t-slate-950 rounded-full animate-spin" />
-                    <span>Salvando na mesa...</span>
+                    <span>Salvando mesa...</span>
                   </>
                 ) : (
                   <>
                     <Check className="w-3.5 h-3.5" />
                     <span>
-                      {uploadDest === "new"
-                        ? `Criar Mesa com ${pendingFiles.length} arquivo(s)`
-                        : `Adicionar ${pendingFiles.length} arquivo(s) à Mesa`}
+                      {newMesaPrinterId
+                        ? `Criar e Iniciar Mesa (${pendingFiles.length} modelos)`
+                        : `Criar Mesa com ${pendingFiles.length} modelo(s)`}
                     </span>
                   </>
                 )}
@@ -2586,6 +2854,133 @@ export default function FilaPage() {
                 ))}
               </div>
             )}
+          </div>
+        </Dialog>
+
+        {/* ==================================================================== */}
+        {/* MODAL: CARREGAR MESA NA IMPRESSORA (PAINEL DE BANCADA) */}
+        {/* ==================================================================== */}
+        <Dialog
+          open={Boolean(printerToAssignBatch)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setPrinterToAssignBatch(null);
+              setSelectedBatchForFreePrinter("");
+            }
+          }}
+          title={`Carregar Mesa na ${printerToAssignBatch?.name || "Impressora"}`}
+        >
+          <div className="space-y-4">
+            <p className="text-xs text-slate-300">
+              Selecione qual mesa de modelos da fila você deseja colocar em impressão nesta máquina:
+            </p>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-200 block">
+                Mesas aguardando impressão:
+              </label>
+              {orderGroups.filter((g) => g.batchId && ["AGUARDANDO", "PREPARANDO", "ERRO"].includes(g.derived)).length === 0 ? (
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 text-center">
+                  <p className="text-xs text-slate-400">
+                    Não há mesas aguardando na fila. Crie uma nova mesa soltando arquivos STL no topo.
+                  </p>
+                </div>
+              ) : (
+                <select
+                  value={selectedBatchForFreePrinter}
+                  onChange={(e) => setSelectedBatchForFreePrinter(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-cyan-400"
+                >
+                  <option value="">Selecione uma mesa da fila...</option>
+                  {orderGroups
+                    .filter((g) => g.batchId && ["AGUARDANDO", "PREPARANDO", "ERRO"].includes(g.derived))
+                    .map((g) => (
+                      <option key={g.key} value={g.batchId!}>
+                        {g.title} ({g.items.length} modelos) — {formatDate(g.createdAt)}
+                      </option>
+                    ))}
+                </select>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setPrinterToAssignBatch(null);
+                  setSelectedBatchForFreePrinter("");
+                }}
+                className="border-slate-700 text-slate-300 rounded-lg text-xs h-9"
+              >
+                Cancelar
+              </Button>
+              <Button
+                disabled={!selectedBatchForFreePrinter || isAssigningBatch}
+                onClick={handleAssignBatchToFreePrinter}
+                className="bg-white hover:bg-slate-200 text-slate-950 font-bold rounded-lg text-xs h-9 px-5 gap-1.5 shadow"
+              >
+                {isAssigningBatch ? "Iniciando..." : "Iniciar Impressão Nesta Máquina"}
+              </Button>
+            </div>
+          </div>
+        </Dialog>
+
+        {/* ==================================================================== */}
+        {/* MODAL: FALHA DA MESA INTEIRA (PAINEL DE BANCADA) */}
+        {/* ==================================================================== */}
+        <Dialog
+          open={Boolean(batchToFailWhole)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setBatchToFailWhole(null);
+              setFailReasonWhole("");
+            }
+          }}
+          title="Marcar Mesa Inteira como Falha?"
+        >
+          <div className="space-y-4">
+            <div className="bg-rose-950/40 border border-rose-900/60 rounded-xl p-3 text-xs text-rose-200 space-y-1.5">
+              <p>
+                Você está marcando a <strong>{batchToFailWhole?.title}</strong> inteira como falha técnica.
+              </p>
+              <p className="text-rose-300 font-semibold flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+                Todos os {batchToFailWhole?.items.length} modelos voltarão para a Fila como PRIORIDADE URGENTE para a próxima mesa!
+              </p>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+                Motivo da falha da mesa:
+              </label>
+              <input
+                type="text"
+                value={failReasonWhole}
+                onChange={(e) => setFailReasonWhole(e.target.value)}
+                placeholder="Ex: Mesa descolou no meio da impressão / falta de resina"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-400"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setBatchToFailWhole(null);
+                  setFailReasonWhole("");
+                }}
+                className="border-slate-700 text-slate-300 rounded-lg text-xs h-9"
+              >
+                Cancelar
+              </Button>
+              <Button
+                disabled={isFailingBatch}
+                onClick={handleConfirmFailWholeBatch}
+                className="bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg text-xs h-9 px-5 gap-1.5 shadow"
+              >
+                {isFailingBatch ? "Marcando..." : "Confirmar Falha da Mesa"}
+              </Button>
+            </div>
           </div>
         </Dialog>
       </div>

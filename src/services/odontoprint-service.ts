@@ -1359,6 +1359,7 @@ export class OdontoPrintService {
       if (card.batch_id === batchId) {
         const oldStatus = this.mapDbStatusToCardStatus(card.status);
         card.status = "AGUARDANDO_FILA";
+        card.priority = "URGENTE";
         card.is_retry = true;
         card.retry_count = (card.retry_count || 0) + 1;
         card.reprint_count = (card.reprint_count || 0) + 1;
@@ -1395,6 +1396,7 @@ export class OdontoPrintService {
 
         await client.from("print_job_items").update({
           status: "AGUARDANDO_FILA",
+          priority: "URGENTE",
           is_retry: true,
           last_failure_reason: failReason,
           reprint_reason: failReason,
@@ -1406,6 +1408,77 @@ export class OdontoPrintService {
     }
 
     return { success: true, affected_count: affectedCount };
+  }
+
+  /**
+   * Conclui a impressão de uma mesa com sucesso.
+   * Marca a mesa como CONCLUIDO, move todos os itens da mesa para CONCLUIDO,
+   * e registra a conclusão no histórico.
+   */
+  static async finishPrintBatch(
+    batchId: string,
+    user_id?: string,
+    user_name?: string
+  ): Promise<{ success: boolean; completed_count: number; error?: string }> {
+    mockPrintBatches = loadLocal("odontoprint_batches", mockPrintBatches);
+    mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
+    mockPrintItemHistory = loadLocal("odontoprint_item_history", mockPrintItemHistory);
+
+    const batch = mockPrintBatches.find((b) => b.id === batchId);
+    if (!batch) return { success: false, completed_count: 0, error: "Mesa não encontrada." };
+
+    const now = new Date().toISOString();
+    batch.status = "CONCLUIDO";
+    batch.updated_at = now;
+
+    let completedCount = 0;
+    const itemIdsToUpdate: string[] = [];
+
+    for (const card of mockPrintJobItems) {
+      if (card.batch_id === batchId && card.status !== "FALHOU_REIMPRESSAO") {
+        const oldStatus = this.mapDbStatusToCardStatus(card.status);
+        card.status = "CONCLUIDO";
+        card.updated_at = now;
+        completedCount++;
+        itemIdsToUpdate.push(card.id);
+
+        mockPrintItemHistory.unshift({
+          id: crypto.randomUUID(),
+          item_id: card.id,
+          from_status: oldStatus,
+          to_status: "CONCLUIDO",
+          changed_by: user_id || null,
+          changed_by_name: user_name || "Operador",
+          notes: `Mesa ${batch.batch_name} concluída com sucesso na impressora ${batch.printer_name || "padrão"}.`,
+          created_at: now,
+        });
+      }
+    }
+
+    saveLocal("odontoprint_batches", mockPrintBatches);
+    saveLocal("odontoprint_job_items", mockPrintJobItems);
+    saveLocal("odontoprint_item_history", mockPrintItemHistory);
+
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        await client.from("print_batches").update({
+          status: "CONCLUIDO",
+          updated_at: now,
+        }).eq("id", batchId);
+
+        if (itemIdsToUpdate.length > 0) {
+          await client.from("print_job_items").update({
+            status: "CONCLUIDO",
+            updated_at: now,
+          }).in("id", itemIdsToUpdate);
+        }
+      } catch (err) {
+        console.warn("Supabase finishPrintBatch error:", err);
+      }
+    }
+
+    return { success: true, completed_count: completedCount };
   }
 
   /**
