@@ -1343,20 +1343,32 @@ export class OdontoPrintService {
     mockPrintBatches = loadLocal("odontoprint_batches", mockPrintBatches);
     mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
     mockPrintItemHistory = loadLocal("odontoprint_item_history", mockPrintItemHistory);
+    mockPrintRuns = loadLocal("odontoprint_print_runs", mockPrintRuns);
+    mockPrintRunItems = loadLocal("odontoprint_print_run_items", mockPrintRunItems);
 
     const batch = mockPrintBatches.find((b) => b.id === batchId);
-    if (!batch) return { success: false, affected_count: 0, error: "Lote não encontrado." };
+    if (!batch && !this.getSupabase().isConfigured) {
+      return { success: false, affected_count: 0, error: "Mesa não encontrada." };
+    }
 
     const now = new Date().toISOString();
     const failReason = reason?.trim() || "Falha técnica na mesa/lote de impressão";
+    const batchPrinterId = batch?.printer_id;
 
-    batch.status = "FALHOU";
-    batch.failure_reason = failReason;
-    batch.updated_at = now;
+    if (batch) {
+      batch.status = "FALHOU";
+      batch.failure_reason = failReason;
+      batch.printer_id = null; // Libera a impressora imediatamente
+      batch.printer_name = null;
+      batch.updated_at = now;
+    }
 
     let affectedCount = 0;
+    const batchItemIds = new Set<string>();
+
     for (const card of mockPrintJobItems) {
       if (card.batch_id === batchId) {
+        batchItemIds.add(card.id);
         const oldStatus = this.mapDbStatusToCardStatus(card.status);
         card.status = "AGUARDANDO_FILA";
         card.priority = "URGENTE";
@@ -1375,15 +1387,43 @@ export class OdontoPrintService {
           to_status: "NA_FILA",
           changed_by: user_id || null,
           changed_by_name: user_name || "Operador",
-          notes: `LOTE FALHOU (${batch.batch_name}): ${failReason}. Retornado para a Fila de Impressão como Reimpressão.`,
+          notes: `LOTE FALHOU (${batch?.batch_name || "Mesa"}): ${failReason}. Retornado para a Fila de Impressão como Reimpressão.`,
           created_at: now,
         });
+      }
+    }
+
+    // Cancela execuções ativas (print_runs) ligadas a esta mesa ou impressora
+    const runsToCancel = mockPrintRuns.filter((r) => {
+      if (r.status !== "EM_IMPRESSAO") return false;
+      const hasItem = mockPrintRunItems.some(
+        (ri) => ri.print_run_id === r.id && batchItemIds.has(ri.print_job_item_id)
+      );
+      if (hasItem) return true;
+      if (batchPrinterId && r.printer_id === batchPrinterId) return true;
+      return false;
+    });
+
+    const cancelledRunIds: string[] = [];
+    for (const run of runsToCancel) {
+      run.status = "CANCELADA";
+      run.finished_at = now;
+      run.updated_at = now;
+      cancelledRunIds.push(run.id);
+
+      for (const ri of mockPrintRunItems) {
+        if (ri.print_run_id === run.id && ri.result === "PENDENTE") {
+          ri.result = "FALHOU";
+          ri.failure_reason = failReason;
+        }
       }
     }
 
     saveLocal("odontoprint_batches", mockPrintBatches);
     saveLocal("odontoprint_job_items", mockPrintJobItems);
     saveLocal("odontoprint_item_history", mockPrintItemHistory);
+    saveLocal("odontoprint_print_runs", mockPrintRuns);
+    saveLocal("odontoprint_print_run_items", mockPrintRunItems);
 
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
@@ -1391,6 +1431,8 @@ export class OdontoPrintService {
         await client.from("print_batches").update({
           status: "FALHOU",
           failure_reason: failReason,
+          printer_id: null,
+          printer_name: null,
           updated_at: now,
         }).eq("id", batchId);
 
@@ -1402,6 +1444,25 @@ export class OdontoPrintService {
           reprint_reason: failReason,
           updated_at: now,
         }).eq("batch_id", batchId);
+
+        if (cancelledRunIds.length > 0) {
+          await client.from("print_runs").update({
+            status: "CANCELADA",
+            finished_at: now,
+            updated_at: now,
+          }).in("id", cancelledRunIds);
+
+          await client.from("print_run_items").update({
+            result: "FALHOU",
+            failure_reason: failReason,
+          }).in("print_run_id", cancelledRunIds).eq("result", "PENDENTE");
+        } else if (batchPrinterId) {
+          await client.from("print_runs").update({
+            status: "CANCELADA",
+            finished_at: now,
+            updated_at: now,
+          }).eq("printer_id", batchPrinterId).eq("status", "EM_IMPRESSAO");
+        }
       } catch (err) {
         console.warn("Supabase failPrintBatch error:", err);
       }
@@ -1413,7 +1474,7 @@ export class OdontoPrintService {
   /**
    * Conclui a impressão de uma mesa com sucesso.
    * Marca a mesa como CONCLUIDO, move todos os itens da mesa para CONCLUIDO,
-   * e registra a conclusão no histórico.
+   * finaliza a execução ativa (print_run -> FINALIZADA) e libera a impressora.
    */
   static async finishPrintBatch(
     batchId: string,
@@ -1423,47 +1484,91 @@ export class OdontoPrintService {
     mockPrintBatches = loadLocal("odontoprint_batches", mockPrintBatches);
     mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
     mockPrintItemHistory = loadLocal("odontoprint_item_history", mockPrintItemHistory);
+    mockPrintRuns = loadLocal("odontoprint_print_runs", mockPrintRuns);
+    mockPrintRunItems = loadLocal("odontoprint_print_run_items", mockPrintRunItems);
 
     const batch = mockPrintBatches.find((b) => b.id === batchId);
-    if (!batch) return { success: false, completed_count: 0, error: "Mesa não encontrada." };
+    if (!batch && !this.getSupabase().isConfigured) {
+      return { success: false, completed_count: 0, error: "Mesa não encontrada." };
+    }
 
     const now = new Date().toISOString();
-    batch.status = "CONCLUIDO";
-    batch.updated_at = now;
+    const batchPrinterId = batch?.printer_id;
+    const batchPrinterName = batch?.printer_name;
+
+    if (batch) {
+      batch.status = "CONCLUIDO";
+      batch.printer_id = null; // Libera impressora
+      batch.printer_name = null;
+      batch.updated_at = now;
+    }
 
     let completedCount = 0;
     const itemIdsToUpdate: string[] = [];
+    const batchItemIds = new Set<string>();
 
     for (const card of mockPrintJobItems) {
-      if (card.batch_id === batchId && card.status !== "FALHOU_REIMPRESSAO") {
-        const oldStatus = this.mapDbStatusToCardStatus(card.status);
-        card.status = "CONCLUIDO";
-        card.updated_at = now;
-        completedCount++;
-        itemIdsToUpdate.push(card.id);
+      if (card.batch_id === batchId) {
+        batchItemIds.add(card.id);
+        if (card.status !== "FALHOU_REIMPRESSAO") {
+          const oldStatus = this.mapDbStatusToCardStatus(card.status);
+          card.status = "CONCLUIDO";
+          card.updated_at = now;
+          completedCount++;
+          itemIdsToUpdate.push(card.id);
 
-        mockPrintItemHistory.unshift({
-          id: crypto.randomUUID(),
-          item_id: card.id,
-          from_status: oldStatus,
-          to_status: "CONCLUIDO",
-          changed_by: user_id || null,
-          changed_by_name: user_name || "Operador",
-          notes: `Mesa ${batch.batch_name} concluída com sucesso na impressora ${batch.printer_name || "padrão"}.`,
-          created_at: now,
-        });
+          mockPrintItemHistory.unshift({
+            id: crypto.randomUUID(),
+            item_id: card.id,
+            from_status: oldStatus,
+            to_status: "CONCLUIDO",
+            changed_by: user_id || null,
+            changed_by_name: user_name || "Operador",
+            notes: `Mesa ${batch?.batch_name || "Mesa"} concluída com sucesso na impressora ${batchPrinterName || "padrão"}.`,
+            created_at: now,
+          });
+        }
+      }
+    }
+
+    // Finaliza execuções ativas (print_runs) vinculadas a esta mesa ou impressora
+    const runsToFinalize = mockPrintRuns.filter((r) => {
+      if (r.status !== "EM_IMPRESSAO") return false;
+      const hasItem = mockPrintRunItems.some(
+        (ri) => ri.print_run_id === r.id && batchItemIds.has(ri.print_job_item_id)
+      );
+      if (hasItem) return true;
+      if (batchPrinterId && r.printer_id === batchPrinterId) return true;
+      return false;
+    });
+
+    const finalizedRunIds: string[] = [];
+    for (const run of runsToFinalize) {
+      run.status = "FINALIZADA";
+      run.finished_at = now;
+      run.updated_at = now;
+      finalizedRunIds.push(run.id);
+
+      for (const ri of mockPrintRunItems) {
+        if (ri.print_run_id === run.id && ri.result === "PENDENTE") {
+          ri.result = "CONCLUIDO";
+        }
       }
     }
 
     saveLocal("odontoprint_batches", mockPrintBatches);
     saveLocal("odontoprint_job_items", mockPrintJobItems);
     saveLocal("odontoprint_item_history", mockPrintItemHistory);
+    saveLocal("odontoprint_print_runs", mockPrintRuns);
+    saveLocal("odontoprint_print_run_items", mockPrintRunItems);
 
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
         await client.from("print_batches").update({
           status: "CONCLUIDO",
+          printer_id: null,
+          printer_name: null,
           updated_at: now,
         }).eq("id", batchId);
 
@@ -1473,12 +1578,101 @@ export class OdontoPrintService {
             updated_at: now,
           }).in("id", itemIdsToUpdate);
         }
+
+        if (finalizedRunIds.length > 0) {
+          await client.from("print_runs").update({
+            status: "FINALIZADA",
+            finished_at: now,
+            updated_at: now,
+          }).in("id", finalizedRunIds);
+
+          await client.from("print_run_items").update({
+            result: "CONCLUIDO",
+          }).in("print_run_id", finalizedRunIds).eq("result", "PENDENTE");
+        } else if (batchPrinterId) {
+          await client.from("print_runs").update({
+            status: "FINALIZADA",
+            finished_at: now,
+            updated_at: now,
+          }).eq("printer_id", batchPrinterId).eq("status", "EM_IMPRESSAO");
+        }
       } catch (err) {
         console.warn("Supabase finishPrintBatch error:", err);
       }
     }
 
     return { success: true, completed_count: completedCount };
+  }
+
+  /**
+   * Libera manualmente uma impressora presa ou com impressão residual.
+   * Finaliza quaisquer execuções (print_runs) ativas e desvincula mesas ocupando a máquina.
+   */
+  static async releasePrinter(
+    printerId: string,
+    user_id?: string,
+    user_name?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    mockPrintRuns = loadLocal("odontoprint_print_runs", mockPrintRuns);
+    mockPrintRunItems = loadLocal("odontoprint_print_run_items", mockPrintRunItems);
+    mockPrintBatches = loadLocal("odontoprint_batches", mockPrintBatches);
+    mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
+
+    const now = new Date().toISOString();
+
+    // 1. Finaliza runs ativas na impressora
+    const activeRuns = mockPrintRuns.filter(
+      (r) => r.printer_id === printerId && r.status === "EM_IMPRESSAO"
+    );
+    const finalizedRunIds: string[] = [];
+    for (const run of activeRuns) {
+      run.status = "FINALIZADA";
+      run.finished_at = now;
+      run.updated_at = now;
+      finalizedRunIds.push(run.id);
+
+      for (const ri of mockPrintRunItems) {
+        if (ri.print_run_id === run.id && ri.result === "PENDENTE") {
+          ri.result = "CONCLUIDO";
+        }
+      }
+    }
+
+    // 2. Desvincula qualquer mesa apontando para esta impressora
+    for (const batch of mockPrintBatches) {
+      if (batch.printer_id === printerId) {
+        batch.printer_id = null;
+        batch.printer_name = null;
+        if (batch.status === "IMPRIMINDO") {
+          batch.status = "CONCLUIDO";
+        }
+        batch.updated_at = now;
+      }
+    }
+
+    saveLocal("odontoprint_print_runs", mockPrintRuns);
+    saveLocal("odontoprint_print_run_items", mockPrintRunItems);
+    saveLocal("odontoprint_batches", mockPrintBatches);
+
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        await client
+          .from("print_runs")
+          .update({ status: "FINALIZADA", finished_at: now, updated_at: now })
+          .eq("printer_id", printerId)
+          .eq("status", "EM_IMPRESSAO");
+
+        await client
+          .from("print_batches")
+          .update({ printer_id: null, printer_name: null, updated_at: now })
+          .eq("printer_id", printerId);
+      } catch (err) {
+        console.warn("Supabase releasePrinter error:", err);
+      }
+    }
+
+    return { success: true };
   }
 
   /**
@@ -1896,6 +2090,7 @@ export class OdontoPrintService {
     mockPrintItemHistory = loadLocal("odontoprint_item_history", mockPrintItemHistory);
     mockFinishingItems = loadLocal("odontoprint_finishing_items", mockFinishingItems);
     mockPrintJobs = loadLocal("odontoprint_jobs", mockPrintJobs);
+    mockPrintRuns = loadLocal("odontoprint_print_runs", mockPrintRuns);
 
     const batch = mockPrintBatches.find((b) => b.id === batchId);
 
@@ -1903,6 +2098,16 @@ export class OdontoPrintService {
     const affectedJobIds = new Set(
       mockPrintJobItems.filter((i) => itemIds.has(i.id)).map((i) => i.print_job_id)
     );
+
+    // Cancela runs ativas se a mesa estava imprimindo
+    const activeRunsToCancel = mockPrintRuns.filter((r) => {
+      if (r.status !== "EM_IMPRESSAO") return false;
+      return mockPrintRunItems.some((ri) => ri.print_run_id === r.id && itemIds.has(ri.print_job_item_id));
+    });
+    for (const r of activeRunsToCancel) {
+      r.status = "CANCELADA";
+      r.finished_at = new Date().toISOString();
+    }
 
     mockPrintRunItems = mockPrintRunItems.filter((ri) => !itemIds.has(ri.print_job_item_id));
     mockPrintItemHistory = mockPrintItemHistory.filter((h) => !itemIds.has(h.item_id));
@@ -1915,6 +2120,7 @@ export class OdontoPrintService {
     const emptiedJobIds = Array.from(affectedJobIds).filter((j) => !remainingJobIds.has(j));
     mockPrintJobs = mockPrintJobs.filter((j) => remainingJobIds.has(j.id));
 
+    saveLocal("odontoprint_print_runs", mockPrintRuns);
     saveLocal("odontoprint_print_run_items", mockPrintRunItems);
     saveLocal("odontoprint_item_history", mockPrintItemHistory);
     saveLocal("odontoprint_finishing_items", mockFinishingItems);
@@ -1927,6 +2133,11 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
+        if (activeRunsToCancel.length > 0) {
+          const runIds = activeRunsToCancel.map((r) => r.id);
+          await client.from("print_runs").update({ status: "CANCELADA", finished_at: new Date().toISOString() }).in("id", runIds);
+        }
+
         // Busca todos os itens ligados a esta mesa no Supabase para garantir que nada fique órfão
         const { data: supaItems } = await client
           .from("print_job_items")

@@ -185,6 +185,11 @@ describe("Fila de Impressão 3D - Cadastro, Lotes, Duplicidade e Backup", () => 
     const cardsAfter = await OdontoPrintService.getPrintCards();
     const updated = cardsAfter.find((c) => c.id === item.id)!;
     expect(updated.status).toBe("CONCLUIDO");
+
+    const batchesAfter = await OdontoPrintService.getPrintBatches();
+    const batchUpdated = batchesAfter.find((b) => b.id === batchRes.batch!.id)!;
+    expect(batchUpdated.status).toBe("CONCLUIDO");
+    expect(batchUpdated.printer_id).toBeNull();
   });
 
   it("apaga um arquivo individual de uma mesa e da fila com sucesso", async () => {
@@ -236,6 +241,24 @@ describe("Fila de Impressão 3D - Cadastro, Lotes, Duplicidade e Backup", () => 
     const cardsAfter = await OdontoPrintService.getPrintCards();
     const itemAfter = cardsAfter.find((c) => c.id === item.id)!;
     expect(itemAfter.batch_id).toBeNull();
+  });
+
+  it("libera a impressora diretamente via releasePrinter finalizando execuções ativas", async () => {
+    const printer = await OdontoPrintService.createPrinter({
+      name: "Halot Mage Pro Test",
+      brand: "Creality",
+      model: "Mage Pro",
+      serial_number: "SN-RELEASE-TEST",
+      active: true,
+    });
+    expect(printer).toBeDefined();
+
+    const releaseRes = await OdontoPrintService.releasePrinter(printer.id, "user-1", "Operador");
+    expect(releaseRes.success).toBe(true);
+
+    const activeRuns = await OdontoPrintService.getActiveRunsWithItems();
+    const runInPrinter = activeRuns.find((r) => r.printer_name.toLowerCase().trim() === printer.name.toLowerCase().trim());
+    expect(runInPrinter).toBeUndefined();
   });
 });
 

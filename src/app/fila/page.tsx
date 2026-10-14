@@ -388,9 +388,20 @@ export default function FilaPage() {
       let activeRun = activeRuns.find(
         (r) => r.printer_name.toLowerCase().trim() === p.name.toLowerCase().trim()
       );
+
+      // Descarta run se não houver itens imprimindo nela
+      if (activeRun) {
+        const runCards = cards.filter((c) => activeRun!.item_ids.includes(c.id));
+        const isRunStillPrinting = runCards.some((c) => c.status === "IMPRIMINDO");
+        if (runCards.length > 0 && !isRunStillPrinting) {
+          activeRun = undefined;
+        }
+      }
+
       let groupFromRun = activeGroup;
       if (!groupFromRun && activeRun) {
         groupFromRun = orderGroups.find((g) =>
+          (g.isPrinting || g.derived === "IMPRIMINDO") &&
           g.items.some((i) => activeRun!.item_ids.includes(i.id))
         );
       }
@@ -401,24 +412,57 @@ export default function FilaPage() {
         activeRun: activeRun || null,
       };
     });
-  }, [printers, orderGroups, activeRuns]);
+  }, [printers, orderGroups, activeRuns, cards]);
 
   // Ações de Mesa do Painel de Máquinas
-  const handleFinishBatch = async (batchId: string) => {
+  const handleFinishBatch = async (batchId?: string | null, printerId?: string | null) => {
     try {
-      const res = await OdontoPrintService.finishPrintBatch(
-        batchId,
+      let completedCount = 0;
+      if (batchId && batchId !== "avulsos") {
+        const res = await OdontoPrintService.finishPrintBatch(
+          batchId,
+          user?.id,
+          user?.full_name || "Operador"
+        );
+        if (!res.success) {
+          toast.error(res.error || "Erro ao concluir mesa.");
+          return;
+        }
+        completedCount = res.completed_count;
+      }
+      if (printerId) {
+        await OdontoPrintService.releasePrinter(
+          printerId,
+          user?.id,
+          user?.full_name || "Operador"
+        );
+      }
+      toast.success(
+        completedCount > 0
+          ? `Mesa concluída e impressora liberada! ${completedCount} modelo(s) finalizados.`
+          : "Impressora liberada com sucesso!"
+      );
+      loadData();
+    } catch {
+      toast.error("Erro inesperado ao concluir mesa.");
+    }
+  };
+
+  const handleReleasePrinterDirectly = async (printerId: string) => {
+    try {
+      const res = await OdontoPrintService.releasePrinter(
+        printerId,
         user?.id,
         user?.full_name || "Operador"
       );
       if (res.success) {
-        toast.success(`Mesa concluída com sucesso! ${res.completed_count} modelo(s) finalizados.`);
+        toast.success("Impressora liberada com sucesso!");
         loadData();
       } else {
-        toast.error(res.error || "Erro ao concluir mesa.");
+        toast.error(res.error || "Erro ao liberar impressora.");
       }
     } catch {
-      toast.error("Erro inesperado ao concluir mesa.");
+      toast.error("Erro ao liberar impressora.");
     }
   };
 
@@ -1402,7 +1446,7 @@ export default function FilaPage() {
                         <Button
                           type="button"
                           size="sm"
-                          onClick={() => handleFinishBatch(activeGroup.batchId || activeGroup.key)}
+                          onClick={() => handleFinishBatch(activeGroup.batchId || null, printer.id)}
                           className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs h-8 rounded-lg gap-1 shadow"
                         >
                           <Check className="w-3.5 h-3.5" />
@@ -1421,6 +1465,18 @@ export default function FilaPage() {
                         >
                           <XCircle className="w-3.5 h-3.5" />
                           Falhou
+                        </Button>
+                      </div>
+                    ) : isPrinting && !activeGroup ? (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => handleReleasePrinterDirectly(printer.id)}
+                          className="flex-1 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs h-8 rounded-lg gap-1 shadow"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          Liberar Impressora
                         </Button>
                       </div>
                     ) : (
