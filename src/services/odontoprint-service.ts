@@ -890,6 +890,23 @@ export class OdontoPrintService {
     saveLocal("odontoprint_job_items", mockPrintJobItems);
     saveLocal("odontoprint_item_history", mockPrintItemHistory);
 
+    // Evento agrupado para "Atividades recentes" (ex.: "adicionou 4 arquivos")
+    const createAudit = {
+      id: crypto.randomUUID(),
+      user_id: user_id || null,
+      action: "PRINT_CARDS_CREATED",
+      entity_type: "cases",
+      entity_id: null as string | null,
+      new_data: {
+        count: createdItems.length,
+        clinic: cardsToCreate[0]?.clinic?.trim() || null,
+        patient_codes: Array.from(new Set(cardsToCreate.map((c) => c.patient.trim().toUpperCase()))).slice(0, 5),
+      },
+      created_at: now,
+    };
+    mockAuditLogs.unshift(createAudit as any);
+    saveLocal("odontoprint_audit_logs", mockAuditLogs);
+
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
@@ -903,6 +920,11 @@ export class OdontoPrintService {
         if (itemErr) throw new Error(`Falha ao gravar itens da fila: ${itemErr.message}`);
         const { error: histErr } = await client.from("print_item_history").insert(historyEntries);
         if (histErr) console.warn("Supabase createPrintCards (histórico) error:", histErr);
+        try {
+          await client.from("audit_logs").insert(createAudit);
+        } catch (auditErr) {
+          console.warn("Supabase createPrintCards (atividades) error:", auditErr);
+        }
       } catch (err: any) {
         console.warn("Supabase createPrintCards persist error:", err);
         // Reverte o salvamento local para não criar fila fantasma
@@ -2583,12 +2605,22 @@ export class OdontoPrintService {
     };
   }
 
-  static async getRecentActivities(): Promise<AuditLog[]> {
+  static async getRecentActivities(limit: number = 10): Promise<import("@/lib/activity-feed").ActivityItem[]> {
+    const { buildActivityFeed } = await import("@/lib/activity-feed");
     mockAuditLogs = loadLocal<AuditLog[]>("odontoprint_audit_logs", mockAuditLogs);
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        const { data, error } = await client.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(20);
+        // Sobe eventos locais ainda não centralizados (idempotente por id)
+        const pending = mockAuditLogs.slice(0, 60);
+        if (pending.length > 0) {
+          await client.from("audit_logs").upsert(pending, { onConflict: "id" });
+        }
+      } catch {
+        // segue com o que houver
+      }
+      try {
+        const { data, error } = await client.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(40);
         if (!error && data) {
           mockAuditLogs = mergeById(data, mockAuditLogs);
           saveLocal("odontoprint_audit_logs", mockAuditLogs);
@@ -2597,7 +2629,29 @@ export class OdontoPrintService {
         console.warn("Supabase getRecentActivities error:", err);
       }
     }
-    return mockAuditLogs.slice(0, 10);
+
+    // Resolve nome de quem fez (em vez do UUID)
+    const users = new Map<string, string>();
+    if (isConfigured && client) {
+      try {
+        const { data } = await client.from("profiles").select("id, full_name");
+        for (const p of data || []) {
+          if (p?.id && p?.full_name) users.set(p.id, p.full_name);
+        }
+      } catch {
+        // segue sem nomes do banco
+      }
+    }
+    try {
+      const localUsers = loadLocal<(Profile & { email?: string })[]>("odontoprint_all_users", []);
+      for (const u of localUsers) {
+        if (u?.id && (u as any)?.full_name && !users.has(u.id)) users.set(u.id, (u as any).full_name);
+      }
+    } catch {
+      // ignore
+    }
+
+    return buildActivityFeed(mockAuditLogs as any, users, { limit });
   }
 
   // ====================================================================

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/layout/shell";
 import { OdontoPrintService } from "@/services/odontoprint-service";
 import { DashboardMetrics } from "@/types/domain";
-import { AuditLog } from "@/types/database.types";
+import { ActivityItem } from "@/lib/activity-feed";
 import {
   Printer,
   ListOrdered,
@@ -19,16 +19,19 @@ import {
   Layers,
   Sparkles,
   Cog,
+  PlusCircle,
+  RefreshCw,
+  Info,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatDate } from "@/lib/utils";
 
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
-  const [activities, setActivities] = useState<AuditLog[]>([]);
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -36,7 +39,7 @@ export default function DashboardPage() {
       try {
         const [m, a] = await Promise.all([
           OdontoPrintService.getDashboardMetrics(),
-          OdontoPrintService.getRecentActivities(),
+          OdontoPrintService.getRecentActivities(15),
         ]);
         setMetrics(m);
         setActivities(a);
@@ -46,6 +49,38 @@ export default function DashboardPage() {
     }
     load();
   }, []);
+
+  const visibleActivities = showAll ? activities : activities.slice(0, 10);
+
+  const kindStyle: Record<ActivityItem["kind"], string> = {
+    added: "bg-emerald-950/80 text-emerald-300 border border-emerald-800/50",
+    printed: "bg-cyan-950/80 text-cyan-300 border border-cyan-800/50",
+    failed: "bg-rose-950/80 text-rose-300 border border-rose-800/50",
+    reprint: "bg-amber-950/80 text-amber-300 border border-amber-800/50",
+    done: "bg-emerald-950/80 text-emerald-300 border border-emerald-800/50",
+    info: "bg-slate-800/80 text-slate-300 border border-slate-700/60",
+    warning: "bg-amber-950/80 text-amber-300 border border-amber-800/50",
+  };
+
+  const KindIcon = ({ kind }: { kind: ActivityItem["kind"] }) => {
+    const cls = "h-3.5 w-3.5";
+    switch (kind) {
+      case "added":
+        return <PlusCircle className={cls} />;
+      case "printed":
+        return <Printer className={cls} />;
+      case "failed":
+        return <AlertTriangle className={cls} />;
+      case "reprint":
+        return <RefreshCw className={cls} />;
+      case "done":
+        return <CheckCircle2 className={cls} />;
+      case "warning":
+        return <AlertTriangle className={cls} />;
+      default:
+        return <Info className={cls} />;
+    }
+  };
 
   return (
     <AppShell>
@@ -232,62 +267,53 @@ export default function DashboardPage() {
                 Nenhuma atividade registrada até o momento.
               </div>
             ) : (
-              <div className="divide-y divide-slate-800">
-                {activities.map((act) => {
-                  const isReprint = act.action === "ITEM_REIMPRESSAO";
-                  const isMaint = act.action.includes("MANUTENCAO");
-                  const isCalib = act.action.includes("CALIBRACAO");
-
-                  return (
-                    <div key={act.id} className="py-3 flex items-start justify-between gap-4 text-xs">
-                      <div className="flex items-start gap-3 min-w-0">
-                        <div
-                          className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
-                            isReprint
-                              ? "bg-rose-950/80 text-rose-300 border border-rose-800/50"
-                              : isMaint
-                              ? "bg-amber-950/80 text-amber-300 border border-amber-800/50"
-                              : isCalib
-                              ? "bg-cyan-950/80 text-cyan-300 border border-cyan-800/50"
-                              : "bg-emerald-950/80 text-emerald-300 border border-emerald-800/50"
-                          }`}
-                        >
-                          {isReprint ? (
-                            <AlertTriangle className="h-3.5 w-3.5" />
-                          ) : isMaint ? (
-                            <Printer className="h-3.5 w-3.5" />
-                          ) : isCalib ? (
-                            <FlaskConical className="h-3.5 w-3.5" />
-                          ) : (
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                          )}
-                        </div>
-
-                        <div className="min-w-0">
-                          <div className="font-semibold text-white truncate">
-                            {act.action === "ITEM_REIMPRESSAO" && "Item Retornou para Reimpressão"}
-                            {act.action === "ITEM_CONCLUIDO" && "Modelo Concluído com Sucesso"}
-                            {act.action === "IMPRESSAO_FINALIZADA" && "Ordem de Impressão Finalizada"}
-                            {act.action === "IMPRESSAO_INICIADA" && "Impressão Iniciada"}
-                            {act.action === "TRABALHO_CRIADO" && "Novo Trabalho Registrado"}
-                            {act.action === "MANUTENCAO_APROVADA" && "Manutenção Aprovada"}
-                            {act.action === "MANUTENCAO_REPROVADA" && "Manutenção Reprovada"}
-                            {act.action === "RECEBIMENTO_RESINA" && "Novo Lote de Resina"}
-                            {act.action === "CALIBRACAO_APROVADA" && "Calibração Aprovada"}
-                            {act.action === "CALIBRACAO_REPROVADA" && "Calibração Reprovada"}
+              <div>
+                <div className="divide-y divide-slate-800">
+                  {visibleActivities.map((act) => {
+                    const row = (
+                      <div className="py-3 flex items-start justify-between gap-4 text-xs">
+                        <div className="flex items-start gap-3 min-w-0">
+                          <div
+                            className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${kindStyle[act.kind]}`}
+                          >
+                            <KindIcon kind={act.kind} />
                           </div>
-                          <p className="text-slate-400 mt-0.5 text-[11px] truncate">
-                            {act.new_data ? JSON.stringify(act.new_data).replace(/["{}]/g, " ") : "Operação registrada"}
-                          </p>
-                        </div>
-                      </div>
 
-                      <span className="shrink-0 text-[11px] text-slate-500 font-medium">
-                        {formatDate(act.created_at)}
-                      </span>
-                    </div>
-                  );
-                })}
+                          <div className="min-w-0">
+                            <div className="font-semibold text-white leading-snug">
+                              {act.title}
+                            </div>
+                            {act.detail && (
+                              <p className="text-slate-400 mt-0.5 text-[11px] leading-snug">
+                                {act.detail}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <span className="shrink-0 text-[11px] text-slate-500 font-medium whitespace-nowrap">
+                          {act.relative}
+                        </span>
+                      </div>
+                    );
+                    return act.href ? (
+                      <Link key={act.id} href={act.href} className="block hover:bg-slate-800/30 rounded-lg transition">
+                        {row}
+                      </Link>
+                    ) : (
+                      <div key={act.id}>{row}</div>
+                    );
+                  })}
+                </div>
+                {activities.length > 10 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAll(!showAll)}
+                    className="mt-2 w-full py-2 text-xs font-medium text-slate-400 hover:text-white border border-slate-800 hover:border-slate-700 rounded-xl transition"
+                  >
+                    {showAll ? "Ver menos" : `Ver mais (${activities.length - 10} anteriores)`}
+                  </button>
+                )}
               </div>
             )}
           </CardContent>
