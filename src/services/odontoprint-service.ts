@@ -227,6 +227,7 @@ export class OdontoPrintService {
       notes: params.notes?.trim() || null,
       created_by: params.user_id || null,
       created_at: now,
+      updated_at: now,
     };
 
     const newJob: PrintJob = {
@@ -238,6 +239,7 @@ export class OdontoPrintService {
       priority: 1,
       created_by: params.user_id || null,
       created_at: now,
+      updated_at: now,
     };
 
     const millingFileTypes = ["COROA_FRESADA", "ELEMENTO_CARGA_CERAMICA"];
@@ -274,6 +276,7 @@ export class OdontoPrintService {
       retry_count: 0,
       is_retry: false,
       created_at: now,
+      updated_at: now,
     }));
 
     // Persist in mock state & localStorage
@@ -800,6 +803,8 @@ export class OdontoPrintService {
     const historyEntries: PrintItemHistory[] = [];
     const newCaseIds: string[] = [];
     const newJobIds: string[] = [];
+    const casesToInsert: Case[] = [];
+    const jobsToInsert: PrintJob[] = [];
 
     if (cardsToCreate[0]) {
       this.saveLastUsedPreferences(cardsToCreate[0].clinic, cardsToCreate[0].cadista);
@@ -807,7 +812,9 @@ export class OdontoPrintService {
 
     for (const card of cardsToCreate) {
       const patientCode = card.patient.trim().toUpperCase();
-      let existingCase = mockCases.find((c) => this.normalizeText(c.patient_code) === this.normalizeText(patientCode));
+      let existingCase =
+        mockCases.find((c) => this.normalizeText(c.patient_code) === this.normalizeText(patientCode)) ||
+        casesToInsert.find((c) => this.normalizeText(c.patient_code) === this.normalizeText(patientCode));
 
       let caseId = existingCase?.id;
       if (!caseId) {
@@ -820,7 +827,9 @@ export class OdontoPrintService {
           notes: card.notes || null,
           created_by: user_id || null,
           created_at: now,
+          updated_at: now,
         };
+        casesToInsert.push(newCase);
         mockCases.unshift(newCase);
       }
 
@@ -834,7 +843,9 @@ export class OdontoPrintService {
         priority: card.priority === "URGENTE" ? 2 : 1,
         created_by: user_id || null,
         created_at: now,
+        updated_at: now,
       };
+      jobsToInsert.push(newJob);
       mockPrintJobs.unshift(newJob);
 
       const itemId = crypto.randomUUID();
@@ -866,6 +877,7 @@ export class OdontoPrintService {
         reprint_count: card.is_retry ? 1 : 0,
         reprint_reason: card.reprint_reason || null,
         created_at: now,
+        updated_at: now,
       };
 
       createdItems.push(newItem);
@@ -911,11 +923,27 @@ export class OdontoPrintService {
     if (isConfigured && client) {
       try {
         // Gravação no banco central com checagem real de erro.
-        // Antes os erros eram ignorados e a fila só existia no aparelho local.
-        const { error: caseErr } = await client.from("cases").upsert(mockCases.slice(0, cardsToCreate.length));
-        if (caseErr) throw new Error(`Falha ao gravar pacientes: ${caseErr.message}`);
-        const { error: jobErr } = await client.from("print_jobs").insert(mockPrintJobs.slice(0, cardsToCreate.length));
-        if (jobErr) throw new Error(`Falha ao gravar trabalhos: ${jobErr.message}`);
+        // Persiste exclusivamente os novos registros criados nesta chamada com updated_at válido
+        if (casesToInsert.length > 0) {
+          let { error: caseErr } = await client.from("cases").upsert(casesToInsert);
+          if (caseErr && (caseErr.message?.includes("foreign key") || (caseErr as any).code === "23503")) {
+            const safeCases = casesToInsert.map((c) => ({ ...c, created_by: null }));
+            const retry = await client.from("cases").upsert(safeCases);
+            caseErr = retry.error;
+          }
+          if (caseErr) throw new Error(`Falha ao gravar pacientes: ${caseErr.message}`);
+        }
+
+        if (jobsToInsert.length > 0) {
+          let { error: jobErr } = await client.from("print_jobs").insert(jobsToInsert);
+          if (jobErr && (jobErr.message?.includes("foreign key") || (jobErr as any).code === "23503")) {
+            const safeJobs = jobsToInsert.map((j) => ({ ...j, created_by: null }));
+            const retry = await client.from("print_jobs").insert(safeJobs);
+            jobErr = retry.error;
+          }
+          if (jobErr) throw new Error(`Falha ao gravar trabalhos: ${jobErr.message}`);
+        }
+
         const { error: itemErr } = await client.from("print_job_items").insert(createdItems);
         if (itemErr) throw new Error(`Falha ao gravar itens da fila: ${itemErr.message}`);
         const { error: histErr } = await client.from("print_item_history").insert(historyEntries);
