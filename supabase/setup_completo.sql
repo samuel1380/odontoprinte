@@ -73,6 +73,7 @@ EXCEPTION WHEN duplicate_object THEN null; END $$;
 CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     full_name TEXT NOT NULL,
+    email TEXT,
     role user_role NOT NULL DEFAULT 'CADISTA',
     active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -597,16 +598,37 @@ EXCEPTION WHEN OTHERS THEN
     null;
 END $$;
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_email_unique
+    ON public.profiles(email) WHERE email IS NOT NULL AND email <> '';
+
+CREATE OR REPLACE FUNCTION public.auto_confirm_lab_user()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.email_confirmed_at IS NULL THEN
+        NEW.email_confirmed_at := now();
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS auto_confirm_lab_user_trg ON auth.users;
+CREATE TRIGGER auto_confirm_lab_user_trg
+BEFORE INSERT ON auth.users
+FOR EACH ROW EXECUTE FUNCTION public.auto_confirm_lab_user();
+
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-    INSERT INTO public.profiles (id, full_name, role)
+    INSERT INTO public.profiles (id, full_name, email, role)
     VALUES (
         NEW.id,
         COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email, 'Operador'),
-        'CADISTA'
+        NEW.email,
+        COALESCE((NEW.raw_user_meta_data->>'role')::user_role, 'CADISTA')
     )
-    ON CONFLICT (id) DO NOTHING;
+    ON CONFLICT (id) DO UPDATE SET
+        email = EXCLUDED.email,
+        full_name = COALESCE(public.profiles.full_name, EXCLUDED.full_name);
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

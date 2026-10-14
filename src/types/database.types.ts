@@ -37,6 +37,7 @@ export type PrintRunItemResult = "PENDENTE" | "CONCLUIDO" | "FALHOU";
 export interface Profile {
   id: string;
   full_name: string;
+  email?: string | null;
   role: UserRole;
   active: boolean;
   created_at: string;

@@ -269,7 +269,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (errorMsg.includes("Invalid login credentials")) {
             errorMsg = "E-mail ou senha incorretos. Verifique suas credenciais.";
           } else if (errorMsg.includes("Email not confirmed")) {
-            errorMsg = "E-mail cadastrado, mas ainda não confirmado no Supabase.";
+            errorMsg = "Conta criada, mas ainda não liberada. Aguarde a aprovação do Administrador.";
+          } else if (/signups not allowed|signup.*disabled/i.test(errorMsg)) {
+            errorMsg = "Cadastro temporariamente desativado no servidor. Fale com o Administrador.";
+          } else if (/rate limit|too many requests/i.test(errorMsg)) {
+            errorMsg = "Muitas tentativas em pouco tempo. Aguarde alguns minutos e tente de novo.";
           }
           return { success: false, error: errorMsg };
         }
@@ -402,6 +406,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   ): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true);
     try {
+      const { validateAccessRequest, translateSupabaseAuthError } = await import("./auth-errors");
+      const validationError = validateAccessRequest({ full_name: fullName, email, password });
+      if (validationError) {
+        return { success: false, error: validationError };
+      }
+
       const cleanEmail = email.trim().toLowerCase();
       const { client, isConfigured } = createClient();
 
@@ -418,7 +428,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
 
         if (error) {
-          return { success: false, error: error.message };
+          return { success: false, error: translateSupabaseAuthError(error.message) };
         }
 
         if (data.user) {
@@ -426,6 +436,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await client.from("profiles").upsert({
               id: data.user.id,
               full_name: fullName.trim(),
+              email: cleanEmail,
               role,
               active: false, // Pendente de aprovação do administrador
             });
@@ -460,7 +471,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       return { success: true };
     } catch (err: any) {
-      return { success: false, error: err?.message || "Erro ao registrar solicitação." };
+      const { translateSupabaseAuthError } = await import("./auth-errors");
+      return { success: false, error: translateSupabaseAuthError(err?.message || "") };
     } finally {
       setIsLoading(false);
     }

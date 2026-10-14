@@ -43,6 +43,7 @@ import {
   ResinCalibrationInput,
 } from "@/lib/business-rules";
 import { DEFAULT_SYSTEM_SETTINGS, FILE_TYPE_LABELS } from "@/lib/constants";
+import { validateAccessRequest, translateSupabaseAuthError } from "@/lib/auth-errors";
 
 // ====================================================================
 // ====================================================================
@@ -2941,9 +2942,30 @@ export class OdontoPrintService {
     password?: string;
     role: UserRole;
   }): Promise<{ success: boolean; error?: string }> {
+    const validationError = validateAccessRequest(params);
+    if (validationError) {
+      return { success: false, error: validationError };
+    }
+
     const { client, isConfigured } = this.getSupabase();
     const cleanEmail = params.email.trim().toLowerCase();
     const cleanName = params.full_name.trim();
+
+    // Duplicidade checada no banco central (antes só olhava o aparelho local)
+    if (isConfigured && client) {
+      try {
+        const { data: existing } = await client
+          .from("profiles")
+          .select("id")
+          .eq("email", cleanEmail)
+          .limit(1);
+        if (existing && existing.length > 0) {
+          return { success: false, error: "Este e-mail já possui cadastro ou solicitação pendente." };
+        }
+      } catch {
+        // segue para o fluxo normal se a checagem falhar
+      }
+    }
 
     if (isConfigured && client && params.password) {
       try {
@@ -2959,19 +2981,23 @@ export class OdontoPrintService {
         });
 
         if (error) {
-          return { success: false, error: error.message };
+          return { success: false, error: translateSupabaseAuthError(error.message) };
         }
 
         if (data.user) {
-          await client.from("profiles").upsert({
+          const { error: profileErr } = await client.from("profiles").upsert({
             id: data.user.id,
             full_name: cleanName,
+            email: cleanEmail,
             role: params.role,
             active: false, // PENDENTE DE APROVAÇÃO PELO ADMIN
           });
+          if (profileErr) {
+            console.warn("requestUserAccess (perfil) error:", profileErr);
+          }
         }
       } catch (err: any) {
-        return { success: false, error: err?.message || "Erro ao conectar com Supabase" };
+        return { success: false, error: translateSupabaseAuthError(err?.message || "") };
       }
     }
 
@@ -3002,9 +3028,13 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        await client.from("profiles").update({ active: true }).eq("id", userId);
+        const { error } = await client.from("profiles").update({ active: true }).eq("id", userId);
+        if (error) {
+          console.warn("approveUser error:", error);
+          return false;
+        }
       } catch {
-        // ignore
+        return false;
       }
     }
 
@@ -3026,9 +3056,15 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        await client.from("profiles").delete().eq("id", userId);
+        // Recusar = remover o perfil; a conta auth órfã não entra
+        // (login exige perfil ativo).
+        const { error } = await client.from("profiles").delete().eq("id", userId);
+        if (error) {
+          console.warn("rejectUser error:", error);
+          return false;
+        }
       } catch {
-        // ignore
+        return false;
       }
     }
 
