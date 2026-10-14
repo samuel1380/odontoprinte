@@ -110,7 +110,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-[100dvh] w-full flex flex-col lg:flex-row bg-[#0B0F19] selection:bg-brand-500 selection:text-white overflow-x-hidden">
       {/* Coluna Esquerda: Apresentação da Plataforma (Desktop PC) */}
-      <div className="relative hidden lg:flex lg:w-1/2 flex-col justify-between p-12 bg-slate-950 text-white overflow-hidden border-r border-slate-850">
+      <div className="relative hidden lg:flex lg:w-1/2 flex-col justify-between p-12 bg-slate-950 text-white overflow-hidden border-r border-slate-800">
         {/* Glow de fundo e padrão de malha médica */}
         <div className="absolute inset-0 opacity-15 pointer-events-none bg-[radial-gradient(#38bdf8_1px,transparent_1px)] [background-size:24px_24px]" />
         <div className="absolute -top-40 -left-40 w-96 h-96 bg-brand-500/20 rounded-full blur-3xl pointer-events-none" />
@@ -200,12 +200,10 @@ export default function LoginPage() {
 
       {/* Coluna Direita: Formulário de Autenticação (Mobile + Desktop) */}
       <div className="w-full lg:w-1/2 flex flex-col justify-center items-center px-4 sm:px-8 xl:px-20 py-8 sm:py-12 relative overflow-hidden bg-[#0B0F19] text-white">
-        {/* Efeito de Fundo com Orbes Difusos (Mobile + Desktop) */}
+        {/* Efeito de fundo sutil */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-32 -left-32 w-80 h-80 bg-cyan-500/20 rounded-full blur-3xl animate-pulse" />
-          <div className="absolute -bottom-32 -right-32 w-80 h-80 bg-brand-500/20 rounded-full blur-3xl" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-brand-600/15 rounded-full blur-3xl" />
-          <div className="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.06)_1px,transparent_1px)] [background-size:24px_24px] opacity-40" />
+          <div className="absolute -top-24 -left-24 w-72 h-72 bg-cyan-500/10 rounded-full blur-3xl" />
+          <div className="absolute -bottom-24 -right-24 w-72 h-72 bg-brand-500/10 rounded-full blur-3xl" />
         </div>
 
         {/* Card de Login com Vidro Fosco */}
@@ -273,14 +271,14 @@ export default function LoginPage() {
                   Nome Completo
                 </label>
                 <div className="relative">
-                  <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" />
+                  <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
                     type="text"
                     required
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     placeholder="Ex: Dra. Camila Soares"
-                    className="w-full pl-10 pr-4 py-2.5 text-base sm:text-sm rounded-full border border-slate-700/80 bg-slate-900/90 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400 transition"
+                    className="w-full pl-10 pr-4 py-2.5 text-base sm:text-sm rounded-xl border border-slate-700/80 bg-slate-900/90 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400 transition"
                   />
                 </div>
               </div>
@@ -291,7 +289,7 @@ export default function LoginPage() {
                 E-mail Corporativo
               </label>
               <div className="relative">
-                <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" />
+                <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="email"
                   required
@@ -299,7 +297,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="seu.nome@odontoprint.com.br"
-                  className="w-full pl-10 pr-4 py-2.5 text-base sm:text-sm rounded-full border border-slate-700/80 bg-slate-900/90 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400 transition"
+                  className="w-full pl-10 pr-4 py-2.5 text-base sm:text-sm rounded-xl border border-slate-700/80 bg-slate-900/90 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400 transition"
                 />
               </div>
             </div>
@@ -310,19 +308,19 @@ export default function LoginPage() {
               </label>
 
               <div className="relative">
-                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" />
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type={showPassword ? "text" : "password"}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
-                  className="w-full pl-10 pr-10 py-2.5 text-base sm:text-sm rounded-full border border-slate-700/80 bg-slate-900/90 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400 transition"
+                  className="w-full pl-10 pr-10 py-2.5 text-base sm:text-sm rounded-xl border border-slate-700/80 bg-slate-900/90 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400 transition"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-3 text-slate-400 hover:text-white p-0.5 transition"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-0.5 transition"
                   title={showPassword ? "Ocultar senha" : "Exibir senha"}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -339,7 +337,7 @@ export default function LoginPage() {
                 <select
                   value={requestedRole}
                   onChange={(e) => setRequestedRole(e.target.value as UserRole)}
-                  className="w-full px-4 py-2.5 text-base sm:text-sm rounded-full border border-slate-700/80 bg-slate-900 text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 transition font-medium"
+                  className="w-full px-4 py-2.5 text-base sm:text-sm rounded-xl border border-slate-700/80 bg-slate-900 text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 transition font-medium"
                 >
                   <option value="CADISTA">Cadista (Design CAD)</option>
                   <option value="OPERADOR_IMPRESSAO">Operador de Impressão 3D & Resinas</option>

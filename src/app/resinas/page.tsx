@@ -94,6 +94,20 @@ export default function ResinasPage() {
               <Skeleton key={i} className="h-52 w-full rounded-3xl bg-slate-800" />
             ))}
           </div>
+        ) : batches.length === 0 ? (
+          <div className="text-center py-12 bg-[#0F172A] rounded-3xl border border-dashed border-slate-800 p-8">
+            <FlaskConical className="w-10 h-10 text-slate-500 mx-auto mb-2" />
+            <h3 className="text-base font-bold text-white">Nenhum lote de resina</h3>
+            <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+              Cadastre o recebimento para controlar volume, validade e calibração.
+            </p>
+            <Link href="/resinas/recebimento">
+              <Button className="mt-4 font-bold rounded-full bg-white hover:bg-slate-200 text-slate-950" size="sm">
+                <Plus className="w-4 h-4" />
+                Cadastrar primeira resina
+              </Button>
+            </Link>
+          </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
             {batches.map((batch) => {

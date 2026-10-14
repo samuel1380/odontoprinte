@@ -119,7 +119,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         )}
       >
         {/* Brand Header */}
-        <div className="flex h-14 sm:h-16 lg:h-18 items-center justify-between border-b border-slate-800 px-4 sm:px-5">
+        <div className="flex h-14 sm:h-16 items-center justify-between border-b border-slate-800 px-4 sm:px-5">
           <Link href="/dashboard" onClick={onClose} className="flex items-center gap-3 group">
             <img
               src="/logo.jpg"

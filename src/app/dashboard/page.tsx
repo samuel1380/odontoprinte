@@ -100,7 +100,7 @@ export default function DashboardPage() {
     <AppShell>
       <div className="space-y-6">
         {/* Header with Title */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2">
+        <div className="pb-2">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
               Painel Principal
@@ -108,21 +108,6 @@ export default function DashboardPage() {
             <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
               Visão geral da produção e do parque odontológico 3D.
             </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Link href="/cadista/status">
-              <Button size="sm" variant="default" className="text-xs gap-1.5 h-9 px-4 rounded-full">
-                <FileCheck2 className="w-3.5 h-3.5" />
-                Novo Trabalho
-              </Button>
-            </Link>
-            <Link href="/fila">
-              <Button size="sm" variant="secondary" className="text-xs gap-1.5 h-9 px-4 rounded-full">
-                <ListOrdered className="w-3.5 h-3.5" />
-                Fila de Impressão
-              </Button>
-            </Link>
           </div>
         </div>
 

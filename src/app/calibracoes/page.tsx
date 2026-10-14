@@ -126,8 +126,8 @@ export default function CalibracoesPage() {
                     </div>
 
                     {/* Measurements */}
-                    <div className="flex flex-wrap items-center gap-4 border-t md:border-t-0 pt-2 md:pt-0 border-slate-800">
-                      <div className="text-right">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t md:border-t-0 pt-2 md:pt-0 border-slate-800">
+                      <div className="text-left sm:text-right">
                         <span className="text-[10px] text-slate-400 block">Hexágono</span>
                         <span
                           className={`font-mono font-bold text-sm ${
@@ -140,17 +140,17 @@ export default function CalibracoesPage() {
                         </span>
                       </div>
 
-                      <div className="text-right">
+                      <div className="text-left sm:text-right">
                         <span className="text-[10px] text-slate-400 block">Camada</span>
                         <span className="font-semibold text-white">{cal.layer_height} mm</span>
                       </div>
 
-                      <div className="text-right">
+                      <div className="text-left sm:text-right">
                         <span className="text-[10px] text-slate-400 block">Exposição</span>
                         <span className="font-semibold text-white">{cal.exposure_time} s</span>
                       </div>
 
-                      <div className="text-right hidden sm:block">
+                      <div className="text-left sm:text-right">
                         <span className="text-[10px] text-slate-500 block">Data</span>
                         <span className="text-slate-400">{formatDate(cal.calibrated_at || cal.created_at)}</span>
                       </div>
