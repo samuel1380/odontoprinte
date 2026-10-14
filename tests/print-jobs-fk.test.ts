@@ -85,4 +85,18 @@ describe("ensureCasesExist: blindagem contra print_jobs_case_id_fkey", () => {
       OdontoPrintService.ensureCasesExist(badClient as any, ["x"], [], [], hint)
     ).rejects.toThrow(/dica RLS/);
   });
+
+  it("ignora erro de chave duplicada (23505) se o caso já foi inserido concorrentemente", async () => {
+    const { client } = stubClient(["case-outro"], {
+      insertError: { code: "23505", message: 'duplicate key value violates unique constraint "cases_pkey"' },
+    });
+    await expect(
+      OdontoPrintService.ensureCasesExist(
+        client as any,
+        ["case-fantasma-1"],
+        [],
+        [staleCase]
+      )
+    ).resolves.toBeUndefined();
+  });
 });
