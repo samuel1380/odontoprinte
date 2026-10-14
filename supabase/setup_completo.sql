@@ -237,6 +237,21 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
 
 -- 3b. FILA AVANÇADA (correção 2026-10-13: sem estas colunas/tabelas o
 -- avanço para CONCLUIDO falhava no Supabase e a tela revertia)
+ALTER TABLE IF EXISTS public.cases
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE IF EXISTS public.cases
+    ALTER COLUMN updated_at SET DEFAULT now();
+
+ALTER TABLE IF EXISTS public.print_jobs
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE IF EXISTS public.print_jobs
+    ALTER COLUMN updated_at SET DEFAULT now();
+
+ALTER TABLE IF EXISTS public.print_job_items
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE IF EXISTS public.print_job_items
+    ALTER COLUMN updated_at SET DEFAULT now();
+
 ALTER TABLE public.print_job_items
     ADD COLUMN IF NOT EXISTS clinic_name TEXT,
     ADD COLUMN IF NOT EXISTS cadista_name TEXT,
@@ -662,6 +677,20 @@ BEGIN
     UPDATE auth.users
     SET email_confirmed_at = now()
     WHERE email_confirmed_at IS NULL;
+EXCEPTION WHEN OTHERS THEN
+    null;
+END $$;
+
+-- Garante que a coluna email exista na tabela profiles caso a tabela já existisse no banco
+ALTER TABLE IF EXISTS public.profiles
+    ADD COLUMN IF NOT EXISTS email TEXT;
+
+DO $$
+BEGIN
+    UPDATE public.profiles p
+    SET email = u.email
+    FROM auth.users u
+    WHERE p.id = u.id AND (p.email IS NULL OR p.email = '');
 EXCEPTION WHEN OTHERS THEN
     null;
 END $$;
