@@ -213,9 +213,9 @@ export default function FilaPage() {
     return `há ${days}d ${hours % 24}h`;
   }
 
-  // Carregar dados
-  const loadData = async () => {
-    setIsLoading(true);
+  // Carregar dados (silent = atualização de fundo sem skeleton, p/ polling)
+  const loadData = async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setIsLoading(true);
     try {
       const [cardsData, batchesData, runsData, failedData, printersData] = await Promise.all([
         OdontoPrintService.getPrintCards(),
@@ -230,7 +230,7 @@ export default function FilaPage() {
       setFailedPendingCount(failedData.length);
       setPrinters(printersData);
     } catch {
-      toast.error("Erro ao carregar fila de impressão.");
+      if (!opts?.silent) toast.error("Erro ao carregar fila de impressão.");
     } finally {
       setIsLoading(false);
     }
@@ -245,14 +245,23 @@ export default function FilaPage() {
     const timer = setInterval(() => {
       setNowTick(Date.now());
     }, 30000);
+    // FASE 2: recarrega TUDO em segundo plano (mesas/cards de outros aparelhos)
     const refresher = setInterval(() => {
-      OdontoPrintService.getActiveRunsWithItems()
-        .then(setActiveRuns)
-        .catch(() => {});
+      loadData({ silent: true }).catch(() => {});
     }, 30000);
+    // FASE 3: tempo real — outro aparelho mexeu, recarrega (com debounce)
+    let rtTimer: ReturnType<typeof setTimeout> | null = null;
+    const unsubSync = OdontoPrintService.subscribeSync(() => {
+      if (rtTimer) clearTimeout(rtTimer);
+      rtTimer = setTimeout(() => {
+        loadData({ silent: true }).catch(() => {});
+      }, 800);
+    });
     return () => {
       clearInterval(timer);
       clearInterval(refresher);
+      if (rtTimer) clearTimeout(rtTimer);
+      if (unsubSync) unsubSync();
     };
   }, []);
 
@@ -887,9 +896,11 @@ export default function FilaPage() {
         loadData();
       } else {
         toast.error(res.error || "Erro ao apagar mesa.");
+        loadData();
       }
     } catch {
       toast.error("Erro ao apagar mesa.");
+      loadData();
     } finally {
       setIsDeletingBatch(false);
     }
@@ -911,9 +922,11 @@ export default function FilaPage() {
         loadData();
       } else {
         toast.error(res.error || "Erro ao esvaziar mesa.");
+        loadData();
       }
     } catch {
       toast.error("Erro ao esvaziar mesa.");
+      loadData();
     } finally {
       setIsEmptyingBatch(false);
     }
@@ -931,9 +944,11 @@ export default function FilaPage() {
         loadData();
       } else {
         toast.error(res.error || "Erro ao apagar arquivo.");
+        loadData();
       }
     } catch {
       toast.error("Erro ao apagar arquivo.");
+      loadData();
     } finally {
       setIsDeletingCard(false);
     }

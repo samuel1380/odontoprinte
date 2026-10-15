@@ -1,6 +1,10 @@
 -- ====================================================================
--- ODONTOPRINT: SCRIPT COMPLETO E UNIFICADO (MIGRATIONS + SEED)
+-- ODONTOPRINT: SCRIPT OFICIAL E ÚNICO DO BANCO (SCHEMA + SEED + PERMISSÕES)
 -- Execute este script inteiro no SQL Editor do Supabase de uma só vez!
+-- É seguro re-rodar: tudo usa IF NOT EXISTS e as sequências são
+-- sincronizadas com os dados existentes (nunca zeradas).
+-- NÃO rode scripts da pasta supabase/_archive (já incorporados aqui).
+-- NUNCA rode scripts de scripts/danger em produção com dados reais.
 -- ====================================================================
 
 -- 1. EXTENSÕES
@@ -337,22 +341,6 @@ SELECT setval(
 CREATE UNIQUE INDEX IF NOT EXISTS idx_print_batches_number_unique
     ON public.print_batches(batch_number);
 
--- Garante updated_at em cases, print_jobs e print_job_items
-ALTER TABLE IF EXISTS public.cases
-    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
-ALTER TABLE IF EXISTS public.cases
-    ALTER COLUMN updated_at SET DEFAULT now();
-
-ALTER TABLE IF EXISTS public.print_jobs
-    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
-ALTER TABLE IF EXISTS public.print_jobs
-    ALTER COLUMN updated_at SET DEFAULT now();
-
-ALTER TABLE IF EXISTS public.print_job_items
-    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
-ALTER TABLE IF EXISTS public.print_job_items
-    ALTER COLUMN updated_at SET DEFAULT now();
-
 CREATE INDEX IF NOT EXISTS idx_cases_patient_code ON public.cases(patient_code);
 CREATE INDEX IF NOT EXISTS idx_print_jobs_status ON public.print_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_print_jobs_queue_entered ON public.print_jobs(queue_entered_at ASC);
@@ -666,10 +654,27 @@ INSERT INTO public.system_settings (
 SELECT 7, 9.99, 10.01, 'A', '00A'
 WHERE NOT EXISTS (SELECT 1 FROM public.system_settings);
 
--- 9. INICIALIZAÇÃO LIMPA PARA PRODUÇÃO (SEM DADOS DE TESTE)
--- Sequências iniciadas para o primeiro código de impressão ser A001 e de reimpressão 00A1
-SELECT setval('print_run_normal_seq', 1, false);
-SELECT setval('print_run_retry_seq', 1, false);
+-- 9. SINCRONIZAÇÃO DAS SEQUÊNCIAS COM OS DADOS EXISTENTES (SEM ZERAR)
+-- NUNCA usa setval(...,1): em banco com impressões, zerar gera A001/00A001
+-- duplicados. Recalcula a partir do maior código já usado (A001 -> 1).
+SELECT setval(
+    'print_run_normal_seq',
+    COALESCE(
+        (SELECT MAX(CAST(SUBSTRING(run_code FROM '[0-9]+$') AS INTEGER))
+         FROM public.print_runs WHERE run_code !~ '^00A' AND run_code ~ '[0-9]'),
+        0
+    ) + 1,
+    false
+);
+SELECT setval(
+    'print_run_retry_seq',
+    COALESCE(
+        (SELECT MAX(CAST(SUBSTRING(run_code FROM '[0-9]+$') AS INTEGER))
+         FROM public.print_runs WHERE run_code ~ '^00A'),
+        0
+    ) + 1,
+    false
+);
 
 -- 10. SINCRONIZAÇÃO AUTOMÁTICA DE USUÁRIOS E PERFIS
 DO $$

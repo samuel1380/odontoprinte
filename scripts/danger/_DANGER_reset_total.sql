@@ -1,7 +1,8 @@
 -- ====================================================================
--- ODONTOPRINT: SCRIPT DE LIMPEZA GERAL DO BANCO (RESET PARA PRODUÇÃO)
--- Execute este script no SQL Editor do Supabase se você já executou
--- dados de teste anteriormente e deseja zerar tudo para uso real.
+-- ⛔ PERIGO: APAGA TODOS OS DADOS OPERACIONAIS (IRREVERSÍVEL) ⛔
+-- NUNCA rode em produção com dados reais. Só para zerar um banco de TESTE.
+-- Faça backup (Database > Backups) antes. Perfis de usuário são mantidos,
+-- todo o resto (fila, mesas, calibrações, auditoria) é destruído.
 -- ====================================================================
 
 -- 1. Esvazia todas as tabelas operacionais em cascata mantendo a estrutura

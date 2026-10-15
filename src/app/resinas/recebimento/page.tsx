@@ -58,8 +58,8 @@ export default function RecebimentoResinaPage() {
       });
 
       router.push("/resinas");
-    } catch {
-      toast.error("Erro ao registrar recebimento de resina.");
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao registrar recebimento de resina.");
     } finally {
       setIsSubmitting(false);
     }

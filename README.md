@@ -85,11 +85,8 @@ Abra [http://localhost:3000](http://localhost:3000) no seu navegador.
 Para conectar seu próprio banco Supabase PostgreSQL em produção, basta executar o script unificado no **SQL Editor** do painel do Supabase:
 
 1. Acesse o painel do seu projeto no Supabase > **SQL Editor**.
-2. Cole e execute o arquivo `supabase/setup_completo.sql` (cria 100% da estrutura, tabelas, enums, triggers, RPCs, views e permissões operacionais de uma só vez).
-3. *(Opcional)* Caso deseje carregar dados de demonstração iniciais, execute em seguida:
-   - `supabase/seed.sql` (Insere as 3 impressoras em estados distintos, os lotes de resina e 6 pacientes na fila).
-4. *(Bancos já existentes)* Se o seu banco já foi criado anteriormente e você precisa apenas aplicar as novidades da esteira e mesas de impressão sem perder dados:
-   - `supabase/migrations/20261014_fix_mesa_print_jobs_prod.sql`
+2. Cole e execute o arquivo `supabase/setup_completo.sql` — é o script **oficial e único**: cria 100% da estrutura (tabelas, enums, triggers, RPCs, views) e permissões operacionais de uma só vez. Pode re-rodar sem medo: nada é apagado e as sequências se ajustam aos dados existentes.
+3. *(Bancos já existentes)* Se o banco já tem dados, o mesmo script serve como atualização (só adiciona o que falta). Nunca execute nada da pasta `supabase/_archive/` (conteúdo antigo já incorporado) nem de `scripts/danger/` (apaga tudo).
 
 ---
 

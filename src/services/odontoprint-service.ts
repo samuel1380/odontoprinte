@@ -107,6 +107,19 @@ function mergeById<T extends { id: string }>(
   return Array.from(map.values());
 }
 
+/**
+ * ESTRITO: lança erro legível quando o Supabase responde com { error }.
+ * Antes os métodos só davam console.warn e retornavam success:true — a UI
+ * mostrava "salvo/apagado" de algo que só existia neste navegador.
+ */
+function assertDbOk(res: { error: any } | null | undefined, contexto: string): void {
+  const err = (res as any)?.error;
+  if (err) {
+    const msg = err.message || err.details || "falha no banco central";
+    throw new Error(`${contexto}: ${msg}`);
+  }
+}
+
 let mockSettings: SystemSettings = {
   id: "90000000-0000-0000-0000-000000000001",
   maintenance_interval_days: 7,
@@ -132,6 +145,11 @@ let mockFinishingItems: FinishingCaseItem[] = [];
 let mockPrintBatches: PrintBatch[] = [];
 let mockPrintItemHistory: PrintItemHistory[] = [];
 
+// Tombstones em memória (espelham o localStorage): mesas/cards apagados
+// nunca ressuscitam em merges — nem neste aparelho, nem vindos do banco.
+let tombstoneBatches: Set<string> = new Set(loadLocal<string[]>("odontoprint_deleted_batches", []));
+let tombstoneCards: Set<string> = new Set(loadLocal<string[]>("odontoprint_deleted_cards", []));
+
 let normalSeqCounter = 0;
 let retrySeqCounter = 0;
 
@@ -141,6 +159,172 @@ let retrySeqCounter = 0;
 export class OdontoPrintService {
   private static getSupabase() {
     return createClient();
+  }
+
+  /**
+   * ROLLBACK LOCAL: fotografia profunda do estado em memória antes de
+   * mutar. Se o Supabase falhar, restaura tudo — nada de "apagou aqui e
+   * continua no banco" nem "salvou aqui e sumiu nos outros aparelhos".
+   * Fotografa os mocks (fonte da verdade após os loadLocal de cada método).
+   */
+  private static snapLocals(_keys?: string[]): Record<string, any[]> {
+    const deep = (v: any[]): any[] => {
+      try {
+        return JSON.parse(JSON.stringify(v));
+      } catch {
+        return [...v];
+      }
+    };
+    return {
+      odontoprint_batches: deep(mockPrintBatches),
+      odontoprint_job_items: deep(mockPrintJobItems),
+      odontoprint_jobs: deep(mockPrintJobs),
+      odontoprint_print_runs: deep(mockPrintRuns),
+      odontoprint_print_run_items: deep(mockPrintRunItems),
+      odontoprint_item_history: deep(mockPrintItemHistory),
+      odontoprint_finishing_items: deep(mockFinishingItems),
+      odontoprint_cases: deep(mockCases),
+      odontoprint_resin_batches: deep(mockResinBatches),
+      odontoprint_calibrations: deep(mockCalibrations),
+      odontoprint_printers: deep(mockPrinters),
+      odontoprint_maintenances: deep(mockMaintenances),
+      odontoprint_deleted_resins: deep(loadLocal<string[]>("odontoprint_deleted_resins", [])),
+      odontoprint_deleted_printers: deep(loadLocal<string[]>("odontoprint_deleted_printers", [])),
+      odontoprint_deleted_batches: Array.from(tombstoneBatches),
+      odontoprint_deleted_cards: Array.from(tombstoneCards),
+    };
+  }
+
+  private static restoreLocals(snap: Record<string, any[]>): void {
+    if (snap.odontoprint_batches) mockPrintBatches = snap.odontoprint_batches;
+    if (snap.odontoprint_job_items) mockPrintJobItems = snap.odontoprint_job_items;
+    if (snap.odontoprint_jobs) mockPrintJobs = snap.odontoprint_jobs;
+    if (snap.odontoprint_print_runs) mockPrintRuns = snap.odontoprint_print_runs;
+    if (snap.odontoprint_print_run_items) mockPrintRunItems = snap.odontoprint_print_run_items;
+    if (snap.odontoprint_item_history) mockPrintItemHistory = snap.odontoprint_item_history;
+    if (snap.odontoprint_finishing_items) mockFinishingItems = snap.odontoprint_finishing_items;
+    if (snap.odontoprint_cases) mockCases = snap.odontoprint_cases;
+    if (snap.odontoprint_resin_batches) mockResinBatches = snap.odontoprint_resin_batches;
+    if (snap.odontoprint_calibrations) mockCalibrations = snap.odontoprint_calibrations;
+    if (snap.odontoprint_printers) mockPrinters = snap.odontoprint_printers;
+    if (snap.odontoprint_maintenances) mockMaintenances = snap.odontoprint_maintenances;
+    saveLocal("odontoprint_batches", mockPrintBatches);
+    saveLocal("odontoprint_job_items", mockPrintJobItems);
+    saveLocal("odontoprint_jobs", mockPrintJobs);
+    saveLocal("odontoprint_print_runs", mockPrintRuns);
+    saveLocal("odontoprint_print_run_items", mockPrintRunItems);
+    saveLocal("odontoprint_item_history", mockPrintItemHistory);
+    saveLocal("odontoprint_finishing_items", mockFinishingItems);
+    saveLocal("odontoprint_cases", mockCases);
+    saveLocal("odontoprint_resin_batches", mockResinBatches);
+    saveLocal("odontoprint_calibrations", mockCalibrations);
+    saveLocal("odontoprint_printers", mockPrinters);
+    saveLocal("odontoprint_maintenances", mockMaintenances);
+    if (snap.odontoprint_deleted_resins) saveLocal("odontoprint_deleted_resins", snap.odontoprint_deleted_resins);
+    if (snap.odontoprint_deleted_printers) saveLocal("odontoprint_deleted_printers", snap.odontoprint_deleted_printers);
+    if (snap.odontoprint_deleted_batches) {
+      tombstoneBatches = new Set(snap.odontoprint_deleted_batches);
+      saveLocal("odontoprint_deleted_batches", snap.odontoprint_deleted_batches);
+    }
+    if (snap.odontoprint_deleted_cards) {
+      tombstoneCards = new Set(snap.odontoprint_deleted_cards);
+      saveLocal("odontoprint_deleted_cards", snap.odontoprint_deleted_cards);
+    }
+  }
+
+  /** Lê o conjunto de ids excluídos (tombstones) de uma chave. */
+  private static deletedIds(key: string): Set<string> {
+    if (key === "odontoprint_deleted_batches") return tombstoneBatches;
+    if (key === "odontoprint_deleted_cards") return tombstoneCards;
+    try {
+      const list = loadLocal<string[]>(key, []);
+      return new Set(Array.isArray(list) ? list : []);
+    } catch {
+      return new Set();
+    }
+  }
+
+  /**
+   * FASE 2: impede ressurreição. Remove do estado local tudo que foi
+   * apagado (neste ou em outro aparelho, via tombstones) para que o merge
+   * com o Supabase nunca traga de volta mesa/card excluído.
+   */
+  private static applyTombstones(): void {
+    const deadBatches = this.deletedIds("odontoprint_deleted_batches");
+    const deadCards = this.deletedIds("odontoprint_deleted_cards");
+    if (deadBatches.size === 0 && deadCards.size === 0) return;
+    const nb = mockPrintBatches.length;
+    const ni = mockPrintJobItems.length;
+    if (deadBatches.size > 0) {
+      mockPrintBatches = mockPrintBatches.filter((b) => !deadBatches.has(b.id));
+    }
+    mockPrintJobItems = mockPrintJobItems.filter(
+      (i) => !deadCards.has(i.id) && !(i.batch_id && deadBatches.has(i.batch_id))
+    );
+    if (mockPrintBatches.length !== nb) saveLocal("odontoprint_batches", mockPrintBatches);
+    if (mockPrintJobItems.length !== ni) saveLocal("odontoprint_job_items", mockPrintJobItems);
+  }
+
+  /**
+   * FASE 3: tempo real entre aparelhos. Assina mudanças no Postgres das
+   * tabelas da operação; cada evento dispara onEvent (a tela recarrega).
+   * onStatus avisa se o canal está vivo (para o selo de conexão honesto).
+   * Retorna função para cancelar, ou null se sem Supabase.
+   */
+  static subscribeSync(onEvent: () => void, onStatus?: (live: boolean) => void): (() => void) | null {
+    const { client, isConfigured } = this.getSupabase();
+    if (!isConfigured || !client) return null;
+    try {
+      const tables = [
+        "print_batches",
+        "print_job_items",
+        "print_jobs",
+        "cases",
+        "print_runs",
+        "resin_batches",
+        "printers",
+      ];
+      const channel = client.channel(`odontoprint-lab-${Math.random().toString(36).slice(2, 8)}`);
+      for (const table of tables) {
+        channel.on(
+          "postgres_changes" as any,
+          { event: "*", schema: "public", table },
+          () => {
+            try {
+              onEvent();
+            } catch {
+              // ignore
+            }
+          }
+        );
+      }
+      channel.subscribe((status: string) => {
+        if (onStatus) {
+          try {
+            onStatus(status === "SUBSCRIBED");
+          } catch {
+            // ignore
+          }
+        }
+      });
+      return () => {
+        try {
+          const p = (client as any).removeChannel(channel);
+          if (p && typeof p.catch === "function") p.catch(() => {});
+        } catch {
+          // ignore
+        }
+      };
+    } catch {
+      if (onStatus) {
+        try {
+          onStatus(false);
+        } catch {
+          // ignore
+        }
+      }
+      return null;
+    }
   }
 
   // --- SETTINGS ---
@@ -164,6 +348,7 @@ export class OdontoPrintService {
 
   static async updateSettings(settings: Partial<SystemSettings>): Promise<SystemSettings> {
     mockSettings = loadLocal("odontoprint_system_settings", mockSettings);
+    const prevSettings = JSON.parse(JSON.stringify(mockSettings));
     mockSettings = {
       ...mockSettings,
       ...settings,
@@ -175,17 +360,19 @@ export class OdontoPrintService {
     if (isConfigured && client) {
       try {
         if (mockSettings.id && mockSettings.id !== "90000000-0000-0000-0000-000000000001") {
-          await client.from("system_settings").update(settings).eq("id", mockSettings.id);
+          assertDbOk(await client.from("system_settings").update(settings).eq("id", mockSettings.id), "Falha ao salvar configurações");
         } else {
           const { data: current } = await client.from("system_settings").select("id").limit(1).single();
           if (current?.id) {
             mockSettings.id = current.id;
             saveLocal("odontoprint_system_settings", mockSettings);
-            await client.from("system_settings").update(settings).eq("id", current.id);
+            assertDbOk(await client.from("system_settings").update(settings).eq("id", current.id), "Falha ao salvar configurações");
           }
         }
-      } catch (err) {
-        console.warn("Supabase updateSettings error:", err);
+      } catch (err: any) {
+        mockSettings = prevSettings;
+        saveLocal("odontoprint_system_settings", mockSettings);
+        throw new Error(err?.message || "Erro ao salvar configurações no banco.");
       }
     }
     return mockSettings;
@@ -419,6 +606,8 @@ export class OdontoPrintService {
       }
     }
 
+    this.applyTombstones();
+
     mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
     mockPrintJobs = loadLocal("odontoprint_jobs", mockPrintJobs);
     mockCases = loadLocal("odontoprint_cases", mockCases);
@@ -593,6 +782,8 @@ export class OdontoPrintService {
         console.warn("Supabase getPrintCards error:", err);
       }
     }
+
+    this.applyTombstones();
 
     const cards: PrintCardItem[] = mockPrintJobItems.map((item) => {
       const job = mockPrintJobs.find((j) => j.id === item.print_job_id);
@@ -1031,11 +1222,11 @@ export class OdontoPrintService {
         // Gravação no banco central com checagem real de erro.
         // Persiste exclusivamente os novos registros criados nesta chamada com updated_at válido
         // Dica de diagnóstico: erro de "row-level security" significa que o SQL
-        // supabase/migrations/20261014_fix_mesa_print_jobs_prod.sql ainda não foi
-        // aplicado no Supabase de produção (SQL Editor > RUN).
+        // supabase/setup_completo.sql ainda não foi aplicado no Supabase
+        // de produção (SQL Editor > RUN).
         const rlsHint = (msg: string) =>
           /row.level.security|permission denied|not allowed|policy/i.test(msg || "")
-            ? " (RLS bloqueando o anon key — rode o SQL 20261014_fix_mesa_print_jobs_prod.sql no Supabase)"
+            ? " (RLS bloqueando o anon key — rode o SQL setup_completo.sql no Supabase)"
             : "";
         const fkCaseHint = (msg: string) =>
           /print_jobs_case_id_fkey/.test(msg || "")
@@ -1133,6 +1324,14 @@ export class OdontoPrintService {
     mockAuditLogs = loadLocal("odontoprint_audit_logs", mockAuditLogs);
     mockPrintJobs = loadLocal("odontoprint_jobs", mockPrintJobs);
     mockFinishingItems = loadLocal("odontoprint_finishing_items", mockFinishingItems);
+
+    const snap = this.snapLocals([
+      "odontoprint_job_items",
+      "odontoprint_item_history",
+      "odontoprint_audit_logs",
+      "odontoprint_jobs",
+      "odontoprint_finishing_items",
+    ]);
 
     const item = mockPrintJobItems.find((i) => i.id === id);
     if (!item) return { success: false, error: "Item de impressão não encontrado." };
@@ -1266,21 +1465,25 @@ export class OdontoPrintService {
           const isMissingColumn =
             /column|last_failure_reason|retry_count|is_retry|schema cache|PGRST/i.test(msg);
           if (isMissingColumn) {
-            const { error: minErr } = await client
-              .from("print_job_items")
-              .update({ status: item.status, updated_at: now })
-              .eq("id", id);
-            if (minErr) console.warn("Supabase updateCardStatus (fallback mínimo) error:", minErr);
+            assertDbOk(
+              await client
+                .from("print_job_items")
+                .update({ status: item.status, updated_at: now })
+                .eq("id", id),
+              "Falha ao atualizar modelo"
+            );
           } else {
-            console.warn("Supabase updateCardStatus error:", fullErr);
+            throw new Error(`Falha ao atualizar modelo: ${fullErr.message}`);
           }
         }
         if (parentJob) {
-          const { error: jobErr } = await client
-            .from("print_jobs")
-            .update({ status: parentJob.status, updated_at: now })
-            .eq("id", parentJob.id);
-          if (jobErr) console.warn("Supabase updateCardStatus (job pai) error:", jobErr);
+          assertDbOk(
+            await client
+              .from("print_jobs")
+              .update({ status: parentJob.status, updated_at: now })
+              .eq("id", parentJob.id),
+            "Falha ao atualizar trabalho pai"
+          );
         }
         // Histórico é auxiliar: nunca pode quebrar o avanço de status.
         try {
@@ -1288,8 +1491,10 @@ export class OdontoPrintService {
         } catch (histErr) {
           console.warn("Supabase updateCardStatus (history) error:", histErr);
         }
-      } catch (err) {
-        console.warn("Supabase updateCardStatus error:", err);
+      } catch (err: any) {
+        // ESTRITO: reverte a mudança local e informa.
+        this.restoreLocals(snap);
+        return { success: false, error: err?.message || "Erro ao atualizar modelo no banco." };
       }
     }
 
@@ -1311,6 +1516,12 @@ export class OdontoPrintService {
     mockPrintBatches = loadLocal("odontoprint_batches", mockPrintBatches);
     mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
     mockPrintItemHistory = loadLocal("odontoprint_item_history", mockPrintItemHistory);
+
+    const snapLegacy = this.snapLocals([
+      "odontoprint_batches",
+      "odontoprint_job_items",
+      "odontoprint_item_history",
+    ]);
 
     const batchId = crypto.randomUUID();
     const now = new Date().toISOString();
@@ -1358,8 +1569,7 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        const { error: batchErr } = await client.from("print_batches").insert(newBatch);
-        if (batchErr) console.warn("Supabase createPrintBatch (batch) error:", batchErr);
+        assertDbOk(await client.from("print_batches").insert(newBatch), "Falha ao criar lote");
         for (const itemId of params.item_ids) {
           const { error: itemErr } = await client.from("print_job_items").update({
             batch_id: batchId,
@@ -1369,15 +1579,15 @@ export class OdontoPrintService {
           }).eq("id", itemId);
           if (itemErr) {
             // Banco sem migration 20261013: tenta só o status.
-            const { error: retryErr } = await client.from("print_job_items").update({
+            assertDbOk(await client.from("print_job_items").update({
               status: "EM_PREPARO",
               updated_at: now,
-            }).eq("id", itemId);
-            if (retryErr) console.warn("Supabase createPrintBatch (item) error:", retryErr);
+            }).eq("id", itemId), "Falha ao vincular modelo ao lote");
           }
         }
-      } catch (err) {
-        console.warn("Supabase createPrintBatch error:", err);
+      } catch (err: any) {
+        this.restoreLocals(snapLegacy);
+        return { success: false, error: err?.message || "Erro ao criar lote no banco." };
       }
     }
 
@@ -1395,6 +1605,14 @@ export class OdontoPrintService {
     mockPrintItemHistory = loadLocal("odontoprint_item_history", mockPrintItemHistory);
     mockPrintRuns = loadLocal("odontoprint_print_runs", mockPrintRuns);
     mockPrintRunItems = loadLocal("odontoprint_print_run_items", mockPrintRunItems);
+
+    const snapFail = this.snapLocals([
+      "odontoprint_batches",
+      "odontoprint_job_items",
+      "odontoprint_item_history",
+      "odontoprint_print_runs",
+      "odontoprint_print_run_items",
+    ]);
 
     const batch = mockPrintBatches.find((b) => b.id === batchId);
     if (!batch && !this.getSupabase().isConfigured) {
@@ -1478,43 +1696,44 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        await client.from("print_batches").update({
+        assertDbOk(await client.from("print_batches").update({
           status: "FALHOU",
           failure_reason: failReason,
           printer_id: null,
           printer_name: null,
           updated_at: now,
-        }).eq("id", batchId);
+        }).eq("id", batchId), "Falha ao marcar falha da mesa");
 
-        await client.from("print_job_items").update({
+        assertDbOk(await client.from("print_job_items").update({
           status: "AGUARDANDO_FILA",
           priority: "URGENTE",
           is_retry: true,
           last_failure_reason: failReason,
           reprint_reason: failReason,
           updated_at: now,
-        }).eq("batch_id", batchId);
+        }).eq("batch_id", batchId), "Falha ao devolver modelos para a fila");
 
         if (cancelledRunIds.length > 0) {
-          await client.from("print_runs").update({
+          assertDbOk(await client.from("print_runs").update({
             status: "CANCELADA",
             finished_at: now,
             updated_at: now,
-          }).in("id", cancelledRunIds);
+          }).in("id", cancelledRunIds), "Falha ao cancelar execução");
 
-          await client.from("print_run_items").update({
+          assertDbOk(await client.from("print_run_items").update({
             result: "FALHOU",
             failure_reason: failReason,
-          }).in("print_run_id", cancelledRunIds).eq("result", "PENDENTE");
+          }).in("print_run_id", cancelledRunIds).eq("result", "PENDENTE"), "Falha ao marcar itens da execução");
         } else if (batchPrinterId) {
-          await client.from("print_runs").update({
+          assertDbOk(await client.from("print_runs").update({
             status: "CANCELADA",
             finished_at: now,
             updated_at: now,
-          }).eq("printer_id", batchPrinterId).eq("status", "EM_IMPRESSAO");
+          }).eq("printer_id", batchPrinterId).eq("status", "EM_IMPRESSAO"), "Falha ao cancelar execução");
         }
-      } catch (err) {
-        console.warn("Supabase failPrintBatch error:", err);
+      } catch (err: any) {
+        this.restoreLocals(snapFail);
+        return { success: false, affected_count: 0, error: err?.message || "Erro ao registrar falha no banco." };
       }
     }
 
@@ -1536,6 +1755,14 @@ export class OdontoPrintService {
     mockPrintItemHistory = loadLocal("odontoprint_item_history", mockPrintItemHistory);
     mockPrintRuns = loadLocal("odontoprint_print_runs", mockPrintRuns);
     mockPrintRunItems = loadLocal("odontoprint_print_run_items", mockPrintRunItems);
+
+    const snapFinish = this.snapLocals([
+      "odontoprint_batches",
+      "odontoprint_job_items",
+      "odontoprint_item_history",
+      "odontoprint_print_runs",
+      "odontoprint_print_run_items",
+    ]);
 
     const batch = mockPrintBatches.find((b) => b.id === batchId);
     if (!batch && !this.getSupabase().isConfigured) {
@@ -1615,39 +1842,40 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        await client.from("print_batches").update({
+        assertDbOk(await client.from("print_batches").update({
           status: "CONCLUIDO",
           printer_id: null,
           printer_name: null,
           updated_at: now,
-        }).eq("id", batchId);
+        }).eq("id", batchId), "Falha ao concluir mesa");
 
         if (itemIdsToUpdate.length > 0) {
-          await client.from("print_job_items").update({
+          assertDbOk(await client.from("print_job_items").update({
             status: "CONCLUIDO",
             updated_at: now,
-          }).in("id", itemIdsToUpdate);
+          }).in("id", itemIdsToUpdate), "Falha ao concluir modelos");
         }
 
         if (finalizedRunIds.length > 0) {
-          await client.from("print_runs").update({
+          assertDbOk(await client.from("print_runs").update({
             status: "FINALIZADA",
             finished_at: now,
             updated_at: now,
-          }).in("id", finalizedRunIds);
+          }).in("id", finalizedRunIds), "Falha ao finalizar execução");
 
-          await client.from("print_run_items").update({
+          assertDbOk(await client.from("print_run_items").update({
             result: "CONCLUIDO",
-          }).in("print_run_id", finalizedRunIds).eq("result", "PENDENTE");
+          }).in("print_run_id", finalizedRunIds).eq("result", "PENDENTE"), "Falha ao concluir itens da execução");
         } else if (batchPrinterId) {
-          await client.from("print_runs").update({
+          assertDbOk(await client.from("print_runs").update({
             status: "FINALIZADA",
             finished_at: now,
             updated_at: now,
-          }).eq("printer_id", batchPrinterId).eq("status", "EM_IMPRESSAO");
+          }).eq("printer_id", batchPrinterId).eq("status", "EM_IMPRESSAO"), "Falha ao finalizar execução");
         }
-      } catch (err) {
-        console.warn("Supabase finishPrintBatch error:", err);
+      } catch (err: any) {
+        this.restoreLocals(snapFinish);
+        return { success: false, completed_count: 0, error: err?.message || "Erro ao concluir mesa no banco." };
       }
     }
 
@@ -1667,6 +1895,12 @@ export class OdontoPrintService {
     mockPrintRunItems = loadLocal("odontoprint_print_run_items", mockPrintRunItems);
     mockPrintBatches = loadLocal("odontoprint_batches", mockPrintBatches);
     mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
+
+    const snapRelease = this.snapLocals([
+      "odontoprint_print_runs",
+      "odontoprint_print_run_items",
+      "odontoprint_batches",
+    ]);
 
     const now = new Date().toISOString();
 
@@ -1707,18 +1941,19 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        await client
+        assertDbOk(await client
           .from("print_runs")
           .update({ status: "FINALIZADA", finished_at: now, updated_at: now })
           .eq("printer_id", printerId)
-          .eq("status", "EM_IMPRESSAO");
+          .eq("status", "EM_IMPRESSAO"), "Falha ao liberar impressora");
 
-        await client
+        assertDbOk(await client
           .from("print_batches")
           .update({ printer_id: null, printer_name: null, updated_at: now })
-          .eq("printer_id", printerId);
-      } catch (err) {
-        console.warn("Supabase releasePrinter error:", err);
+          .eq("printer_id", printerId), "Falha ao desvincular mesas");
+      } catch (err: any) {
+        this.restoreLocals(snapRelease);
+        return { success: false, error: err?.message || "Erro ao liberar impressora no banco." };
       }
     }
 
@@ -1736,6 +1971,7 @@ export class OdontoPrintService {
     mockPrintBatches = loadLocal("odontoprint_batches", mockPrintBatches);
     const batch = mockPrintBatches.find((b) => b.id === batchId);
     if (!batch) return { success: false, error: "Mesa não encontrada." };
+    const snapPrinter = this.snapLocals(["odontoprint_batches"]);
     const now = new Date().toISOString();
     batch.printer_id = printerId;
     batch.printer_name = printerName;
@@ -1745,16 +1981,17 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        await client
+        assertDbOk(await client
           .from("print_batches")
           .update({
             printer_id: printerId,
             printer_name: printerName,
             updated_at: now,
           })
-          .eq("id", batchId);
-      } catch (err) {
-        console.warn("Supabase updateBatchPrinter error:", err);
+          .eq("id", batchId), "Falha ao trocar impressora da mesa");
+      } catch (err: any) {
+        this.restoreLocals(snapPrinter);
+        return { success: false, error: err?.message || "Erro ao trocar impressora no banco." };
       }
     }
     return { success: true };
@@ -1780,6 +2017,12 @@ export class OdontoPrintService {
     mockPrintBatches = loadLocal("odontoprint_batches", mockPrintBatches);
     mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
     mockPrintItemHistory = loadLocal("odontoprint_item_history", mockPrintItemHistory);
+
+    const snapOrder = this.snapLocals([
+      "odontoprint_batches",
+      "odontoprint_job_items",
+      "odontoprint_item_history",
+    ]);
 
     const batchId = crypto.randomUUID();
     const now = new Date().toISOString();
@@ -1853,14 +2096,20 @@ export class OdontoPrintService {
             console.warn("Supabase createOrderBatch (retry número) error:", retryErr);
           }
         }
-        if (batchErr) console.warn("Supabase createOrderBatch (batch) error:", batchErr);
+        if (batchErr) {
+          this.restoreLocals(snapOrder);
+          return { success: false, error: `Falha ao criar mesa no banco: ${batchErr.message}` };
+        }
         for (const itemId of params.item_ids) {
           const { error: itemErr } = await client.from("print_job_items").update({
             batch_id: batchId,
             batch_name: newBatch.batch_name,
             updated_at: now,
           }).eq("id", itemId);
-          if (itemErr) console.warn("Supabase createOrderBatch (item) error:", itemErr);
+          if (itemErr) {
+            this.restoreLocals(snapOrder);
+            return { success: false, error: `Falha ao vincular modelos à mesa: ${itemErr.message}` };
+          }
         }
         try {
           await client.from("print_item_history").insert(
@@ -1869,7 +2118,12 @@ export class OdontoPrintService {
         } catch (histErr) {
           console.warn("Supabase createOrderBatch (history) error:", histErr);
         }
-      } catch (err) {
+      } catch (err: any) {
+        // Se ainda não retornamos acima, foi falha auxiliar: mantém local.
+        // Falhas estruturais já retornaram com restore.
+        if (err?.message?.startsWith("Falha ao")) {
+          return { success: false, error: err.message };
+        }
         console.warn("Supabase createOrderBatch error:", err);
       }
     }
@@ -1902,6 +2156,10 @@ export class OdontoPrintService {
     if (targetBatchId && !target) return { success: false, error: "Pedido de destino não encontrado." };
 
     const fromName = item.batch_name || "Sem lote";
+    const prevBatchId = item.batch_id;
+    const prevBatchName = item.batch_name;
+    const prevUpdatedAt = item.updated_at;
+    const histLenBefore = mockPrintItemHistory.length;
     item.batch_id = target ? target.id : null;
     item.batch_name = target ? target.batch_name : null;
     item.updated_at = now;
@@ -1923,12 +2181,11 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        const { error: itemErr } = await client.from("print_job_items").update({
+        assertDbOk(await client.from("print_job_items").update({
           batch_id: item.batch_id,
           batch_name: item.batch_name,
           updated_at: now,
-        }).eq("id", itemId);
-        if (itemErr) console.warn("Supabase moveItemToBatch (item) error:", itemErr);
+        }).eq("id", itemId), "Falha ao mover modelo");
         try {
           await client.from("print_item_history").insert(
             mockPrintItemHistory.filter((h) => h.item_id === itemId).slice(0, 1)
@@ -1936,8 +2193,14 @@ export class OdontoPrintService {
         } catch (histErr) {
           console.warn("Supabase moveItemToBatch (history) error:", histErr);
         }
-      } catch (err) {
-        console.warn("Supabase moveItemToBatch error:", err);
+      } catch (err: any) {
+        item.batch_id = prevBatchId;
+        item.batch_name = prevBatchName;
+        item.updated_at = prevUpdatedAt;
+        mockPrintItemHistory = mockPrintItemHistory.slice(mockPrintItemHistory.length - histLenBefore);
+        saveLocal("odontoprint_job_items", mockPrintJobItems);
+        saveLocal("odontoprint_item_history", mockPrintItemHistory);
+        return { success: false, error: err?.message || "Erro ao mover modelo no banco." };
       }
     }
 
@@ -2142,6 +2405,18 @@ export class OdontoPrintService {
     mockPrintJobs = loadLocal("odontoprint_jobs", mockPrintJobs);
     mockPrintRuns = loadLocal("odontoprint_print_runs", mockPrintRuns);
 
+    const snap = this.snapLocals([
+      "odontoprint_batches",
+      "odontoprint_job_items",
+      "odontoprint_print_run_items",
+      "odontoprint_item_history",
+      "odontoprint_finishing_items",
+      "odontoprint_jobs",
+      "odontoprint_print_runs",
+      "odontoprint_deleted_batches",
+      "odontoprint_deleted_cards",
+    ]);
+
     const batch = mockPrintBatches.find((b) => b.id === batchId);
 
     const itemIds = new Set(mockPrintJobItems.filter((i) => i.batch_id === batchId).map((i) => i.id));
@@ -2185,41 +2460,56 @@ export class OdontoPrintService {
       try {
         if (activeRunsToCancel.length > 0) {
           const runIds = activeRunsToCancel.map((r) => r.id);
-          await client.from("print_runs").update({ status: "CANCELADA", finished_at: new Date().toISOString() }).in("id", runIds);
+          assertDbOk(
+            await client.from("print_runs").update({ status: "CANCELADA", finished_at: new Date().toISOString(), updated_at: new Date().toISOString() }).in("id", runIds),
+            "Falha ao cancelar execução da mesa"
+          );
         }
 
         // Busca todos os itens ligados a esta mesa no Supabase para garantir que nada fique órfão
-        const { data: supaItems } = await client
+        const { data: supaItems, error: supaErr } = await client
           .from("print_job_items")
           .select("id, print_job_id")
           .eq("batch_id", batchId);
+        if (supaErr) throw new Error(`Falha ao conferir itens da mesa: ${supaErr.message}`);
 
         const supaItemIds = supaItems ? supaItems.map((i) => i.id) : [];
+        const supaJobIds = supaItems ? Array.from(new Set(supaItems.map((i) => (i as any).print_job_id).filter(Boolean))) : [];
         const allItemIds = Array.from(new Set([...Array.from(itemIds), ...supaItemIds]));
         totalRemoved = Math.max(totalRemoved, allItemIds.length);
 
         if (allItemIds.length > 0) {
-          await client.from("print_run_items").delete().in("print_job_item_id", allItemIds);
-          await client.from("print_item_history").delete().in("item_id", allItemIds);
-          await client.from("print_job_items").delete().in("id", allItemIds);
+          assertDbOk(await client.from("print_run_items").delete().in("print_job_item_id", allItemIds), "Falha ao apagar vínculos de execução");
+          assertDbOk(await client.from("print_item_history").delete().in("item_id", allItemIds), "Falha ao apagar histórico da mesa");
+          assertDbOk(await client.from("print_job_items").delete().in("id", allItemIds), "Falha ao apagar modelos da mesa");
         }
 
-        const { error: batchErr } = await client.from("print_batches").delete().eq("id", batchId);
-        if (batchErr) {
-          console.warn("Supabase deletePrintBatch error:", batchErr);
-          return { success: false, removed_count: totalRemoved, error: batchErr.message };
-        }
+        assertDbOk(await client.from("print_batches").delete().eq("id", batchId), "Falha ao apagar mesa");
 
-        if (emptiedJobIds.length > 0) {
-          await client.from("print_jobs").delete().in("id", emptiedJobIds);
+        // Trabalhos esvaziados: junta os locais com os que só existiam no banco
+        const emptiedRemote = supaJobIds.filter(
+          (j) => !mockPrintJobs.some((job) => job.id === j)
+        );
+        const allEmptied = Array.from(new Set([...emptiedJobIds, ...emptiedRemote]));
+        if (allEmptied.length > 0) {
+          assertDbOk(await client.from("print_jobs").delete().in("id", allEmptied), "Falha ao apagar trabalhos esvaziados");
         }
       } catch (err: any) {
-        console.warn("Supabase deletePrintBatch error:", err);
-        return { success: false, removed_count: totalRemoved, error: err?.message || "Erro ao apagar mesa no banco." };
+        // ESTRITO: restaura tudo localmente — a mesa continua visível até apagar de verdade.
+        this.restoreLocals(snap);
+        return { success: false, removed_count: 0, error: err?.message || "Erro ao apagar mesa no banco." };
       }
     } else if (!batch && itemIds.size === 0) {
       return { success: false, removed_count: 0, error: "Mesa não encontrada." };
     }
+
+    // Tombstones: mesa e cards apagados não ressuscitam em merges de outros aparelhos
+    const tombB = this.deletedIds("odontoprint_deleted_batches");
+    tombB.add(batchId);
+    saveLocal("odontoprint_deleted_batches", Array.from(tombB));
+    const tombC = this.deletedIds("odontoprint_deleted_cards");
+    for (const id of Array.from(itemIds)) tombC.add(id);
+    saveLocal("odontoprint_deleted_cards", Array.from(tombC));
 
     return { success: true, removed_count: totalRemoved };
   }
@@ -2237,6 +2527,8 @@ export class OdontoPrintService {
     mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
     mockPrintBatches = loadLocal("odontoprint_batches", mockPrintBatches);
     mockPrintItemHistory = loadLocal("odontoprint_item_history", mockPrintItemHistory);
+
+    const snap = this.snapLocals(["odontoprint_job_items", "odontoprint_item_history"]);
 
     const batch = mockPrintBatches.find((b) => b.id === batchId);
     const batchTitle = batch ? batch.batch_name : "Mesa";
@@ -2269,18 +2561,16 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        const { error: updErr } = await client
-          .from("print_job_items")
-          .update({ batch_id: null, batch_name: null, updated_at: now })
-          .eq("batch_id", batchId);
-
-        if (updErr) {
-          console.warn("Supabase emptyPrintBatch error:", updErr);
-          return { success: false, unlinked_count: totalCount, error: updErr.message };
-        }
+        assertDbOk(
+          await client
+            .from("print_job_items")
+            .update({ batch_id: null, batch_name: null, updated_at: now })
+            .eq("batch_id", batchId),
+          "Falha ao esvaziar mesa"
+        );
       } catch (err: any) {
-        console.warn("Supabase emptyPrintBatch error:", err);
-        return { success: false, unlinked_count: totalCount, error: err?.message || "Erro ao esvaziar mesa no banco." };
+        this.restoreLocals(snap);
+        return { success: false, unlinked_count: 0, error: err?.message || "Erro ao esvaziar mesa no banco." };
       }
     }
 
@@ -2298,6 +2588,15 @@ export class OdontoPrintService {
     mockPrintItemHistory = loadLocal("odontoprint_item_history", mockPrintItemHistory);
     mockFinishingItems = loadLocal("odontoprint_finishing_items", mockFinishingItems);
     mockPrintJobs = loadLocal("odontoprint_jobs", mockPrintJobs);
+
+    const snap = this.snapLocals([
+      "odontoprint_job_items",
+      "odontoprint_print_run_items",
+      "odontoprint_item_history",
+      "odontoprint_finishing_items",
+      "odontoprint_jobs",
+      "odontoprint_deleted_cards",
+    ]);
 
     const item = mockPrintJobItems.find((i) => i.id === cardId);
     const parentJobId = item?.print_job_id;
@@ -2323,21 +2622,21 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        await client.from("print_run_items").delete().eq("print_job_item_id", cardId);
-        await client.from("print_item_history").delete().eq("item_id", cardId);
-        const { error: delErr } = await client.from("print_job_items").delete().eq("id", cardId);
-        if (delErr) {
-          console.warn("Supabase deletePrintCard error:", delErr);
-          return { success: false, error: delErr.message };
-        }
+        assertDbOk(await client.from("print_run_items").delete().eq("print_job_item_id", cardId), "Falha ao apagar vínculos de execução");
+        assertDbOk(await client.from("print_item_history").delete().eq("item_id", cardId), "Falha ao apagar histórico do modelo");
+        assertDbOk(await client.from("print_job_items").delete().eq("id", cardId), "Falha ao apagar modelo");
         if (parentJobId && !hasOtherItemsInJob) {
-          await client.from("print_jobs").delete().eq("id", parentJobId);
+          assertDbOk(await client.from("print_jobs").delete().eq("id", parentJobId), "Falha ao apagar trabalho esvaziado");
         }
       } catch (err: any) {
-        console.warn("Supabase deletePrintCard error:", err);
+        this.restoreLocals(snap);
         return { success: false, error: err?.message || "Erro ao apagar arquivo no banco." };
       }
     }
+
+    const tombC = this.deletedIds("odontoprint_deleted_cards");
+    tombC.add(cardId);
+    saveLocal("odontoprint_deleted_cards", Array.from(tombC));
 
     return { success: true };
   }
@@ -2358,6 +2657,8 @@ export class OdontoPrintService {
         console.warn("Supabase getPrintBatches error:", err);
       }
     }
+
+    this.applyTombstones();
 
     return mockPrintBatches.map((b) => ({
       ...b,
@@ -2499,41 +2800,46 @@ export class OdontoPrintService {
   }
 
   static async deletePrinter(id: string): Promise<{ success: boolean; error?: string }> {
-    // 1. Registra no conjunto de deletadas para evitar re-surgimento em merges
+    mockPrinters = loadLocal<Printer[]>("odontoprint_printers", mockPrinters);
+    mockMaintenances = loadLocal<PrinterMaintenance[]>("odontoprint_maintenances", mockMaintenances);
+    mockCalibrations = loadLocal<ResinCalibration[]>("odontoprint_calibrations", mockCalibrations);
+    mockPrintRuns = loadLocal<PrintRun[]>("odontoprint_print_runs", mockPrintRuns);
+
+    const snap = this.snapLocals();
+
+    // 1. Remove do estado e localStorage de impressoras
+    mockPrinters = mockPrinters.filter((p) => p.id !== id);
+    saveLocal("odontoprint_printers", mockPrinters);
+
+    // 2. Remove manutenções, calibrações e impressões vinculadas localmente
+    mockMaintenances = mockMaintenances.filter((m) => m.printer_id !== id);
+    saveLocal("odontoprint_maintenances", mockMaintenances);
+
+    mockCalibrations = mockCalibrations.filter((c) => c.printer_id !== id);
+    saveLocal("odontoprint_calibrations", mockCalibrations);
+
+    mockPrintRuns = mockPrintRuns.filter((r) => r.printer_id !== id);
+    saveLocal("odontoprint_print_runs", mockPrintRuns);
+
+    // 3. Executa DELETE no Supabase em ordem segura de dependências
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        assertDbOk(await client.from("print_runs").delete().eq("printer_id", id), "Falha ao apagar execuções da impressora");
+        assertDbOk(await client.from("resin_calibrations").delete().eq("printer_id", id), "Falha ao apagar calibrações da impressora");
+        assertDbOk(await client.from("printer_maintenances").delete().eq("printer_id", id), "Falha ao apagar manutenções da impressora");
+        assertDbOk(await client.from("printers").delete().eq("id", id), "Falha ao apagar impressora");
+      } catch (err: any) {
+        this.restoreLocals(snap);
+        return { success: false, error: err?.message || "Erro ao apagar impressora no banco." };
+      }
+    }
+
+    // 4. Só registra tombstone após confirmação
     const deleted = loadLocal<string[]>("odontoprint_deleted_printers", []);
     if (!deleted.includes(id)) {
       deleted.push(id);
       saveLocal("odontoprint_deleted_printers", deleted);
-    }
-
-    // 2. Remove do estado e localStorage de impressoras
-    mockPrinters = loadLocal<Printer[]>("odontoprint_printers", mockPrinters).filter((p) => p.id !== id);
-    saveLocal("odontoprint_printers", mockPrinters);
-
-    // 3. Remove manutenções, calibrações e impressões vinculadas localmente
-    mockMaintenances = loadLocal<PrinterMaintenance[]>("odontoprint_maintenances", mockMaintenances).filter((m) => m.printer_id !== id);
-    saveLocal("odontoprint_maintenances", mockMaintenances);
-
-    mockCalibrations = loadLocal<ResinCalibration[]>("odontoprint_calibrations", mockCalibrations).filter((c) => c.printer_id !== id);
-    saveLocal("odontoprint_calibrations", mockCalibrations);
-
-    mockPrintRuns = loadLocal<PrintRun[]>("odontoprint_print_runs", mockPrintRuns).filter((r) => r.printer_id !== id);
-    saveLocal("odontoprint_print_runs", mockPrintRuns);
-
-    // 4. Executa DELETE no Supabase em ordem segura de dependências
-    const { client, isConfigured } = this.getSupabase();
-    if (isConfigured && client) {
-      try {
-        await client.from("print_runs").delete().eq("printer_id", id);
-        await client.from("resin_calibrations").delete().eq("printer_id", id);
-        await client.from("printer_maintenances").delete().eq("printer_id", id);
-        const { error } = await client.from("printers").delete().eq("id", id);
-        if (error) {
-          console.error("Supabase delete printer error:", error);
-        }
-      } catch (err) {
-        console.error("Supabase delete printer exception:", err);
-      }
     }
 
     // 5. Registra log de auditoria
@@ -2706,10 +3012,20 @@ export class OdontoPrintService {
           error = retryErr;
         }
         if (error) {
-          console.error("Supabase insert resin_batch error:", error);
+          // ESTRITO: desfaz o salvamento local e avisa — sem fantasma.
+          mockResinBatches = loadLocal<ResinBatch[]>("odontoprint_resin_batches", []).filter(
+            (b) => b.id !== newBatch.id
+          );
+          saveLocal("odontoprint_resin_batches", mockResinBatches);
+          throw new Error(`Falha ao salvar resina no banco: ${error.message}`);
         }
-      } catch (err) {
-        console.error("Supabase insert resin_batch exception:", err);
+      } catch (err: any) {
+        if (err?.message?.startsWith("Falha ao salvar resina")) throw err;
+        mockResinBatches = loadLocal<ResinBatch[]>("odontoprint_resin_batches", []).filter(
+          (b) => b.id !== newBatch.id
+        );
+        saveLocal("odontoprint_resin_batches", mockResinBatches);
+        throw new Error(`Falha ao salvar resina no banco: ${err?.message || "sem conexão"}`);
       }
     }
 
@@ -2720,7 +3036,7 @@ export class OdontoPrintService {
       action: "RECEBIMENTO_RESINA",
       entity_type: "resin_batches",
       entity_id: newBatch.id,
-      new_data: { brand: newBatch.brand, type: newBatch.resin_type, lot: newBatch.lot },
+      new_data: { brand: newBatch.brand, type: newBatch.resin_type, lot: newBatch.lot, notes: params.notes?.trim() || null },
       created_at: now,
     });
     saveLocal("odontoprint_audit_logs", mockAuditLogs);
@@ -2729,37 +3045,42 @@ export class OdontoPrintService {
   }
 
   static async deleteResinBatch(id: string): Promise<{ success: boolean; error?: string }> {
-    // 1. Registra no conjunto de deletadas para evitar re-surgimento em merges
+    mockResinBatches = loadLocal<ResinBatch[]>("odontoprint_resin_batches", mockResinBatches);
+    mockCalibrations = loadLocal<ResinCalibration[]>("odontoprint_calibrations", mockCalibrations);
+    mockPrintRuns = loadLocal<PrintRun[]>("odontoprint_print_runs", mockPrintRuns);
+
+    const snap = this.snapLocals();
+
+    // 1. Remove do estado e localStorage de lotes de resina
+    mockResinBatches = mockResinBatches.filter((b) => b.id !== id);
+    saveLocal("odontoprint_resin_batches", mockResinBatches);
+
+    // 2. Remove calibrações e impressões vinculadas localmente
+    mockCalibrations = mockCalibrations.filter((c) => c.resin_batch_id !== id);
+    saveLocal("odontoprint_calibrations", mockCalibrations);
+
+    mockPrintRuns = mockPrintRuns.filter((r) => r.resin_batch_id !== id);
+    saveLocal("odontoprint_print_runs", mockPrintRuns);
+
+    // 3. Executa DELETE no Supabase em ordem segura de dependências
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        assertDbOk(await client.from("print_runs").delete().eq("resin_batch_id", id), "Falha ao apagar execuções da resina");
+        assertDbOk(await client.from("resin_calibrations").delete().eq("resin_batch_id", id), "Falha ao apagar calibrações da resina");
+        assertDbOk(await client.from("resin_batches").delete().eq("id", id), "Falha ao apagar resina");
+      } catch (err: any) {
+        // ESTRITO: restaura tudo localmente e informa — nada some de mentira.
+        this.restoreLocals(snap);
+        return { success: false, error: err?.message || "Erro ao apagar resina no banco." };
+      }
+    }
+
+    // 4. Só registra tombstone após confirmação (evita esconder o que não apagou)
     const deleted = loadLocal<string[]>("odontoprint_deleted_resins", []);
     if (!deleted.includes(id)) {
       deleted.push(id);
       saveLocal("odontoprint_deleted_resins", deleted);
-    }
-
-    // 2. Remove do estado e localStorage de lotes de resina
-    mockResinBatches = loadLocal<ResinBatch[]>("odontoprint_resin_batches", mockResinBatches).filter((b) => b.id !== id);
-    saveLocal("odontoprint_resin_batches", mockResinBatches);
-
-    // 3. Remove calibrações e impressões vinculadas localmente
-    mockCalibrations = loadLocal<ResinCalibration[]>("odontoprint_calibrations", mockCalibrations).filter((c) => c.resin_batch_id !== id);
-    saveLocal("odontoprint_calibrations", mockCalibrations);
-
-    mockPrintRuns = loadLocal<PrintRun[]>("odontoprint_print_runs", mockPrintRuns).filter((r) => r.resin_batch_id !== id);
-    saveLocal("odontoprint_print_runs", mockPrintRuns);
-
-    // 4. Executa DELETE no Supabase em ordem segura de dependências
-    const { client, isConfigured } = this.getSupabase();
-    if (isConfigured && client) {
-      try {
-        await client.from("print_runs").delete().eq("resin_batch_id", id);
-        await client.from("resin_calibrations").delete().eq("resin_batch_id", id);
-        const { error } = await client.from("resin_batches").delete().eq("id", id);
-        if (error) {
-          console.error("Supabase delete resin_batch error:", error);
-        }
-      } catch (err) {
-        console.error("Supabase delete resin_batch exception:", err);
-      }
     }
 
     // 5. Registra log de auditoria
@@ -3058,11 +3379,13 @@ export class OdontoPrintService {
     };
 
     mockPrintRuns = loadLocal("odontoprint_print_runs", mockPrintRuns);
-    mockPrintRuns.unshift(newRun);
-    saveLocal("odontoprint_print_runs", mockPrintRuns);
-
     mockPrintRunItems = loadLocal("odontoprint_print_run_items", mockPrintRunItems);
     mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
+
+    const snapRun = this.snapLocals();
+
+    mockPrintRuns.unshift(newRun);
+    saveLocal("odontoprint_print_runs", mockPrintRuns);
 
     const runItemsToInsert: PrintRunItem[] = [];
     // Vincula itens à impressão e atualiza status para EM_IMPRESSAO
@@ -3091,14 +3414,17 @@ export class OdontoPrintService {
       try {
         let { error: runErr } = await client.from("print_runs").insert(newRun);
         if (runErr && (runErr.message?.includes("foreign key") || (runErr as any).code === "23503")) {
-          await client.from("print_runs").insert({ ...newRun, created_by: null });
+          const retry = await client.from("print_runs").insert({ ...newRun, created_by: null });
+          runErr = retry.error;
         }
-        await client.from("print_run_items").insert(runItemsToInsert);
+        if (runErr) throw new Error(`Falha ao iniciar impressão: ${runErr.message}`);
+        assertDbOk(await client.from("print_run_items").insert(runItemsToInsert), "Falha ao vincular modelos à impressão");
         for (const itemId of params.item_ids) {
-          await client.from("print_job_items").update({ status: "EM_IMPRESSAO", last_run_code: params.run_code }).eq("id", itemId);
+          assertDbOk(await client.from("print_job_items").update({ status: "EM_IMPRESSAO", last_run_code: params.run_code }).eq("id", itemId), "Falha ao marcar modelos em impressão");
         }
-      } catch (err) {
-        console.error("Supabase startPrintRun error:", err);
+      } catch (err: any) {
+        this.restoreLocals(snapRun);
+        return { success: false, run: null as any, error: err?.message || "Erro ao iniciar impressão no banco." };
       }
     }
 
@@ -3146,6 +3472,8 @@ export class OdontoPrintService {
     mockPrintJobs = loadLocal("odontoprint_jobs", mockPrintJobs);
     mockCases = loadLocal("odontoprint_cases", mockCases);
     mockAuditLogs = loadLocal("odontoprint_audit_logs", mockAuditLogs);
+
+    const snapFinalize = this.snapLocals();
 
     const runItems = mockPrintRunItems.filter((ri) => ri.print_run_id === run.id);
     const failedMap = new Map(params.failed_items.map((f) => [f.item_id, f.reason]));
@@ -3246,34 +3574,35 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        await client.from("print_runs").update({ status: "FINALIZADA", finished_at: now }).eq("id", run.id);
+        assertDbOk(await client.from("print_runs").update({ status: "FINALIZADA", finished_at: now }).eq("id", run.id), "Falha ao finalizar impressão");
 
         for (const ri of runItems) {
-          await client.from("print_run_items").update({
+          assertDbOk(await client.from("print_run_items").update({
             result: ri.result,
             failure_reason: ri.failure_reason || null,
-          }).eq("id", ri.id);
+          }).eq("id", ri.id), "Falha ao concluir itens da impressão");
 
           const jobItem = mockPrintJobItems.find((i) => i.id === ri.print_job_item_id);
           if (jobItem) {
-            await client.from("print_job_items").update({
+            assertDbOk(await client.from("print_job_items").update({
               status: jobItem.status,
               retry_count: jobItem.retry_count,
               is_retry: jobItem.is_retry,
               last_failure_reason: jobItem.last_failure_reason || null,
               last_run_code: jobItem.last_run_code || null,
-            }).eq("id", jobItem.id);
+            }).eq("id", jobItem.id), "Falha ao atualizar modelos");
 
             const parentJob = mockPrintJobs.find((j) => j.id === jobItem.print_job_id);
             if (parentJob) {
-              await client.from("print_jobs").update({
+              assertDbOk(await client.from("print_jobs").update({
                 status: parentJob.status,
-              }).eq("id", parentJob.id);
+              }).eq("id", parentJob.id), "Falha ao atualizar trabalho pai");
             }
           }
         }
-      } catch (err) {
-        console.warn("Supabase finalizePrintRun error:", err);
+      } catch (err: any) {
+        this.restoreLocals(snapFinalize);
+        return { success: false, completed_count: 0, failed_count: 0, error: err?.message || "Erro ao finalizar impressão no banco." };
       }
     }
 

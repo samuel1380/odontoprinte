@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { USER_ROLES, UserRole } from "@/lib/constants";
@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Breadcrumbs } from "./breadcrumbs";
+import { OdontoPrintService } from "@/services/odontoprint-service";
 
 interface TopbarProps {
   onOpenMobileMenu?: () => void;
@@ -24,6 +25,20 @@ export function Topbar({ onOpenMobileMenu }: TopbarProps) {
   const { user, activeRole, setActiveRole, logout, isSupabaseConnected } = useAuth();
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
+  // FASE 3: selo honesto — verde só com canal realtime vivo de verdade
+  const [realtimeLive, setRealtimeLive] = useState(false);
+
+  useEffect(() => {
+    if (!isSupabaseConnected) {
+      setRealtimeLive(false);
+      return;
+    }
+    const unsub = OdontoPrintService.subscribeSync(() => {}, setRealtimeLive);
+    return () => {
+      if (unsub) unsub();
+      setRealtimeLive(false);
+    };
+  }, [isSupabaseConnected]);
 
   const roleColors: Record<string, string> = {
     ADMIN: "bg-white text-slate-950 border-transparent font-semibold",
@@ -51,12 +66,36 @@ export function Topbar({ onOpenMobileMenu }: TopbarProps) {
       {/* Right: Operational Status & User Profile */}
       <div className="flex items-center gap-2.5 sm:gap-3">
         {/* Status Operacional do Sistema */}
-        <div className="hidden sm:flex items-center gap-2 rounded-full border border-slate-800 bg-[#0F172A] px-3.5 py-1 text-xs text-slate-300 shadow-xs">
+        <div
+          className="hidden sm:flex items-center gap-2 rounded-full border border-slate-800 bg-[#0F172A] px-3.5 py-1 text-xs text-slate-300 shadow-xs"
+          title={
+            !isSupabaseConnected
+              ? "Sem banco configurado: cada aparelho vê só os próprios dados"
+              : realtimeLive
+              ? "Conectado em tempo real: mudanças de outros aparelhos aparecem sozinhas"
+              : "Tentando tempo real: atualizando a cada 30 segundos"
+          }
+        >
           <span className="relative flex h-2 w-2">
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-400"></span>
+            {realtimeLive && (
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            )}
+            <span
+              className={`relative inline-flex rounded-full h-2 w-2 ${
+                !isSupabaseConnected
+                  ? "bg-slate-500"
+                  : realtimeLive
+                  ? "bg-emerald-400"
+                  : "bg-amber-400"
+              }`}
+            ></span>
           </span>
           <span className="font-medium text-slate-200">
-            {isSupabaseConnected ? "Nuvem Conectada" : "Linha Ativa"}
+            {!isSupabaseConnected
+              ? "Só neste aparelho"
+              : realtimeLive
+              ? "Tempo real"
+              : "Sincronizando…"}
           </span>
         </div>
 
