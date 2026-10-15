@@ -6,14 +6,14 @@ import { AIChatMessage } from "@/types/ai.types";
 import { AIService } from "@/services/ai-service";
 import { DEFAULT_GROQ_MODEL, DEFAULT_GEMINI_MODEL } from "@/lib/ai/models";
 import {
-  Sparkles,
   X,
   Send,
-  Bot,
   User,
   Settings,
   Copy,
 } from "lucide-react";
+
+const MASCOT_SRC = "/mascote-odontoia.jpg";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -215,7 +215,7 @@ export function AICopilotDrawer() {
     <>
       {/* Bolinha flutuante arrastável (segura e solta no canto) */}
       <div
-        className={`fixed z-40 flex items-center gap-2 ${
+        className={`fixed z-40 flex items-center gap-2 group ${
           dragPos ? "" : `${dockCorner} transition-[left,top,right,bottom,transform] duration-500 ease-[cubic-bezier(.34,1.56,.64,1)]`
         } ${dock.h === "left" ? "flex-row-reverse" : ""}`}
         style={
@@ -225,7 +225,7 @@ export function AICopilotDrawer() {
         }
       >
         {!isOpen && (
-          <div className="hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#0F172A]/90 border border-slate-800 text-xs font-semibold text-slate-200 shadow-md backdrop-blur-md select-none">
+          <div className="pointer-events-none hidden sm:flex -translate-x-1 items-center gap-2 rounded-full border border-slate-800 bg-[#0F172A]/90 px-3.5 py-1.5 text-xs font-semibold text-slate-200 opacity-0 shadow-md backdrop-blur-md transition-all duration-300 select-none group-hover:translate-x-0 group-hover:opacity-100">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-400"></span>
@@ -252,8 +252,16 @@ export function AICopilotDrawer() {
           title="Arrastar para mover · clicar para abrir a OdontoIA"
           aria-label="Assistente virtual OdontoIA (arraste para mover, clique para abrir)"
         >
-          <span key={squishKey} className="flex animate-bubble-squish pointer-events-none">
-            {isOpen ? <X className="h-5 w-5 sm:h-6 sm:w-6" /> : <Sparkles className="h-5 w-5 sm:h-6 sm:w-6 text-brand-600" />}
+          <span key={squishKey} className="flex h-10 w-10 sm:h-12 sm:w-12 animate-bubble-squish pointer-events-none">
+            {isOpen ? (
+              <X className="h-5 w-5 sm:h-6 sm:w-6 m-auto" />
+            ) : (
+              <img
+                src={MASCOT_SRC}
+                alt="Mascote OdontoIA"
+                className="h-full w-full rounded-full object-cover ring-2 ring-cyan-400/40"
+              />
+            )}
           </span>
           {dragPos && (
             <span className="absolute inset-0 rounded-full border-2 border-cyan-400 animate-ping pointer-events-none" />
@@ -275,9 +283,11 @@ export function AICopilotDrawer() {
             <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-[#0B0F19]">
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-cyan-400 to-brand-600 text-slate-950 flex items-center justify-center shadow-md shadow-cyan-950/50">
-                    <Sparkles className="h-5 w-5 text-white" />
-                  </div>
+                  <img
+                    src={MASCOT_SRC}
+                    alt="Mascote OdontoIA"
+                    className="h-10 w-10 rounded-2xl object-cover shadow-md ring-1 ring-slate-700/60 shrink-0"
+                  />
                   <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 ring-2 ring-[#0B0F19]"></span>
@@ -383,9 +393,11 @@ export function AICopilotDrawer() {
                     }`}
                   >
                     {isAssistant && (
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-brand-600 shrink-0 mt-0.5 shadow-sm">
-                        <Bot className="h-3.5 w-3.5 text-white" />
-                      </div>
+                      <img
+                        src={MASCOT_SRC}
+                        alt="OdontoIA"
+                        className="mt-0.5 h-6 w-6 shrink-0 rounded-full object-cover ring-1 ring-slate-700/60"
+                      />
                     )}
 
                     <div
@@ -424,9 +436,11 @@ export function AICopilotDrawer() {
 
               {isSending && (
                 <div className="flex items-start gap-2.5 animate-msg-in">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-brand-600 shrink-0 mt-0.5">
-                    <Sparkles className="h-3.5 w-3.5 text-white" />
-                  </div>
+                  <img
+                    src={MASCOT_SRC}
+                    alt="OdontoIA pensando"
+                    className="h-6 w-6 shrink-0 mt-0.5 rounded-full object-cover ring-1 ring-slate-700/60 animate-pulse"
+                  />
                   <div className="bg-[#0F172A] text-slate-200 border border-slate-800 shadow-md rounded-2xl rounded-tl-md px-3.5 py-2.5 flex items-center gap-1.5">
                     <span className="think-dot h-1.5 w-1.5 rounded-full bg-cyan-300" />
                     <span className="think-dot h-1.5 w-1.5 rounded-full bg-cyan-300" style={{ animationDelay: "0.15s" }} />
