@@ -329,9 +329,11 @@ export default function FilaPage() {
         loadData();
       } else {
         toast.error(res.error || "Erro ao iniciar impressão.");
+        loadData();
       }
     } catch {
       toast.error("Erro inesperado ao iniciar impressão.");
+      loadData();
     } finally {
       setIsStartingBatchPrint(false);
     }

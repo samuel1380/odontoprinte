@@ -150,6 +150,9 @@ let mockPrintItemHistory: PrintItemHistory[] = [];
 let tombstoneBatches: Set<string> = new Set(loadLocal<string[]>("odontoprint_deleted_batches", []));
 let tombstoneCards: Set<string> = new Set(loadLocal<string[]>("odontoprint_deleted_cards", []));
 
+// Ids já vistos no banco por entidade (para podar o que sumiu em outro aparelho).
+const knownRemoteIds: Record<string, Set<string>> = {};
+
 let normalSeqCounter = 0;
 let retrySeqCounter = 0;
 
@@ -263,6 +266,38 @@ export class OdontoPrintService {
     );
     if (mockPrintBatches.length !== nb) saveLocal("odontoprint_batches", mockPrintBatches);
     if (mockPrintJobItems.length !== ni) saveLocal("odontoprint_job_items", mockPrintJobItems);
+  }
+
+  /**
+   * FASE 2b: apaga da lista local o que sumiu do banco (excluído em OUTRO
+   * aparelho ou banco zerado). Só poda id que já vimos no banco antes —
+   * o que foi criado offline (ainda não sincronizado) é preservado.
+   * Só chamar após fetch remoto com sucesso.
+   */
+  private static pruneGoneRemote<T extends { id: string }>(
+    knownKey: string,
+    local: T[],
+    remoteIds: Set<string>
+  ): T[] {
+    let known = knownRemoteIds[knownKey];
+    if (!known) {
+      try {
+        const list = loadLocal<string[]>(knownKey, []);
+        known = new Set(Array.isArray(list) ? list : []);
+      } catch {
+        known = new Set();
+      }
+      knownRemoteIds[knownKey] = known;
+    }
+    const kept = local.filter((i) => remoteIds.has(i.id) || !known.has(i.id));
+    const next = new Set(remoteIds);
+    knownRemoteIds[knownKey] = next;
+    try {
+      saveLocal(knownKey, Array.from(next));
+    } catch {
+      // ignora
+    }
+    return kept;
   }
 
   /**
@@ -590,7 +625,11 @@ export class OdontoPrintService {
         const { data: cases, error: cErr } = await client.from("cases").select("*");
 
         if (!jiErr && jobItems) {
-          mockPrintJobItems = mergeById(jobItems, mockPrintJobItems);
+          mockPrintJobItems = this.pruneGoneRemote(
+            "odontoprint_known_cards",
+            mergeById(jobItems, mockPrintJobItems),
+            new Set(jobItems.map((i: any) => i.id))
+          );
           saveLocal("odontoprint_job_items", mockPrintJobItems);
         }
         if (!jErr && jobs) {
@@ -763,7 +802,11 @@ export class OdontoPrintService {
         const { data: batches, error: bErr } = await client.from("print_batches").select("*");
 
         if (!jiErr && jobItems) {
-          mockPrintJobItems = mergeById(jobItems, mockPrintJobItems);
+          mockPrintJobItems = this.pruneGoneRemote(
+            "odontoprint_known_cards",
+            mergeById(jobItems, mockPrintJobItems),
+            new Set(jobItems.map((i: any) => i.id))
+          );
           saveLocal("odontoprint_job_items", mockPrintJobItems);
         }
         if (!jErr && jobs) {
@@ -775,7 +818,11 @@ export class OdontoPrintService {
           saveLocal("odontoprint_cases", mockCases);
         }
         if (!bErr && batches) {
-          mockPrintBatches = mergeById(batches, mockPrintBatches);
+          mockPrintBatches = this.pruneGoneRemote(
+            "odontoprint_known_batches",
+            mergeById(batches, mockPrintBatches),
+            new Set(batches.map((b: any) => b.id))
+          );
           saveLocal("odontoprint_batches", mockPrintBatches);
         }
       } catch (err) {
@@ -2347,6 +2394,24 @@ export class OdontoPrintService {
       return { success: false, error: "Não há modelos prontos para imprimir nesta mesa." };
     }
 
+    const { client: preClient, isConfigured: preConfigured } = this.getSupabase();
+    if (preConfigured && preClient) {
+      // Falha rápido: impressora fantasma (apagada em outro aparelho ou
+      // banco zerado) nem deve gastar número da sequência.
+      try {
+        const { data: dbPrinterEarly, error: printerSelEarlyErr } = await preClient
+          .from("printers")
+          .select("id")
+          .eq("id", params.printer_id)
+          .maybeSingle();
+        if (!printerSelEarlyErr && !dbPrinterEarly) {
+          return { success: false, error: "Impressora não encontrada no banco central. Recarregue a página e selecione novamente." };
+        }
+      } catch {
+        // Erro de rede na conferência: deixa o insert decidir (erro estrito).
+      }
+    }
+
     const hasRetry = printableItems.some((i) => i.is_retry);
     const runCode = await this.generatePrintCode(hasRetry);
 
@@ -2364,8 +2429,42 @@ export class OdontoPrintService {
       }
       resin = chosen;
     }
+
+    // (usa a mesma conexão da conferência da impressora acima)
     if (!resin) {
+      // Com banco: sem resina calibrada PARA ESTA impressora não inicia
+      // (usar lote de outra máquina corromperia a ordem). Sem banco (demo):
+      // mantém o fallback antigo.
+      if (preConfigured && preClient) {
+        return { success: false, error: "Nenhuma resina calibrada para esta impressora. Calibre um lote antes de iniciar." };
+      }
       resin = options.resins[0];
+    }
+
+    // Blindagem FK (mesmo padrão do ensureCasesExist): resina e calibração
+    // podem ser fantasmas locais. Confere no banco ANTES de criar a ordem.
+    // (Impressora e resina-ausente já verificados acima.)
+    if (preConfigured && preClient && resin) {
+      try {
+        const { data: dbResin, error: resinSelErr } = await preClient
+          .from("resin_batches")
+          .select("id")
+          .eq("id", resin.resin_batch_id)
+          .maybeSingle();
+        if (!resinSelErr && !dbResin) {
+          return { success: false, error: "Resina não encontrada no banco central (foi apagada?). Escolha outra resina." };
+        }
+        const { data: dbCal, error: calSelErr } = await preClient
+          .from("resin_calibrations")
+          .select("id")
+          .eq("id", resin.calibration_id)
+          .maybeSingle();
+        if (!calSelErr && !dbCal) {
+          return { success: false, error: "Calibração não encontrada no banco central. Escolha outra resina." };
+        }
+      } catch {
+        // Erro de rede na conferência: deixa o insert decidir (erro estrito).
+      }
     }
 
     const runRes = await this.startPrintRun({
@@ -2669,7 +2768,11 @@ export class OdontoPrintService {
       try {
         const { data, error } = await client.from("print_batches").select("*").order("created_at", { ascending: false });
         if (!error && data) {
-          mockPrintBatches = mergeById(data, mockPrintBatches);
+          mockPrintBatches = this.pruneGoneRemote(
+            "odontoprint_known_batches",
+            mergeById(data, mockPrintBatches),
+            new Set(data.map((b: any) => b.id))
+          );
           saveLocal("odontoprint_batches", mockPrintBatches);
         }
       } catch (err) {
@@ -2739,7 +2842,12 @@ export class OdontoPrintService {
 
         if (!pErr && printersData) {
           const activePrintersData = printersData.filter((p: Printer) => !deletedPrinters.has(p.id));
-          mockPrinters = mergeById(activePrintersData, mockPrinters);
+          const remoteIds = new Set(printersData.map((p: Printer) => p.id));
+          mockPrinters = this.pruneGoneRemote(
+            "odontoprint_known_printers",
+            mergeById(activePrintersData, mockPrinters),
+            remoteIds
+          );
           saveLocal("odontoprint_printers", mockPrinters);
         }
         if (!mErr && maintData) {
@@ -2954,7 +3062,11 @@ export class OdontoPrintService {
           .order("received_at", { ascending: false });
         if (!error && data) {
           const activeResins = data.filter((b: ResinBatch) => !deletedResins.has(b.id));
-          mockResinBatches = mergeById(activeResins, mockResinBatches);
+          mockResinBatches = this.pruneGoneRemote(
+            "odontoprint_known_resins",
+            mergeById(activeResins, mockResinBatches),
+            new Set(activeResins.map((b: ResinBatch) => b.id))
+          );
           saveLocal("odontoprint_resin_batches", mockResinBatches);
         }
       } catch (err) {
