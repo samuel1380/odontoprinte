@@ -2377,6 +2377,7 @@ export class OdontoPrintService {
       supports_confirmed: true,
       resin_manipulated: true,
       user_id: params.user_id,
+      has_retry: hasRetry,
     });
 
     if (!runRes.success) {
@@ -2406,7 +2407,7 @@ export class OdontoPrintService {
       }
     }
 
-    return { success: true, run_code: runCode, run_id: runRes.run?.id };
+    return { success: true, run_code: runRes.run?.run_code || runCode, run_id: runRes.run?.id };
   }
 
   /**
@@ -3354,6 +3355,21 @@ export class OdontoPrintService {
   // --- NOMENCLATURA E EXECUÇÃO DE IMPRESSÃO ---
   static async generatePrintCode(hasRetry: boolean): Promise<string> {
     const settings = await this.getSettings();
+    // Fonte da verdade: sequência atômica no Postgres (à prova de dois
+    // aparelhos gerando o mesmo código ao mesmo tempo).
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        const { data, error } = await (client as any).rpc("generate_print_run_code", {
+          p_has_retry: hasRetry,
+        });
+        if (!error && typeof data === "string" && data.trim().length > 0) {
+          return data.trim();
+        }
+      } catch {
+        // cai para o contador local abaixo (modo offline/demo)
+      }
+    }
     if (hasRetry) {
       retrySeqCounter += 1;
       return formatPrintRunCode(retrySeqCounter, true, settings.normal_print_prefix, settings.retry_print_prefix);
@@ -3361,6 +3377,14 @@ export class OdontoPrintService {
       normalSeqCounter += 1;
       return formatPrintRunCode(normalSeqCounter, false, settings.normal_print_prefix, settings.retry_print_prefix);
     }
+  }
+
+  /** Detecta violação de unicidade do código da ordem (Postgres 23505). */
+  private static isRunCodeConflict(err: any): boolean {
+    if (!err) return false;
+    if ((err as any).code === "23505") return true;
+    const msg = `${err.message || ""} ${(err as any).details || ""}`;
+    return /duplicate key/i.test(msg) && /run_code/i.test(msg);
   }
 
   static async startPrintRun(params: {
@@ -3372,6 +3396,7 @@ export class OdontoPrintService {
     supports_confirmed: boolean;
     resin_manipulated: boolean;
     user_id?: string;
+    has_retry?: boolean;
   }): Promise<{ success: boolean; run: PrintRun; error?: string }> {
     if (!params.supports_confirmed || !params.resin_manipulated) {
       return { success: false, run: null as any, error: "As verificações pré-impressão devem ser confirmadas." };
@@ -3435,10 +3460,27 @@ export class OdontoPrintService {
           const retry = await client.from("print_runs").insert({ ...newRun, created_by: null });
           runErr = retry.error;
         }
+        // Concorrência: outro aparelho comitou o mesmo código primeiro.
+        // Gera um código NOVO (sequência atômica) e tenta de novo, até 3x.
+        let attempts = 0;
+        while (runErr && this.isRunCodeConflict(runErr) && attempts < 3) {
+          attempts += 1;
+          const hasRetry =
+            params.has_retry ?? /^(00A|.*RETRY.*)$/i.test(newRun.run_code);
+          newRun.run_code = await this.generatePrintCode(hasRetry);
+          for (const itemId of params.item_ids) {
+            const it = mockPrintJobItems.find((i) => i.id === itemId);
+            if (it) it.last_run_code = newRun.run_code;
+          }
+          saveLocal("odontoprint_print_runs", mockPrintRuns);
+          saveLocal("odontoprint_job_items", mockPrintJobItems);
+          const retry = await client.from("print_runs").insert({ ...newRun, created_by: null });
+          runErr = retry.error;
+        }
         if (runErr) throw new Error(`Falha ao iniciar impressão: ${runErr.message}`);
         assertDbOk(await client.from("print_run_items").insert(runItemsToInsert), "Falha ao vincular modelos à impressão");
         for (const itemId of params.item_ids) {
-          assertDbOk(await client.from("print_job_items").update({ status: "EM_IMPRESSAO", last_run_code: params.run_code }).eq("id", itemId), "Falha ao marcar modelos em impressão");
+          assertDbOk(await client.from("print_job_items").update({ status: "EM_IMPRESSAO", last_run_code: newRun.run_code }).eq("id", itemId), "Falha ao marcar modelos em impressão");
         }
       } catch (err: any) {
         this.restoreLocals(snapRun);
@@ -3456,7 +3498,7 @@ export class OdontoPrintService {
       entity_type: "print_runs",
       entity_id: newRun.id,
       new_data: {
-        run_code: params.run_code,
+        run_code: newRun.run_code,
         printer: printer?.name,
         items_count: params.item_ids.length,
       },
