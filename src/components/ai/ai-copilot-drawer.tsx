@@ -241,6 +241,13 @@ export function AICopilotDrawer() {
             <div className="p-2.5 bg-[#0B0F19] border-b border-slate-800 flex gap-1.5 overflow-x-auto text-[11px] no-scrollbar">
               <button
                 type="button"
+                onClick={() => handleSend("O que está imprimindo agora?")}
+                className="whitespace-nowrap px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white transition shrink-0"
+              >
+                Imprimindo agora
+              </button>
+              <button
+                type="button"
                 onClick={() => handleSend("Quais impressoras estão liberadas hoje?")}
                 className="whitespace-nowrap px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white transition shrink-0"
               >

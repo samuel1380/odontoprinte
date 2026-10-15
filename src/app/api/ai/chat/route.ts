@@ -17,10 +17,13 @@ interface ChatRequestPayload {
   context?: {
     cases?: any[];
     queue?: any[];
-    milling?: any[];
-    finishing?: any[];
     printers?: any[];
     resins?: any[];
+    printing?: any[];
+    models?: any[];
+    batches?: any[];
+    waitingModels?: number;
+    failedCount?: number;
   };
   provider?: AIProvider;
   apiKey?: string;
@@ -132,15 +135,48 @@ CONTEXTO ATUAL DO LABORATÓRIO ODONTOPRINT:
         status: r.status,
       }))
     )}
+- IMPRIMINDO AGORA (ordens ativas): ${JSON.stringify(
+      (context.printing || []).map((p: any) => ({
+        ordem: p.run_code,
+        impressora: p.printer_name,
+        inicio: p.started_at,
+        modelos: p.items_count,
+        mesas: p.group_titles,
+      }))
+    )}
+- Resumo operacional: ${context.waitingModels ?? "?"} modelo(s) aguardando, ${
+      context.failedCount ?? "?"
+    } falha(s) com prioridade de reimpressão.
+- Mesas de impressão: ${JSON.stringify(
+      (context.batches || []).slice(0, 40).map((b: any) => ({
+        mesa: b.mesa || b.batch_name,
+        status: b.status,
+        impressora: b.impressora || b.printer_name,
+        itens: b.itens ?? b.items_count,
+      }))
+    )}
+- Modelos (paciente, clínica, mesa, situação): ${JSON.stringify(
+      (context.models || []).slice(0, 150).map((m: any) => ({
+        paciente: m.paciente || m.patient_code,
+        nome: m.nome || m.patient_name,
+        clinica: m.clinica || m.clinic_name,
+        mesa: m.mesa || m.batch_name,
+        status: m.status,
+        reimpressao: m.reimpressao ?? m.is_retry,
+        motivo_falha: m.motivo_falha || m.last_failure_reason,
+      }))
+    )}
 `;
 
     const systemPrompt = `Você é a OdontoIA, copiloto técnico operacional especialista em odontologia digital e impressão 3D (SLA/DLP/LCD) do laboratório OdontoPrint.
 Você fala português brasileiro com clareza, simpatia profissional, objetividade e precisão técnica de prótese dentária.
 Suas funções:
 1. Localizar e informar a situação de pacientes e modelos da equipe técnica.
-2. Auxiliar operadores técnicos com dúvidas de calibração de resinas (tempos de exposição 405nm, camadas de base, lift speed, lavagem em álcool isopropílico e pós-cura UV).
-3. Auxiliar no diagnóstico de falhas de impressão (descolamento de mesa, delaminação, quebra de suportes).
-4. Fornecer respostas diretas, úteis e concisas.`;
+2. Informar em tempo real O QUE ESTÁ IMPRIMINDO (mesa, impressora, modelos e há quanto tempo roda).
+3. Localizar modelos por paciente, clínica/doutor ou mesa, mostrando a jornada (fila → mesa → ordem → concluído/falha).
+4. Auxiliar operadores técnicos com dúvidas de calibração de resinas (tempos de exposição 405nm, camadas de base, lift speed, lavagem em álcool isopropílico e pós-cura UV).
+5. Auxiliar no diagnóstico de falhas de impressão (descolamento de mesa, delaminação, quebra de suportes).
+6. Fornecer respostas diretas, úteis e concisas. Se perguntarem por algo fora do contexto do laboratório, diga que não tem acesso a essa informação.`;
 
     // 1. Processamento GEMINI — cascata entre modelos reais (3.8 -> 3.5 -> 2.5)
     const executeGemini = async (key: string, selectedModel?: string) => {
@@ -378,20 +414,109 @@ Suas funções:
         (c.patient_name && lower.includes(c.patient_name.toLowerCase()))
     );
 
+    // Helpers do modo local: jornada do modelo e tempo decorrido
+    const norm = (v: unknown) =>
+      String(v || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase();
+    const elapsedShort = (iso?: string | null): string => {
+      if (!iso) return "";
+      const mins = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
+      if (mins < 1) return "começou agora";
+      if (mins < 60) return `há ${mins} min`;
+      return `há ${Math.floor(mins / 60)}h${mins % 60 ? `${mins % 60}min` : ""}`;
+    };
+    const STATUS_PT: Record<string, string> = {
+      NA_FILA: "na fila",
+      PREPARANDO: "em preparo",
+      IMPRIMINDO: "imprimindo",
+      IMPRESSO: "impresso",
+      CONCLUIDO: "concluído",
+      FALHOU: "com FALHA (prioridade)",
+      CANCELADO: "cancelado",
+    };
+    const models: any[] = context.models || [];
+    const printing: any[] = context.printing || [];
+
     if (matchedCase) {
       const pCode = matchedCase.patient_code;
       const inQueue = (context.queue || []).filter(
         (q: any) => q.patient_code === pCode
       );
+      const journey = models.filter(
+        (m: any) => (m.paciente || m.patient_code) === pCode
+      );
       localReply = `🔍 **Status do Trabalho ${pCode} (${matchedCase.patient_name || "Paciente"}):**\n\n`;
-      if (inQueue.length > 0) {
-        localReply += `📋 **Fila de Impressão 3D (FIFO)**: Existem **${inQueue.length} modelo(s)** aguardando fatiamento e envio para as impressoras.`;
+      if (journey.length > 0) {
+        const byGroup = new Map<string, any[]>();
+        for (const j of journey) {
+          const key = `${j.mesa || j.batch_name || "Sem mesa"}|${j.status}`;
+          if (!byGroup.has(key)) byGroup.set(key, []);
+          byGroup.get(key)!.push(j);
+        }
+        for (const [key, list] of Array.from(byGroup.entries())) {
+          const [mesa, st] = key.split("|");
+          localReply += `- **${list.length} modelo(s)** em **${mesa}** — ${STATUS_PT[st] || st}.\n`;
+        }
+      } else if (inQueue.length > 0) {
+        localReply += `📋 **Fila de Impressão 3D (FIFO)**: Existem **${inQueue.length} modelo(s)** aguardando impressão.`;
       } else {
         localReply += `O caso está registrado no sistema com status **${matchedCase.status || "Ativo"}**.`;
       }
     } else if (
-      lower.includes("impressora") ||
+      lower.includes("imprimindo") ||
+      lower.includes("rodando") ||
       lower.includes("maquina") ||
+      lower.includes("máquina")
+    ) {
+      if (printing.length === 0) {
+        localReply = `🖨️ **Nenhuma máquina imprimindo agora.** ${(context.waitingModels ?? 0)} modelo(s) aguardando na fila.`;
+      } else {
+        localReply = `🖨️ **Imprimindo agora (${printing.length} ordem(ns)):**\n`;
+        for (const p of printing) {
+          const code = p.run_code || p.ordem || "?";
+          const when = elapsedShort(p.started_at || p.inicio);
+          const titles = (p.group_titles || p.mesas || []).join(" + ");
+          localReply += `\n- **Mesa ${code}** · ${p.printer_name || p.impressora || "?"}${when ? ` · ${when}` : ""}\n  ${p.items_count ?? "?"} modelo(s)${titles ? ` · ${titles}` : ""}`;
+          const runModels = models.filter((m: any) =>
+            (p.item_ids || []).includes?.(m.id)
+          );
+          if (runModels.length > 0) {
+            localReply += `\n  Modelos: ${runModels
+              .slice(0, 8)
+              .map((m: any) => `${m.paciente || m.patient_code}${m.clinica || m.clinic_name ? ` (${m.clinica || m.clinic_name})` : ""}`)
+              .join(", ")}${runModels.length > 8 ? ` (+${runModels.length - 8})` : ""}`;
+          }
+        }
+      }
+    } else if (
+      lower.includes("clinica") ||
+      lower.includes("clínica") ||
+      lower.includes("doutor") ||
+      lower.includes("dr ")
+    ) {
+      const clinics = Array.from(
+        new Set(models.map((m: any) => m.clinica || m.clinic_name).filter(Boolean))
+      );
+      const hit = clinics.find((c) => lower.includes(norm(c)));
+      if (hit) {
+        const list = models.filter((m: any) => (m.clinica || m.clinic_name) === hit);
+        localReply = `🏥 **${hit}: ${list.length} modelo(s) no sistema:**\n`;
+        const byStatus = new Map<string, number>();
+        for (const m of list) {
+          const k = `${m.mesa || m.batch_name || "Sem mesa"}|${m.status}`;
+          byStatus.set(k, (byStatus.get(k) || 0) + 1);
+        }
+        for (const [k, n] of Array.from(byStatus.entries())) {
+          const [mesa, st] = k.split("|");
+          localReply += `- **${n}** em **${mesa}** — ${STATUS_PT[st] || st}.\n`;
+        }
+      } else {
+        localReply = `🏥 **Clínicas com modelos no sistema:** ${clinics.slice(0, 10).join(", ") || "nenhuma"}. Pergunte por uma delas (ex: "o que tem da ...?").`;
+      }
+    } else if (
+      lower.includes("impressora") ||
       lower.includes("manuten")
     ) {
       const printers = context.printers || [];
@@ -407,11 +532,13 @@ Suas funções:
       }
     } else if (lower.includes("fila") || lower.includes("quantos")) {
       const q = context.queue || [];
+      const failed = context.failedCount ?? 0;
       localReply = `📋 **Situação da Fila de Impressão:**\nAtualmente temos **${q.length} modelo(s) aguardando** na fila prioritária FIFO aguardando impressão.`;
+      if (failed > 0) localReply += `\n⚠️ **${failed} modelo(s) com falha** aguardando reimpressão prioritária.`;
     } else if (lower.includes("resina") || lower.includes("calibr")) {
       localReply = `🧪 **Calibração de Resinas:**\nO protocolo OdontoPrint exige calibração técnica de teste com medição do hexágono entre **9.99mm e 10.01mm**.`;
     } else {
-      localReply = `Olá! Sou a **OdontoIA**, copiloto do laboratório OdontoPrint. Posso te ajudar com status de pacientes, fila de impressão 3D e calibração de resinas.`;
+      localReply = `Olá! Sou a **OdontoIA**, copiloto do laboratório OdontoPrint. Posso te dizer **o que está imprimindo agora**, **onde está o modelo de um paciente ou clínica**, fila de impressão 3D e calibração de resinas.`;
     }
 
     localReply += `\n\n*(💡 Modo Local Ativo. Para respostas avançadas com IA em tempo real, configure sua chave do Google Gemini como GEMINI_API_KEY no Render).*`;

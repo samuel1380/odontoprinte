@@ -186,6 +186,59 @@ export class AIService {
     }
   }
 
+  /**
+   * Monta o contexto enxuto do laboratório para a IA.
+   * Prioridade operacional: o que está imprimindo, falhas, espera — por
+   * último concluídos. Limites evitam estourar o prompt em bancadas grandes.
+   */
+  static buildAILabContext(input: {
+    casesRes: any;
+    queueRes: any;
+    printers: any[];
+    resins: any[];
+    overview: any | null;
+    cards: any[];
+    batches: any[];
+  }) {
+    const rankCard = (c: any): number => {
+      const s = String(c?.status || "");
+      if (s === "FALHOU" || c?.is_retry) return 0;
+      if (s === "IMPRIMINDO") return 1;
+      if (s === "CONCLUIDO") return 3;
+      return 2;
+    };
+    const models = [...(input.cards || [])]
+      .sort((a, b) => rankCard(a) - rankCard(b))
+      .slice(0, 150)
+      .map((c: any) => ({
+        paciente: c.patient_code,
+        nome: c.patient_name || null,
+        clinica: c.clinic_name || null,
+        mesa: c.batch_name || null,
+        status: c.status,
+        reimpressao: Boolean(c.is_retry || c.status === "FALHOU"),
+        motivo_falha: c.last_failure_reason || null,
+      }));
+
+    return {
+      cases: Array.isArray(input.casesRes) ? input.casesRes : input.casesRes?.cases || [],
+      queue: input.queueRes?.items || [],
+      printers: input.printers || [],
+      resins: input.resins || [],
+      printing: input.overview?.printing || [],
+      waitingModels: input.overview?.waitingModels ?? (input.queueRes?.items || []).length,
+      failedCount: input.overview?.failedCount ?? 0,
+      models,
+      batches: (input.batches || []).slice(0, 40).map((b: any) => ({
+        mesa: b.batch_name,
+        numero: b.batch_number ?? null,
+        status: b.status,
+        impressora: b.printer_name || null,
+        itens: b.items_count ?? null,
+      })),
+    };
+  }
+
   static async sendMessage(message: string, history: AIChatMessage[] = []): Promise<string> {
     const config = this.getConfig();
     const cleanMessage = (message || "").trim();
@@ -194,26 +247,21 @@ export class AIService {
       throw new Error(`Mensagem muito longa (máx. ${AI_MAX_MESSAGE_CHARS} caracteres).`);
     }
 
-    // Coleta dados em tempo real do laboratório para o contexto da IA
+    // Coleta dados em tempo real do laboratório para o contexto da IA.
+    // (Sem fresagem/acabamento: essas áreas não existem mais no sistema.)
     let context: any = {};
     try {
-      const [casesRes, queueRes, printers, resins, milling, finishing] = await Promise.all([
+      const [casesRes, queueRes, printers, resins, overview, cards, batches] = await Promise.all([
         OdontoPrintService.getCases(),
         OdontoPrintService.getQueue(),
         OdontoPrintService.getPrinters(),
         OdontoPrintService.getResinBatches(),
-        OdontoPrintService.getMillingItems(),
-        OdontoPrintService.getFinishingItems(),
+        OdontoPrintService.getPrintingOverview().catch(() => null),
+        OdontoPrintService.getPrintCards().catch(() => []),
+        OdontoPrintService.getPrintBatches().catch(() => []),
       ]);
 
-      context = {
-        cases: Array.isArray(casesRes) ? casesRes : (casesRes as any)?.cases || [],
-        queue: queueRes.items || [],
-        printers: printers || [],
-        resins: resins || [],
-        milling: milling || [],
-        finishing: finishing || [],
-      };
+      context = this.buildAILabContext({ casesRes, queueRes, printers, resins, overview, cards, batches });
     } catch (err) {
       console.warn("Aviso ao carregar contexto de bancada para IA:", err);
     }
