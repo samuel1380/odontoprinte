@@ -12,7 +12,6 @@ import {
   Bot,
   User,
   Settings,
-  RefreshCw,
   Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -34,6 +33,8 @@ export function AICopilotDrawer() {
   const [isSending, setIsSending] = useState(false);
   const [aiProvider, setAiProvider] = useState<"GEMINI" | "GROQ">("GEMINI");
   const [isRenderKey, setIsRenderKey] = useState(false);
+  // Re-dispara a animação de "borracha" da bolinha a cada clique
+  const [squishKey, setSquishKey] = useState(0);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   // Ref espelha o histórico para evitar closure desatualizada em envios rápidos
@@ -145,12 +146,17 @@ export function AICopilotDrawer() {
 
         <button
           type="button"
-          onClick={() => setIsOpen(!isOpen)}
-          className="flex h-12 w-12 sm:h-13 sm:w-13 items-center justify-center rounded-full bg-white text-slate-950 shadow-xl hover:bg-slate-200 hover:scale-105 active:scale-95 transition-all duration-200 border border-white/30 focus:outline-hidden"
+          onClick={() => {
+            setSquishKey((k) => k + 1);
+            setIsOpen(!isOpen);
+          }}
+          className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-white text-slate-950 shadow-xl shadow-slate-950/40 hover:bg-slate-200 hover:scale-105 active:scale-90 transition-all duration-200 border border-white/30 focus:outline-hidden"
           title="Abrir OdontoIA Copilot"
           aria-label="Abrir assistente virtual OdontoIA"
         >
-          {isOpen ? <X className="h-5 w-5 sm:h-6 sm:w-6" /> : <Sparkles className="h-5 w-5 sm:h-6 sm:w-6 text-brand-600" />}
+          <span key={squishKey} className="flex animate-bubble-squish">
+            {isOpen ? <X className="h-5 w-5 sm:h-6 sm:w-6" /> : <Sparkles className="h-5 w-5 sm:h-6 sm:w-6 text-brand-600" />}
+          </span>
         </button>
       </div>
 
@@ -163,21 +169,23 @@ export function AICopilotDrawer() {
             onClick={() => setIsOpen(false)}
           />
 
-          <div className="fixed bottom-18 sm:bottom-22 right-3 sm:right-6 z-50 w-[calc(100vw-24px)] sm:w-[420px] h-[min(560px,calc(100dvh-90px))] rounded-3xl border border-slate-800 bg-[#0F172A] shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-slate-100">
+          <div className="fixed bottom-[76px] right-4 sm:bottom-[104px] sm:right-6 z-50 w-[calc(100vw-32px)] sm:w-[420px] h-[min(600px,calc(100dvh-130px))] rounded-3xl border border-slate-700/80 bg-[#0F172A] shadow-2xl shadow-slate-950/60 flex flex-col overflow-hidden origin-bottom-right animate-copilot-pop text-slate-100">
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-[#0B0F19]">
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  <div className="h-10 w-10 rounded-full bg-white text-slate-950 flex items-center justify-center font-bold text-sm shadow-xs">
-                    <Sparkles className="h-5 w-5 text-brand-600" />
+                  <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-cyan-400 to-brand-600 text-slate-950 flex items-center justify-center shadow-md shadow-cyan-950/50">
+                    <Sparkles className="h-5 w-5 text-white" />
                   </div>
-                  <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-[#0B0F19]">
-                    <span className="h-1 w-1 rounded-full bg-white"></span>
+                  <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 ring-2 ring-[#0B0F19]"></span>
                   </span>
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-sm text-white tracking-tight">OdontoIA</span>
+                    <span className="text-[10px] font-semibold text-emerald-300">online</span>
                     <Badge variant="outline" className="rounded-full border-slate-700 bg-slate-900 text-cyan-300 text-[10px] px-2 py-0">
                       {aiProvider}
                     </Badge>
@@ -262,21 +270,21 @@ export function AICopilotDrawer() {
                 return (
                   <div
                     key={m.id}
-                    className={`flex items-start gap-2.5 ${
+                    className={`flex items-start gap-2.5 animate-msg-in ${
                       isAssistant ? "justify-start" : "justify-end"
                     }`}
                   >
                     {isAssistant && (
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-slate-950 shrink-0 mt-0.5 shadow-xs">
-                        <Bot className="h-3.5 w-3.5 text-brand-600" />
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-brand-600 shrink-0 mt-0.5 shadow-xs">
+                        <Bot className="h-3.5 w-3.5 text-white" />
                       </div>
                     )}
 
                     <div
                       className={`group relative max-w-[85%] rounded-2xl p-3 leading-relaxed whitespace-pre-wrap ${
                         isAssistant
-                          ? "bg-[#0F172A] text-slate-100 border border-slate-800 shadow-md"
-                          : "bg-white text-slate-950 font-medium shadow-md"
+                          ? "rounded-tl-md bg-[#0F172A] text-slate-100 border border-slate-800 shadow-md"
+                          : "rounded-tr-md bg-white text-slate-950 font-medium shadow-md"
                       }`}
                     >
                       {m.content}
@@ -307,9 +315,16 @@ export function AICopilotDrawer() {
               })}
 
               {isSending && (
-                <div className="flex items-center gap-2 text-xs text-slate-400 p-2 bg-[#0F172A] rounded-full border border-slate-800 w-fit">
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-cyan-400" />
-                  <span>Consultando...</span>
+                <div className="flex items-start gap-2.5 animate-msg-in">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-brand-600 shrink-0 mt-0.5">
+                    <Sparkles className="h-3.5 w-3.5 text-white" />
+                  </div>
+                  <div className="bg-[#0F172A] text-slate-200 border border-slate-800 shadow-md rounded-2xl rounded-tl-md px-3.5 py-2.5 flex items-center gap-1.5">
+                    <span className="think-dot h-1.5 w-1.5 rounded-full bg-cyan-300" />
+                    <span className="think-dot h-1.5 w-1.5 rounded-full bg-cyan-300" style={{ animationDelay: "0.15s" }} />
+                    <span className="think-dot h-1.5 w-1.5 rounded-full bg-cyan-300" style={{ animationDelay: "0.3s" }} />
+                    <span className="text-[11px] text-slate-400 ml-1">pensando…</span>
+                  </div>
                 </div>
               )}
 
@@ -335,9 +350,10 @@ export function AICopilotDrawer() {
                 type="submit"
                 disabled={!inputText.trim() || isSending}
                 size="sm"
-                className="h-8 w-8 p-0 rounded-full bg-white hover:bg-slate-200 text-slate-950 shrink-0"
+                className="h-9 w-9 p-0 rounded-full bg-white hover:bg-slate-200 active:scale-90 text-slate-950 shrink-0 transition disabled:opacity-40"
+                title="Enviar mensagem"
               >
-                <Send className="w-3.5 h-3.5" />
+                <Send className="w-4 h-4" />
               </Button>
             </form>
           </div>

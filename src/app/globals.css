@@ -64,3 +64,76 @@
 .pulse-reprint {
   animation: reprintPulse 2s infinite ease-in-out;
 }
+
+/* OdontoIA Copilot: abre como se a bolinha esticasse virando o chat */
+@keyframes copilot-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.15) translateY(48px);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.04) translateY(-4px);
+  }
+  75% {
+    transform: scale(0.99) translateY(1px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-copilot-pop {
+  animation: copilot-pop 0.42s cubic-bezier(0.34, 1.4, 0.64, 1) both;
+  transform-origin: bottom right;
+}
+
+/* Mensagem chegando no chat */
+@keyframes msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-msg-in {
+  animation: msg-in 0.28s ease-out both;
+}
+
+/* "Pensando": bolinhas quicando em cascata */
+@keyframes think-bounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  30% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
+}
+
+.think-dot {
+  animation: think-bounce 1.1s infinite ease-in-out;
+}
+
+/* Bolinha aperta ao clicar (efeito borracha antes de abrir) */
+@keyframes bubble-squish {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(0.82, 0.9);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-bubble-squish {
+  animation: bubble-squish 0.22s ease-out;
+}
