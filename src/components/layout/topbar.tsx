@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Breadcrumbs } from "./breadcrumbs";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { OdontoPrintService } from "@/services/odontoprint-service";
 
 interface TopbarProps {
@@ -63,8 +64,9 @@ export function Topbar({ onOpenMobileMenu }: TopbarProps) {
         </div>
       </div>
 
-      {/* Right: Operational Status & User Profile */}
+      {/* Right: Theme, Status & User Profile */}
       <div className="flex items-center gap-2.5 sm:gap-3">
+        <ThemeToggle />
         {/* Status Operacional do Sistema */}
         <div
           className="hidden sm:flex items-center gap-2 rounded-full border border-slate-800 bg-[#0F172A] px-3.5 py-1 text-xs text-slate-300 shadow-sm"

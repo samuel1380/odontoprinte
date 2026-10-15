@@ -152,3 +152,98 @@
   animation: pop-in 0.16s ease-out both;
   transform-origin: top right;
 }
+
+/* ================================================================== */
+/* MODO CLARO (html.light): remapeia a paleta escura para tons claros */
+/* ================================================================== */
+html.light body {
+  background-color: #eef2f7;
+  color: #0f172a;
+}
+
+/* fundos */
+html.light .bg-\[\#0B0F19\] { background-color: #eef2f7; }
+html.light .bg-\[\#0F172A\] { background-color: #ffffff; }
+html.light .bg-slate-950,
+html.light .bg-slate-950\/60 { background-color: #ffffff; }
+html.light .bg-slate-900,
+html.light .bg-slate-900\/60 { background-color: #f1f5f9; }
+html.light .bg-slate-800,
+html.light .bg-slate-800\/80 { background-color: #e2e8f0; }
+html.light .bg-white { background-color: #0f172a; }
+html.light .hover\:bg-slate-800:hover,
+html.light .hover\:bg-slate-800\/80:hover { background-color: #e2e8f0; }
+html.light .hover\:bg-slate-200:hover { background-color: #1e293b; }
+
+/* textos */
+html.light .text-white { color: #0f172a; }
+html.light .text-slate-200 { color: #334155; }
+html.light .text-slate-300 { color: #475569; }
+html.light .text-slate-400 { color: #64748b; }
+html.light .text-slate-500 { color: #64748b; }
+html.light .text-slate-950 { color: #ffffff; }
+html.light .hover\:text-white:hover { color: #0f172a; }
+html.light .text-cyan-300 { color: #0e7490; }
+html.light .text-cyan-400 { color: #0891b2; }
+html.light .text-rose-200 { color: #9f1239; }
+html.light .text-rose-300 { color: #be123c; }
+html.light .text-rose-400 { color: #e11d48; }
+html.light .text-emerald-300 { color: #047857; }
+html.light .text-emerald-400 { color: #059669; }
+html.light .text-amber-300 { color: #b45309; }
+html.light .text-amber-400 { color: #d97706; }
+html.light .text-brand-300,
+html.light .text-brand-400 { color: #087aa4; }
+html.light .placeholder\:text-slate-500::placeholder { color: #94a3b8; }
+html.light .placeholder\:text-slate-600::placeholder { color: #94a3b8; }
+
+/* bordas e divisórias */
+html.light .border-slate-800,
+html.light .border-slate-800\/80 { border-color: #e2e8f0; }
+html.light .border-slate-700,
+html.light .border-slate-700\/80 { border-color: #cbd5e1; }
+html.light .divide-slate-800 > * + * { border-color: #e2e8f0; }
+html.light .hover\:border-slate-700:hover,
+html.light .hover\:border-slate-600:hover { border-color: #94a3b8; }
+
+/* paineis translúcidos de status */
+html.light .bg-rose-950\/40,
+html.light .bg-rose-950\/60,
+html.light .bg-rose-950\/20,
+html.light .bg-rose-950\/70 { background-color: #ffe4e6; }
+html.light .bg-emerald-950\/30,
+html.light .bg-emerald-950\/40,
+html.light .bg-emerald-950\/60,
+html.light .bg-emerald-950\/70 { background-color: #d1fae5; }
+html.light .bg-amber-950\/40,
+html.light .bg-amber-950\/60,
+html.light .bg-amber-950\/70 { background-color: #fef3c7; }
+html.light .bg-cyan-950\/40,
+html.light .bg-cyan-950\/60 { background-color: #cffafe; }
+html.light .bg-red-950 { background-color: #fee2e2; }
+html.light .border-rose-800\/60,
+html.light .border-rose-800\/40,
+html.light .border-rose-900\/60,
+html.light .border-rose-800,
+html.light .border-rose-900,
+html.light .border-rose-500\/40,
+html.light .border-rose-500,
+html.light .border-rose-700 { border-color: #fda4af; }
+html.light .border-emerald-800\/60,
+html.light .border-emerald-800\/50,
+html.light .border-emerald-800,
+html.light .border-emerald-900\/40,
+html.light .border-emerald-900 { border-color: #6ee7b7; }
+html.light .border-amber-800\/60,
+html.light .border-amber-800,
+html.light .border-amber-900,
+html.light .border-amber-500\/30,
+html.light .border-amber-500\/40 { border-color: #fcd34d; }
+html.light .border-cyan-800\/60,
+html.light .border-cyan-800,
+html.light .border-cyan-700 { border-color: #67e8f9; }
+html.light .border-cyan-500\/30,
+html.light .border-cyan-500\/60 { border-color: #22d3ee; }
+
+/* anel de foco visível no claro */
+html.light .focus\:border-cyan-400:focus { border-color: #0891b2; }
