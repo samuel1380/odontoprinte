@@ -36,6 +36,87 @@ export function AICopilotDrawer() {
   // Re-dispara a animação de "borracha" da bolinha a cada clique
   const [squishKey, setSquishKey] = useState(0);
 
+  // Bolinha arrastável: solta no canto mais próximo e se ajusta sozinha
+  type Dock = { h: "left" | "right"; v: "top" | "bottom" };
+  const DOCK_KEY = "odontoprint_copilot_dock";
+  const [dock, setDock] = useState<Dock>(() => {
+    try {
+      const raw = typeof window !== "undefined" ? localStorage.getItem(DOCK_KEY) : null;
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (
+        parsed &&
+        (parsed.h === "left" || parsed.h === "right") &&
+        (parsed.v === "top" || parsed.v === "bottom")
+      ) {
+        return parsed as Dock;
+      }
+    } catch {
+      // ignora
+    }
+    return { h: "right", v: "bottom" };
+  });
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+  const dragStart = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+
+  const handleBubbleDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // ignora
+    }
+    dragStart.current = { x: e.clientX, y: e.clientY, moved: false };
+  };
+
+  const handleBubbleMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const s = dragStart.current;
+    if (!s) return;
+    if (!s.moved && Math.hypot(e.clientX - s.x, e.clientY - s.y) > 8) {
+      s.moved = true;
+      if (isOpen) setIsOpen(false);
+    }
+    if (s.moved) setDragPos({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleBubbleUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const s = dragStart.current;
+    dragStart.current = null;
+    setDragPos(null);
+    if (!s) return;
+    if (!s.moved) {
+      setSquishKey((k) => k + 1);
+      setIsOpen(!isOpen);
+      return;
+    }
+    const next: Dock = {
+      h: e.clientX < window.innerWidth / 2 ? "left" : "right",
+      v: e.clientY < window.innerHeight / 2 ? "top" : "bottom",
+    };
+    setDock(next);
+    try {
+      localStorage.setItem(DOCK_KEY, JSON.stringify(next));
+    } catch {
+      // ignora
+    }
+  };
+
+  const dockCorner =
+    dock.v === "top"
+      ? dock.h === "left"
+        ? "left-4 top-4 sm:left-6 sm:top-6"
+        : "right-4 top-4 sm:right-6 sm:top-6"
+      : dock.h === "left"
+      ? "left-4 bottom-4 sm:left-6 sm:bottom-6"
+      : "right-4 bottom-4 sm:right-6 sm:bottom-6";
+  const panelPlacement =
+    dock.v === "top"
+      ? dock.h === "left"
+        ? "left-4 top-[76px] sm:left-6 sm:top-[104px] origin-top-left"
+        : "right-4 top-[76px] sm:right-6 sm:top-[104px] origin-top-right"
+      : dock.h === "left"
+      ? "left-4 bottom-[76px] sm:left-6 sm:bottom-[104px] origin-bottom-left"
+      : "right-4 bottom-[76px] sm:right-6 sm:bottom-[104px] origin-bottom-right";
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   // Ref espelha o histórico para evitar closure desatualizada em envios rápidos
   const messagesRef = useRef<AIChatMessage[]>(messages);
@@ -132,10 +213,19 @@ export function AICopilotDrawer() {
 
   return (
     <>
-      {/* Botão Flutuante Global */}
-      <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40 flex items-center gap-2">
+      {/* Bolinha flutuante arrastável (segura e solta no canto) */}
+      <div
+        className={`fixed z-40 flex items-center gap-2 ${
+          dragPos ? "" : `${dockCorner} transition-[left,top,right,bottom,transform] duration-500 ease-[cubic-bezier(.34,1.56,.64,1)]`
+        } ${dock.h === "left" ? "flex-row-reverse" : ""}`}
+        style={
+          dragPos
+            ? { left: dragPos.x, top: dragPos.y, transform: "translate(-50%, -50%) scale(1.15)" }
+            : undefined
+        }
+      >
         {!isOpen && (
-          <div className="hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#0F172A]/90 border border-slate-800 text-xs font-semibold text-slate-200 shadow-md backdrop-blur-md">
+          <div className="hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#0F172A]/90 border border-slate-800 text-xs font-semibold text-slate-200 shadow-md backdrop-blur-md select-none">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-400"></span>
@@ -146,17 +236,28 @@ export function AICopilotDrawer() {
 
         <button
           type="button"
-          onClick={() => {
-            setSquishKey((k) => k + 1);
-            setIsOpen(!isOpen);
+          onPointerDown={handleBubbleDown}
+          onPointerMove={handleBubbleMove}
+          onPointerUp={handleBubbleUp}
+          onPointerCancel={() => {
+            dragStart.current = null;
+            setDragPos(null);
           }}
-          className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-white text-slate-950 shadow-xl shadow-slate-950/40 hover:bg-slate-200 hover:scale-105 active:scale-90 transition-all duration-200 border border-white/30 focus:outline-hidden"
-          title="Abrir OdontoIA Copilot"
-          aria-label="Abrir assistente virtual OdontoIA"
+          className={`relative flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-white text-slate-950 border border-white/30 focus:outline-hidden select-none ${
+            dragPos
+              ? "shadow-2xl shadow-cyan-950/50 cursor-grabbing"
+              : "shadow-xl shadow-slate-950/40 hover:bg-slate-200 hover:scale-105 active:scale-90 cursor-grab transition-all duration-200"
+          }`}
+          style={{ touchAction: "none" }}
+          title="Arrastar para mover · clicar para abrir a OdontoIA"
+          aria-label="Assistente virtual OdontoIA (arraste para mover, clique para abrir)"
         >
-          <span key={squishKey} className="flex animate-bubble-squish">
+          <span key={squishKey} className="flex animate-bubble-squish pointer-events-none">
             {isOpen ? <X className="h-5 w-5 sm:h-6 sm:w-6" /> : <Sparkles className="h-5 w-5 sm:h-6 sm:w-6 text-brand-600" />}
           </span>
+          {dragPos && (
+            <span className="absolute inset-0 rounded-full border-2 border-cyan-400 animate-ping pointer-events-none" />
+          )}
         </button>
       </div>
 
@@ -169,7 +270,7 @@ export function AICopilotDrawer() {
             onClick={() => setIsOpen(false)}
           />
 
-          <div className="fixed bottom-[76px] right-4 sm:bottom-[104px] sm:right-6 z-50 w-[calc(100vw-32px)] sm:w-[420px] h-[min(600px,calc(100dvh-130px))] rounded-3xl border border-slate-700/80 bg-[#0F172A] shadow-2xl shadow-slate-950/60 flex flex-col overflow-hidden origin-bottom-right animate-copilot-pop text-slate-100">
+          <div className={`fixed ${panelPlacement} z-50 w-[calc(100vw-32px)] sm:w-[420px] h-[min(600px,calc(100dvh-130px))] rounded-3xl border border-slate-700/80 bg-[#0F172A] shadow-2xl shadow-slate-950/60 flex flex-col overflow-hidden animate-copilot-pop text-slate-100`}>
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-[#0B0F19]">
               <div className="flex items-center gap-3">
