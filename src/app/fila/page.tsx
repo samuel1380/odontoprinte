@@ -12,6 +12,7 @@ import {
   DuplicateCheckResult,
   ActiveRunInfo,
   PrinterWithStatus,
+  EligibleResinOption,
 } from "@/types/domain";
 import { PrintBatch, PrintItemHistory } from "@/types/database.types";
 import {
@@ -135,9 +136,12 @@ export default function FilaPage() {
   const [selectedCardForHistory, setSelectedCardForHistory] = useState<PrintCardItem | null>(null);
   const [cardHistoryEntries, setCardHistoryEntries] = useState<PrintItemHistory[]>([]);
 
-  // Modal de Iniciar Impressão Direto na Mesa (vincular à impressora)
+  // Modal de Iniciar Impressão Direto na Mesa (vincular impressora + resina)
   const [batchToPrintDirectly, setBatchToPrintDirectly] = useState<OrderGroup | null>(null);
   const [selectedPrinterForBatch, setSelectedPrinterForBatch] = useState<string>("");
+  const [selectedResinBatchId, setSelectedResinBatchId] = useState<string>("");
+  const [eligibleResins, setEligibleResins] = useState<EligibleResinOption[]>([]);
+  const [isLoadingResins, setIsLoadingResins] = useState(false);
   const [isStartingBatchPrint, setIsStartingBatchPrint] = useState(false);
 
   // Painel de Bancada: Vincular Mesa da Fila à Impressora Disponível
@@ -265,6 +269,34 @@ export default function FilaPage() {
     };
   }, []);
 
+  // Resinas calibradas da impressora escolhida no modal de envio
+  useEffect(() => {
+    if (!batchToPrintDirectly || !selectedPrinterForBatch) {
+      setEligibleResins([]);
+      return;
+    }
+    let cancelled = false;
+    setIsLoadingResins(true);
+    OdontoPrintService.getEligibleOptions()
+      .then((options) => {
+        if (cancelled) return;
+        const list = (options.resins || []).filter((r) => r.printer_id === selectedPrinterForBatch);
+        setEligibleResins(list);
+        setSelectedResinBatchId((prev) =>
+          list.some((r) => r.calibration_id === prev) ? prev : list[0]?.calibration_id || ""
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setEligibleResins([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingResins(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [batchToPrintDirectly, selectedPrinterForBatch]);
+
   // Iniciar impressão direto na mesa
   const handleDirectBatchPrint = async () => {
     if (!batchToPrintDirectly || !batchToPrintDirectly.batchId) return;
@@ -275,9 +307,13 @@ export default function FilaPage() {
     setIsStartingBatchPrint(true);
     try {
       const chosen = printers.find((p) => p.id === selectedPrinterForBatch);
+      const chosenResin =
+        eligibleResins.find((r) => r.calibration_id === selectedResinBatchId) || eligibleResins[0];
       const res = await OdontoPrintService.startPrintBatchDirectly({
         batch_id: batchToPrintDirectly.batchId,
         printer_id: selectedPrinterForBatch,
+        resin_batch_id: chosenResin?.resin_batch_id,
+        calibration_id: chosenResin?.calibration_id,
         user_id: user?.id,
         user_name: user?.full_name || "Operador",
       });
@@ -287,6 +323,8 @@ export default function FilaPage() {
         );
         setBatchToPrintDirectly(null);
         setSelectedPrinterForBatch("");
+        setSelectedResinBatchId("");
+        setEligibleResins([]);
         setViewTab("IMPRIMINDO");
         loadData();
       } else {
@@ -2954,7 +2992,11 @@ export default function FilaPage() {
         <Dialog
           open={Boolean(batchToPrintDirectly)}
           onOpenChange={(open) => {
-            if (!open) setBatchToPrintDirectly(null);
+            if (!open) {
+              setBatchToPrintDirectly(null);
+              setSelectedResinBatchId("");
+              setEligibleResins([]);
+            }
           }}
           title={`Enviar ${batchToPrintDirectly?.title || "Mesa"} para Impressora`}
         >
@@ -2980,6 +3022,33 @@ export default function FilaPage() {
                   {printers.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name} — {p.brand} {p.model}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-200 block">
+                Resina da Impressão *
+              </label>
+              {!selectedPrinterForBatch ? (
+                <p className="text-xs text-slate-500">Escolha primeiro a impressora.</p>
+              ) : isLoadingResins ? (
+                <p className="text-xs text-slate-400">Buscando resinas calibradas...</p>
+              ) : eligibleResins.length === 0 ? (
+                <p className="text-xs text-amber-400">
+                  Nenhuma resina calibrada para esta impressora. Calibre um lote antes para registrar o lote correto na ordem.
+                </p>
+              ) : (
+                <select
+                  value={selectedResinBatchId}
+                  onChange={(e) => setSelectedResinBatchId(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-cyan-400"
+                >
+                  {eligibleResins.map((r) => (
+                    <option key={`${r.resin_batch_id}-${r.calibration_id}`} value={r.calibration_id}>
+                      {r.brand} ({r.resin_type}) — Lote {r.lot} · cal #{r.calibration_number} ({r.layer_height}mm/{r.exposure_time}s)
                     </option>
                   ))}
                 </select>

@@ -2314,13 +2314,17 @@ export class OdontoPrintService {
   }
 
   /**
-   * Inicia a impressão de uma mesa diretamente vinculando a uma impressora.
-   * Cria a ordem oficial (PrintRun), atualiza todos os itens para IMPRIMINDO
-   * e marca a mesa como em execução na máquina.
+   * Inicia a impressão de uma mesa diretamente vinculando a uma impressora
+   * e a uma resina (lote calibrado). Cria a ordem oficial (PrintRun),
+   * atualiza todos os itens para IMPRIMINDO e marca a mesa como em execução.
+   * resin_batch_id/calibration_id são opcionais: sem eles, usa a primeira
+   * resina elegível (comportamento anterior, mantém chiamadores antigos).
    */
   static async startPrintBatchDirectly(params: {
     batch_id: string;
     printer_id: string;
+    resin_batch_id?: string;
+    calibration_id?: string;
     user_id?: string;
     user_name?: string;
   }): Promise<{ success: boolean; run_code?: string; run_id?: string; error?: string }> {
@@ -2347,8 +2351,22 @@ export class OdontoPrintService {
     const runCode = await this.generatePrintCode(hasRetry);
 
     const options = await this.getEligibleOptions();
-    const resin =
-      options.resins.find((r) => r.printer_id === params.printer_id) || options.resins[0];
+    const eligibleForPrinter = options.resins.filter((r) => r.printer_id === params.printer_id);
+    let resin = eligibleForPrinter[0];
+    if (params.resin_batch_id) {
+      const chosen = eligibleForPrinter.find(
+        (r) =>
+          r.resin_batch_id === params.resin_batch_id &&
+          (!params.calibration_id || r.calibration_id === params.calibration_id)
+      );
+      if (!chosen) {
+        return { success: false, error: "Resina inválida para esta impressora (sem calibração aprovada)." };
+      }
+      resin = chosen;
+    }
+    if (!resin) {
+      resin = options.resins[0];
+    }
 
     const runRes = await this.startPrintRun({
       run_code: runCode,
