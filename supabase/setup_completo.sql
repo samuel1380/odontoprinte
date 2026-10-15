@@ -645,6 +645,12 @@ BEGIN
     BEGIN
         ALTER PUBLICATION supabase_realtime ADD TABLE public.printers;
     EXCEPTION WHEN duplicate_object THEN null; WHEN undefined_object THEN null; END;
+    BEGIN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.resin_batches;
+    EXCEPTION WHEN duplicate_object THEN null; WHEN undefined_object THEN null; END;
+    BEGIN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.resin_calibrations;
+    EXCEPTION WHEN duplicate_object THEN null; WHEN undefined_object THEN null; END;
 END $$;
 
 -- 8. CONFIGURAÇÃO INICIAL (SETTINGS)
