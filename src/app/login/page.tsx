@@ -232,7 +232,7 @@ export default function LoginPage() {
               onClick={() => setIsRegisterMode(false)}
               className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-semibold rounded-full transition ${
                 !isRegisterMode
-                  ? "bg-white text-slate-950 shadow-xs"
+                  ? "bg-white text-slate-950 shadow-sm"
                   : "text-slate-400 hover:text-white"
               }`}
             >
@@ -244,7 +244,7 @@ export default function LoginPage() {
               onClick={() => setIsRegisterMode(true)}
               className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-semibold rounded-full transition ${
                 isRegisterMode
-                  ? "bg-white text-slate-950 shadow-xs"
+                  ? "bg-white text-slate-950 shadow-sm"
                   : "text-slate-400 hover:text-white"
               }`}
             >

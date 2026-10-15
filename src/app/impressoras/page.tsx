@@ -86,8 +86,8 @@ export default function ImpressorasPage() {
       setSerialNumber("");
       setMaintenanceContact("");
       loadPrinters();
-    } catch {
-      toast.error("Erro ao salvar impressora.");
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao salvar impressora.");
     } finally {
       setIsSaving(false);
     }

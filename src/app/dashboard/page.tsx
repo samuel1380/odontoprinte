@@ -114,7 +114,7 @@ export default function DashboardPage() {
         {/* Ações Diretas em Pílulas */}
         <div className="flex flex-wrap items-center gap-2 overflow-x-auto pb-1">
           <Link href="/cadista/status">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white text-slate-950 text-xs font-semibold hover:bg-slate-200 transition shadow-xs">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white text-slate-950 text-xs font-semibold hover:bg-slate-200 transition shadow-sm">
               <FileCheck2 className="w-3.5 h-3.5 text-slate-950" />
               <span>Novo Trabalho</span>
             </div>

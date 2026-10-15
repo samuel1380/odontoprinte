@@ -67,7 +67,7 @@ export function Topbar({ onOpenMobileMenu }: TopbarProps) {
       <div className="flex items-center gap-2.5 sm:gap-3">
         {/* Status Operacional do Sistema */}
         <div
-          className="hidden sm:flex items-center gap-2 rounded-full border border-slate-800 bg-[#0F172A] px-3.5 py-1 text-xs text-slate-300 shadow-xs"
+          className="hidden sm:flex items-center gap-2 rounded-full border border-slate-800 bg-[#0F172A] px-3.5 py-1 text-xs text-slate-300 shadow-sm"
           title={
             !isSupabaseConnected
               ? "Sem banco configurado: cada aparelho vê só os próprios dados"
@@ -104,9 +104,9 @@ export function Topbar({ onOpenMobileMenu }: TopbarProps) {
           <button
             type="button"
             onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-            className="flex items-center gap-2 rounded-full border border-slate-800 bg-[#0F172A] p-1 sm:px-3 sm:py-1 text-xs text-slate-200 shadow-xs hover:bg-slate-800 transition"
+            className="flex items-center gap-2 rounded-full border border-slate-800 bg-[#0F172A] p-1 sm:px-3 sm:py-1 text-xs text-slate-200 shadow-sm hover:bg-slate-800 transition"
           >
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-slate-950 font-bold text-xs shadow-xs">
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-slate-950 font-bold text-xs shadow-sm">
               {user?.full_name?.charAt(0) || "U"}
             </div>
 
@@ -131,7 +131,7 @@ export function Topbar({ onOpenMobileMenu }: TopbarProps) {
                   setShowRoleSwitcher(false);
                 }}
               />
-              <div className="absolute right-0 top-full mt-2 z-50 w-72 rounded-2xl border border-slate-800 bg-[#0F172A] p-2 shadow-2xl animate-in fade-in zoom-in-95 text-slate-200">
+              <div className="absolute right-0 top-full mt-2 z-50 w-72 rounded-2xl border border-slate-800 bg-[#0F172A] p-2 shadow-2xl animate-pop-in text-slate-200">
                 {/* Header do Menu */}
                 <div className="p-3 border-b border-slate-800">
                   <div className="font-semibold text-xs text-white">{user?.full_name || "Usuário"}</div>

@@ -501,11 +501,11 @@ export class OdontoPrintService {
       updated_at: now,
     }));
 
-    // Persist in mock state & localStorage
+    // Persist in mock state & localStorage (com snapshot p/ rollback estrito)
+    const snapCadista = this.snapLocals();
     mockCases = loadLocal("odontoprint_cases", mockCases);
     mockCases.unshift(newCase);
     saveLocal("odontoprint_cases", mockCases);
-
     if (millingFiles.length > 0) {
       mockMillingItems = loadLocal("odontoprint_milling_items", mockMillingItems);
       saveLocal("odontoprint_milling_items", mockMillingItems);
@@ -544,22 +544,25 @@ export class OdontoPrintService {
       try {
         let { error: caseErr } = await client.from("cases").insert(newCase);
         if (caseErr && (caseErr.message?.includes("foreign key") || (caseErr as any).code === "23503")) {
-          await client.from("cases").insert({ ...newCase, created_by: null });
+          const retry = await client.from("cases").insert({ ...newCase, created_by: null });
+          caseErr = retry.error;
         }
-        await client.from("case_status_events").insert({
+        assertDbOk(caseErr ? { error: caseErr } : null, "Falha ao salvar paciente");
+        assertDbOk(await client.from("case_status_events").insert({
           id: eventId,
           case_id: caseId,
           process_type: params.process_type,
           notes: params.notes || null,
           created_by: null,
           created_at: now,
-        });
+        }), "Falha ao registrar evento do caso");
         if (newItems.length > 0) {
-          await client.from("print_jobs").insert({ ...newJob, created_by: null });
-          await client.from("print_job_items").insert(newItems);
+          assertDbOk(await client.from("print_jobs").insert({ ...newJob, created_by: null }), "Falha ao salvar trabalho");
+          assertDbOk(await client.from("print_job_items").insert(newItems), "Falha ao salvar modelos");
         }
-      } catch (err) {
-        console.error("Supabase insert error (fallback preserved):", err);
+      } catch (err: any) {
+        this.restoreLocals(snapCadista);
+        return { success: false, case_id: "", job_id: "", error: err?.message || "Erro ao salvar trabalho no banco." };
       }
     }
 
@@ -2483,6 +2486,7 @@ export class OdontoPrintService {
       return { success: false, error: runRes.error || "Erro ao iniciar execução da impressão." };
     }
 
+    const prevBatch = { ...batch };
     batch.printer_id = printer.id;
     batch.printer_name = printer.name;
     batch.status = "IMPRIMINDO";
@@ -2492,7 +2496,7 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        await client
+        assertDbOk(await client
           .from("print_batches")
           .update({
             printer_id: printer.id,
@@ -2500,9 +2504,11 @@ export class OdontoPrintService {
             status: "IMPRIMINDO",
             updated_at: batch.updated_at,
           })
-          .eq("id", batch.id);
-      } catch (err) {
-        console.warn("Supabase startPrintBatchDirectly error:", err);
+          .eq("id", batch.id), "Falha ao marcar mesa em impressão");
+      } catch (err: any) {
+        Object.assign(batch, prevBatch);
+        saveLocal("odontoprint_batches", mockPrintBatches);
+        return { success: false, error: "Ordem criada, mas falha ao marcar a mesa como imprimindo. Recarregue e conclua pela fila." };
       }
     }
 
@@ -2915,12 +2921,11 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        const { error } = await client.from("printers").insert(newPrinter);
-        if (error) {
-          console.error("Supabase insert printer error:", error);
-        }
-      } catch (err) {
-        console.error("Supabase insert printer exception:", err);
+        assertDbOk(await client.from("printers").insert(newPrinter), "Falha ao salvar impressora");
+      } catch (err: any) {
+        mockPrinters = loadLocal<Printer[]>("odontoprint_printers", []).filter((p) => p.id !== newPrinter.id);
+        saveLocal("odontoprint_printers", mockPrinters);
+        throw new Error(err?.message || "Erro ao salvar impressora no banco.");
       }
     }
     return newPrinter;
@@ -2990,7 +2995,7 @@ export class OdontoPrintService {
     checklist: MaintenanceChecklistInput;
     notes?: string;
     performed_by?: string;
-  }): Promise<{ success: boolean; maintenance: PrinterMaintenance; approved: boolean }> {
+  }): Promise<{ success: boolean; maintenance: PrinterMaintenance; approved: boolean; error?: string }> {
     const approved = validateMaintenanceChecklist(params.checklist);
     const now = new Date().toISOString();
 
@@ -3015,15 +3020,20 @@ export class OdontoPrintService {
     mockMaintenances.unshift(newMaint);
     saveLocal("odontoprint_maintenances", mockMaintenances);
 
+    const snapMaint = this.snapLocals();
+
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
         let { error: maintErr } = await client.from("printer_maintenances").insert(newMaint);
         if (maintErr && (maintErr.message?.includes("foreign key") || (maintErr as any).code === "23503")) {
-          await client.from("printer_maintenances").insert({ ...newMaint, performed_by: null });
+          const retry = await client.from("printer_maintenances").insert({ ...newMaint, performed_by: null });
+          maintErr = retry.error;
         }
-      } catch (err) {
-        console.error("Supabase insert maintenance exception:", err);
+        assertDbOk(maintErr ? { error: maintErr } : null, "Falha ao salvar manutenção");
+      } catch (err: any) {
+        this.restoreLocals(snapMaint);
+        return { success: false, maintenance: newMaint, approved, error: err?.message || "Erro ao salvar manutenção no banco." };
       }
     }
 
@@ -3328,6 +3338,7 @@ export class OdontoPrintService {
     approved: boolean;
     calibration: ResinCalibration;
     errorReason?: string;
+    error?: string;
   }> {
     const settings = await this.getSettings();
     const validation = validateResinCalibration({
@@ -3380,18 +3391,29 @@ export class OdontoPrintService {
       }
     }
 
+    const snapCal = this.snapLocals();
+
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
         let { error: calErr } = await client.from("resin_calibrations").insert(newCal);
         if (calErr && (calErr.message?.includes("foreign key") || (calErr as any).code === "23503")) {
-          await client.from("resin_calibrations").insert({ ...newCal, created_by: null });
+          const retry = await client.from("resin_calibrations").insert({ ...newCal, created_by: null });
+          calErr = retry.error;
         }
+        assertDbOk(calErr ? { error: calErr } : null, "Falha ao salvar calibração");
         if (validation.approved) {
-          await client.from("resin_batches").update({ status: "CALIBRADA" }).eq("id", params.resin_batch_id);
+          assertDbOk(await client.from("resin_batches").update({ status: "CALIBRADA" }).eq("id", params.resin_batch_id), "Falha ao marcar lote como calibrado");
         }
-      } catch (err) {
-        console.error("Supabase insert calibration exception:", err);
+      } catch (err: any) {
+        this.restoreLocals(snapCal);
+        return {
+          success: false,
+          approved: false,
+          calibration: newCal,
+          errorReason: validation.errorReason,
+          error: err?.message || "Erro ao salvar calibração no banco.",
+        };
       }
     }
 
@@ -3633,6 +3655,8 @@ export class OdontoPrintService {
       return { success: false, completed_count: 0, failed_count: 0, error: "Esta impressão já foi finalizada." };
     }
 
+    const snapFinalize = this.snapLocals();
+
     const now = new Date().toISOString();
     run.status = "FINALIZADA";
     run.finished_at = now;
@@ -3644,8 +3668,6 @@ export class OdontoPrintService {
     mockPrintJobs = loadLocal("odontoprint_jobs", mockPrintJobs);
     mockCases = loadLocal("odontoprint_cases", mockCases);
     mockAuditLogs = loadLocal("odontoprint_audit_logs", mockAuditLogs);
-
-    const snapFinalize = this.snapLocals();
 
     const runItems = mockPrintRunItems.filter((ri) => ri.print_run_id === run.id);
     const failedMap = new Map(params.failed_items.map((f) => [f.item_id, f.reason]));
@@ -4483,6 +4505,8 @@ export class OdontoPrintService {
     const item = mockFinishingItems.find((f) => f.id === id);
     if (!item) return { success: false, error: "Trabalho não encontrado na bancada de acabamento." };
 
+    const snapFinish = this.snapLocals();
+
     const now = new Date().toISOString();
     item.status = "APROVADO_CQ";
     item.finished_at = now;
@@ -4516,16 +4540,17 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        await client.from("print_job_items").update({ status: "CONCLUIDO" }).eq("id", id);
+        assertDbOk(await client.from("print_job_items").update({ status: "CONCLUIDO" }).eq("id", id), "Falha ao concluir modelo");
         if (jobItem?.print_job_id) {
           const siblingItems = mockPrintJobItems.filter((i) => i.print_job_id === jobItem.print_job_id);
           const allCompleted = siblingItems.every((i) => i.status === "CONCLUIDO");
           if (allCompleted) {
-            await client.from("print_jobs").update({ status: "CONCLUIDO" }).eq("id", jobItem.print_job_id);
+            assertDbOk(await client.from("print_jobs").update({ status: "CONCLUIDO" }).eq("id", jobItem.print_job_id), "Falha ao concluir trabalho");
           }
         }
-      } catch (err) {
-        console.warn("Supabase approveFinishingCase error:", err);
+      } catch (err: any) {
+        this.restoreLocals(snapFinish);
+        return { success: false, error: err?.message || "Erro ao aprovar no banco." };
       }
     }
 
@@ -4672,7 +4697,7 @@ export class OdontoPrintService {
             active: false, // PENDENTE DE APROVAÇÃO PELO ADMIN
           });
           if (profileErr) {
-            console.warn("requestUserAccess (perfil) error:", profileErr);
+            return { success: false, error: `Conta criada, mas falha ao registrar perfil: ${profileErr.message}` };
           }
         }
       } catch (err: any) {
@@ -4760,9 +4785,10 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
-        await client.from("profiles").update({ role }).eq("id", userId);
+        const { error } = await client.from("profiles").update({ role }).eq("id", userId);
+        if (error) return false;
       } catch {
-        // ignore
+        return false;
       }
     }
 

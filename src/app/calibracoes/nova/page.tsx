@@ -172,6 +172,11 @@ function NovaCalibracaoContent() {
         created_by: user?.id || "",
       });
 
+      if (!res.success) {
+        toast.error(res.error || "Não foi possível salvar a calibração no banco.");
+        return;
+      }
+
       if (res.approved) {
         toast.success("Calibração aprovada e finalizada!", {
           description: "A resina e a impressora agora estão liberadas para impressão.",
@@ -189,7 +194,7 @@ function NovaCalibracaoContent() {
   const handleNewAttempt = async () => {
     setIsSubmitting(true);
     try {
-      await OdontoPrintService.registerCalibrationAttempt({
+      const resAttempt = await OdontoPrintService.registerCalibrationAttempt({
         resin_batch_id: selectedBatchId,
         printer_id: selectedPrinterId,
         initial_exposure_time: Number(initialExposure),
@@ -204,6 +209,11 @@ function NovaCalibracaoContent() {
         cure_time: Number(cureTime),
         created_by: user?.id || "",
       });
+
+      if (!resAttempt.success) {
+        toast.error(resAttempt.error || "Não foi possível registrar a tentativa no banco.");
+        return;
+      }
 
       toast.warning(`Tentativa #${calibrationNumber} reprovada e registrada no histórico.`, {
         description: `Iniciando Calibração #${calibrationNumber + 1}. Ajuste os tempos de exposição.`,
@@ -449,7 +459,7 @@ function NovaCalibracaoContent() {
                     onClick={() => setLinesVisible(true)}
                     className={`px-4 py-1 rounded-full text-xs font-bold transition ${
                       linesVisible === true
-                        ? "bg-white text-slate-950 shadow-xs"
+                        ? "bg-white text-slate-950 shadow-sm"
                         : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800"
                     }`}
                   >
@@ -460,7 +470,7 @@ function NovaCalibracaoContent() {
                     onClick={() => setLinesVisible(false)}
                     className={`px-4 py-1 rounded-full text-xs font-bold transition ${
                       linesVisible === false
-                        ? "bg-rose-500 text-white shadow-xs"
+                        ? "bg-rose-500 text-white shadow-sm"
                         : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800"
                     }`}
                   >
@@ -477,7 +487,7 @@ function NovaCalibracaoContent() {
                     onClick={() => setNumbersVisible(true)}
                     className={`px-4 py-1 rounded-full text-xs font-bold transition ${
                       numbersVisible === true
-                        ? "bg-white text-slate-950 shadow-xs"
+                        ? "bg-white text-slate-950 shadow-sm"
                         : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800"
                     }`}
                   >
@@ -488,7 +498,7 @@ function NovaCalibracaoContent() {
                     onClick={() => setNumbersVisible(false)}
                     className={`px-4 py-1 rounded-full text-xs font-bold transition ${
                       numbersVisible === false
-                        ? "bg-rose-500 text-white shadow-xs"
+                        ? "bg-rose-500 text-white shadow-sm"
                         : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800"
                     }`}
                   >
@@ -505,7 +515,7 @@ function NovaCalibracaoContent() {
                     onClick={() => setDetailsVisible(true)}
                     className={`px-4 py-1 rounded-full text-xs font-bold transition ${
                       detailsVisible === true
-                        ? "bg-white text-slate-950 shadow-xs"
+                        ? "bg-white text-slate-950 shadow-sm"
                         : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800"
                     }`}
                   >
@@ -516,7 +526,7 @@ function NovaCalibracaoContent() {
                     onClick={() => setDetailsVisible(false)}
                     className={`px-4 py-1 rounded-full text-xs font-bold transition ${
                       detailsVisible === false
-                        ? "bg-rose-500 text-white shadow-xs"
+                        ? "bg-rose-500 text-white shadow-sm"
                         : "bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800"
                     }`}
                   >

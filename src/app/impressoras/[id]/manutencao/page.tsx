@@ -101,6 +101,11 @@ export default function PrinterManutencaoPage() {
         performed_by: user?.id || "",
       });
 
+      if (!res.success) {
+        toast.error(res.error || "Não foi possível salvar a manutenção no banco.");
+        return;
+      }
+
       if (res.approved) {
         toast.success(`Manutenção aprovada com sucesso! A impressora foi liberada por mais 7 dias.`);
       } else {
@@ -412,7 +417,7 @@ export default function PrinterManutencaoPage() {
           {/* Result Status Preview Card */}
           {allAnswered && (
             <div
-              className={`p-4 rounded-2xl border transition-all animate-in fade-in ${
+              className={`p-4 rounded-2xl border transition-all animate-pop-in ${
                 isApproved
                   ? "border-emerald-500/40 bg-emerald-950/20 text-emerald-300"
                   : "border-rose-500/40 bg-rose-950/20 text-rose-300"

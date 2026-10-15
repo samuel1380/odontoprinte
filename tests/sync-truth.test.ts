@@ -123,4 +123,19 @@ describe("verdade nas escritas: falhou no banco = erro + rollback, sem fantasma"
     const cards = await OdontoPrintService.getPrintCards();
     expect(cards.some((c) => c.file_name === "tomb.stl")).toBe(false);
   });
+
+  it("criar trabalho (cadista) com banco falhando retorna erro e não deixa fantasma", async () => {
+    useRemote({ writeError: { message: "db down" } });
+    const res = await OdontoPrintService.createCadistaCase({
+      patient_code: "PAC-FANTASMA-CAD",
+      process_type: "IMPRESSAO",
+      selected_files: ["MODELO_DE_TRABALHO"],
+    });
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/Falha ao salvar paciente/);
+
+    useRemote({ selectData: { cases: [], print_jobs: [], print_job_items: [] } });
+    const cases = await OdontoPrintService.getCases();
+    expect(cases.some((c: any) => c.patient_code === "PAC-FANTASMA-CAD")).toBe(false);
+  });
 });

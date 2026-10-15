@@ -266,7 +266,7 @@ export function AICopilotDrawer() {
         <>
           {/* Backdrop para mobile */}
           <div
-            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs sm:hidden"
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm sm:hidden"
             onClick={() => setIsOpen(false)}
           />
 
@@ -383,7 +383,7 @@ export function AICopilotDrawer() {
                     }`}
                   >
                     {isAssistant && (
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-brand-600 shrink-0 mt-0.5 shadow-xs">
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-brand-600 shrink-0 mt-0.5 shadow-sm">
                         <Bot className="h-3.5 w-3.5 text-white" />
                       </div>
                     )}

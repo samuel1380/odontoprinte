@@ -309,7 +309,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Card 1: Manutenção */}
-          <Card className="rounded-2xl sm:rounded-3xl border border-slate-800 bg-[#0F172A] shadow-xs">
+          <Card className="rounded-2xl sm:rounded-3xl border border-slate-800 bg-[#0F172A] shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-base text-white flex items-center gap-2">
                 <Sliders className="w-4 h-4 text-cyan-400" />
@@ -338,7 +338,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
           </Card>
 
           {/* Card 2: Tolerância de Calibração */}
-          <Card className="rounded-2xl sm:rounded-3xl border border-slate-800 bg-[#0F172A] shadow-xs">
+          <Card className="rounded-2xl sm:rounded-3xl border border-slate-800 bg-[#0F172A] shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-base text-white flex items-center gap-2">
                 <Sliders className="w-4 h-4 text-cyan-400" />
@@ -379,7 +379,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
           </Card>
 
           {/* Card 3: Nomenclatura */}
-          <Card className="rounded-2xl sm:rounded-3xl border border-slate-800 bg-[#0F172A] shadow-xs">
+          <Card className="rounded-2xl sm:rounded-3xl border border-slate-800 bg-[#0F172A] shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-base text-white flex items-center gap-2">
                 <Sliders className="w-4 h-4 text-cyan-400" />
@@ -418,7 +418,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
           </Card>
 
           {/* Card 4: Status do Banco de Dados & Sincronização em Nuvem (Supabase) */}
-          <Card className="rounded-2xl sm:rounded-3xl border border-slate-800 bg-[#0F172A] shadow-xs">
+          <Card className="rounded-2xl sm:rounded-3xl border border-slate-800 bg-[#0F172A] shadow-sm">
             <CardHeader className="pb-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <CardTitle className="text-base flex items-center gap-2 text-white">
@@ -493,7 +493,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
           </Card>
 
           {/* Card 5: Inteligência Artificial (Gemini / Groq) */}
-          <Card className="rounded-2xl sm:rounded-3xl border border-slate-800 bg-[#0F172A] shadow-xs">
+          <Card className="rounded-2xl sm:rounded-3xl border border-slate-800 bg-[#0F172A] shadow-sm">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base flex items-center gap-2 text-white">
@@ -530,7 +530,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
                     onClick={() => handleProviderChange("GEMINI")}
                     className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
                       aiProvider === "GEMINI"
-                        ? "bg-white text-slate-950 shadow-xs font-bold"
+                        ? "bg-white text-slate-950 shadow-sm font-bold"
                         : "text-slate-400 hover:text-white"
                     }`}
                   >
@@ -541,7 +541,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
                     onClick={() => handleProviderChange("GROQ")}
                     className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
                       aiProvider === "GROQ"
-                        ? "bg-white text-slate-950 shadow-xs font-bold"
+                        ? "bg-white text-slate-950 shadow-sm font-bold"
                         : "text-slate-400 hover:text-white"
                     }`}
                   >

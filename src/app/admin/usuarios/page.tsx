@@ -228,7 +228,7 @@ export default function AdminUsuariosPage() {
                 {pendingUsers.map((applicant) => (
                   <div
                     key={applicant.id}
-                    className="p-3.5 bg-[#0F172A] rounded-xl border border-amber-500/30 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    className="p-3.5 bg-[#0F172A] rounded-xl border border-amber-500/30 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                   >
                     <div className="flex items-center gap-3">
                       <div className="h-10 w-10 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-300 flex items-center justify-center font-bold text-sm shrink-0">

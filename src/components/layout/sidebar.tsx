@@ -106,7 +106,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       {/* Backdrop para telas mobile/tablet */}
       {isOpen && (
         <div
-          className="fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-xs lg:hidden transition-opacity"
+          className="fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-sm lg:hidden transition-opacity"
           onClick={onClose}
           aria-hidden="true"
         />
@@ -124,7 +124,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
             <img
               src="/logo.jpg"
               alt="Logo OdontoPrint"
-              className="h-9 w-9 rounded-xl object-contain border border-white/20 p-0.5 bg-white shadow-xs group-hover:scale-105 transition-all shrink-0"
+              className="h-9 w-9 rounded-xl object-contain border border-white/20 p-0.5 bg-white shadow-sm group-hover:scale-105 transition-all shrink-0"
             />
             <div>
               <div className="text-sm font-black tracking-wider text-white flex items-center leading-none">
@@ -176,7 +176,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                         className={cn(
                           "group flex items-center gap-2.5 rounded-full px-3.5 py-2 text-xs font-medium transition-all",
                           isActive
-                            ? "bg-white text-slate-950 font-semibold shadow-xs"
+                            ? "bg-white text-slate-950 font-semibold shadow-sm"
                             : "text-slate-400 hover:bg-slate-800/80 hover:text-white"
                         )}
                       >
@@ -206,7 +206,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
 
         {/* Footer / Lab Station Status */}
         <div className="border-t border-slate-800 p-3.5 bg-slate-950/40">
-          <div className="rounded-2xl border border-slate-800 bg-[#0F172A] p-2.5 shadow-xs flex items-center justify-between">
+          <div className="rounded-2xl border border-slate-800 bg-[#0F172A] p-2.5 shadow-sm flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
               <span className="text-xs font-semibold text-slate-200">Laboratório Online</span>
