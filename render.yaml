@@ -5,10 +5,13 @@ services:
     plan: starter
     region: ohio
     buildCommand: npm ci --include=dev && npm run build
+    preDeployCommand: npm run db:migrate
     startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
+      - key: DATABASE_URL
+        sync: false
       - key: NEXT_PUBLIC_SUPABASE_URL
         sync: false
       - key: NEXT_PUBLIC_SUPABASE_ANON_KEY

@@ -88,6 +88,17 @@ Para conectar seu próprio banco Supabase PostgreSQL em produção, basta execut
 2. Cole e execute o arquivo `supabase/setup_completo.sql` — é o script **oficial e único**: cria 100% da estrutura (tabelas, enums, triggers, RPCs, views) e permissões operacionais de uma só vez. Pode re-rodar sem medo: nada é apagado e as sequências se ajustam aos dados existentes.
 3. *(Bancos já existentes)* Se o banco já tem dados, o mesmo script serve como atualização (só adiciona o que falta). Nunca execute nada da pasta `supabase/_archive/` (conteúdo antigo já incorporado) nem de `scripts/danger/` (apaga tudo).
 
+### Migrações automáticas (sem colar SQL na mão)
+
+Depois da primeira carga, as mudanças de banco vivem em arquivos pequenos na pasta
+`supabase/migrations/` (`AAAAMMDD_descricao.sql`) e são **aplicadas sozinhas a cada
+deploy** no Render, antes do sistema subir:
+
+- `npm run db:migrate` aplica só o que ainda não foi aplicado (controle pela tabela `public.schema_migrations`), com trava para dois deploys não brigarem.
+- Para isso funcionar, cadastre **uma única vez** no Render (Dashboard > serviço > Environment) o segredo:
+  - `DATABASE_URL` = string de conexão do Postgres (Supabase Dashboard > Project Settings > Database > Connection string, modo URI). Sem ela, o deploy só pula essa etapa com aviso.
+- Para criar uma nova mudança de banco: adicione um arquivo novo em `supabase/migrations/` (sempre aditivo: `IF NOT EXISTS`, nunca `TRUNCATE` nem zerar sequência) e faça push. O deploy aplica.
+
 ---
 
 ## 👥 Perfis de Usuário & RBAC
