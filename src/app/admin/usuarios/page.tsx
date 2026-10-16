@@ -34,7 +34,7 @@ export default function AdminUsuariosPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [newFullName, setNewFullName] = useState("");
   const [newEmail, setNewEmail] = useState("");
-  const [newRole, setNewRole] = useState<UserRole>("CADISTA");
+  const [newRole, setNewRole] = useState<UserRole>("OPERADOR_IMPRESSAO");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const loadUsers = async () => {
@@ -129,7 +129,7 @@ export default function AdminUsuariosPage() {
         setModalOpen(false);
         setNewFullName("");
         setNewEmail("");
-        setNewRole("CADISTA");
+        setNewRole("OPERADOR_IMPRESSAO");
         await loadUsers();
       } else {
         toast.error(res.error || "Não foi possível cadastrar o usuário.");

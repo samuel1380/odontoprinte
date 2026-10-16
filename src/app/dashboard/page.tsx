@@ -15,7 +15,6 @@ import {
   FlaskConical,
   Activity,
   ArrowUpRight,
-  FileCheck2,
   Layers,
   PlusCircle,
   RefreshCw,
@@ -131,22 +130,22 @@ export default function DashboardPage() {
 
         {/* Ações Diretas em Pílulas */}
         <div className="flex flex-wrap items-center gap-2 overflow-x-auto pb-1">
-          <Link href="/cadista/status">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white text-slate-950 text-xs font-semibold hover:bg-slate-200 transition shadow-sm">
-              <FileCheck2 className="w-3.5 h-3.5 text-slate-950" />
-              <span>Novo Trabalho</span>
-            </div>
-          </Link>
-
           <Link href="/fila">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#0F172A] border border-slate-800 text-slate-300 text-xs font-medium hover:bg-slate-800 hover:text-white transition">
-              <ListOrdered className="w-3.5 h-3.5 text-slate-400" />
-              <span>Fila</span>
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white text-slate-950 text-xs font-semibold hover:bg-slate-200 transition shadow-sm">
+              <ListOrdered className="w-3.5 h-3.5 text-slate-950" />
+              <span>Fila de Impressão</span>
               {metrics && metrics.items_in_queue > 0 && (
                 <span className="px-1.5 py-0.2 rounded-full bg-cyan-500 text-slate-950 text-[10px] font-bold">
                   {metrics.items_in_queue}
                 </span>
               )}
+            </div>
+          </Link>
+
+          <Link href="/montagem">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#0F172A] border border-slate-800 text-slate-300 text-xs font-medium hover:bg-slate-800 hover:text-white transition">
+              <Layers className="w-3.5 h-3.5 text-slate-400" />
+              <span>Montagem de Mesa</span>
             </div>
           </Link>
 

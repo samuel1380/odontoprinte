@@ -402,7 +402,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     email: string,
     password: string,
     fullName: string,
-    role: UserRole = "CADISTA"
+    role: UserRole = "OPERADOR_IMPRESSAO"
   ): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true);
     try {

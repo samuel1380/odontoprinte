@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 import { AICopilotDrawer } from "@/components/ai/ai-copilot-drawer";
+import { toast } from "sonner";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -13,14 +14,29 @@ interface AppShellProps {
 
 export function AppShell({ children }: AppShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { user, isLoading } = useAuth();
+  const { user, activeRole, isLoading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!isLoading && !user) {
       router.replace("/login");
+      return;
     }
-  }, [user, isLoading, router]);
+
+    if (!isLoading && user && activeRole !== "ADMIN") {
+      // Rotas restritas exclusivamente para ADMIN (Histórico Completo, Configurações e Usuários)
+      const isAdminRoute = 
+        pathname.startsWith("/historico") || 
+        pathname.startsWith("/admin/configuracoes") || 
+        pathname.startsWith("/admin/usuarios");
+
+      if (isAdminRoute) {
+        toast.error("Acesso restrito ao perfil de Administrador.");
+        router.replace("/dashboard");
+      }
+    }
+  }, [user, activeRole, isLoading, router, pathname]);
 
   if (isLoading) {
     return (

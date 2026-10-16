@@ -1,6 +1,15 @@
 import { createBrowserClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-export function createClient() {
+let cachedClientInstance: SupabaseClient | null = null;
+let lastUsedUrl = "";
+let lastUsedKey = "";
+
+export function createClient(): {
+  client: SupabaseClient | null;
+  isConfigured: boolean;
+  supabaseUrl: string;
+} {
   let supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
   let supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
@@ -24,9 +33,25 @@ export function createClient() {
     !supabaseKey.includes("your-anon-key")
   );
 
+  if (!isConfigured) {
+    cachedClientInstance = null;
+    return {
+      client: null,
+      isConfigured: false,
+      supabaseUrl: "",
+    };
+  }
+
+  // Singleton: reaproveita a mesma instância no browser para não travar conexões
+  if (!cachedClientInstance || lastUsedUrl !== supabaseUrl || lastUsedKey !== supabaseKey) {
+    cachedClientInstance = createBrowserClient(supabaseUrl, supabaseKey);
+    lastUsedUrl = supabaseUrl;
+    lastUsedKey = supabaseKey;
+  }
+
   return {
-    client: isConfigured ? createBrowserClient(supabaseUrl, supabaseKey) : null,
-    isConfigured,
-    supabaseUrl: isConfigured ? supabaseUrl : "",
+    client: cachedClientInstance,
+    isConfigured: true,
+    supabaseUrl,
   };
 }

@@ -74,8 +74,7 @@ export type ProcessType = keyof typeof PROCESS_TYPES;
 
 export const USER_ROLES = {
   ADMIN: "Administrador / Gestor",
-  CADISTA: "Cadista (Design / Modelagem)",
-  OPERADOR_IMPRESSAO: "Operador de Impressão 3D & Resinas",
+  OPERADOR_IMPRESSAO: "Operador de Resina / Impressão 3D",
 } as const;
 
 export type UserRole = keyof typeof USER_ROLES | "OPERADOR_RESINA" | "PROTETICO_ACABAMENTO";
@@ -83,18 +82,13 @@ export type UserRole = keyof typeof USER_ROLES | "OPERADOR_RESINA" | "PROTETICO_
 export const ROLE_PERMISSIONS: Record<string, { label: string; description: string; paths: string[] }> = {
   ADMIN: {
     label: "Administrador / Gestor",
-    description: "Acesso irrestrito a todos os setores do laboratório, configurações e auditoria.",
-    paths: ["/dashboard", "/cadista/status", "/fila", "/montagem", "/resinas", "/calibracoes", "/impressoras", "/historico", "/admin/usuarios", "/admin/configuracoes"],
-  },
-  CADISTA: {
-    label: "Cadista (Design / Modelagem)",
-    description: "Criação de novos trabalhos e encaminhamento para a fila de impressão 3D.",
-    paths: ["/dashboard", "/cadista/status", "/fila", "/historico"],
+    description: "Acesso irrestrito a todos os setores do laboratório, configurações, histórico completo e gestão de usuários.",
+    paths: ["/dashboard", "/fila", "/montagem", "/resinas", "/calibracoes", "/impressoras", "/historico", "/admin/usuarios", "/admin/configuracoes"],
   },
   OPERADOR_IMPRESSAO: {
-    label: "Operador de Impressão 3D & Resinas",
-    description: "Gestão completa da esteira 3D: fila de impressão, envio de mesas, impressoras, resinas e calibrações.",
-    paths: ["/dashboard", "/fila", "/montagem", "/impressoras", "/resinas", "/calibracoes", "/historico"],
+    label: "Operador de Resina / Impressão 3D",
+    description: "Gestão operacional da esteira 3D: fila de impressão, montagem de mesas, impressoras, resinas e calibrações.",
+    paths: ["/dashboard", "/fila", "/montagem", "/impressoras", "/resinas", "/calibracoes"],
   },
 };
 

@@ -7,8 +7,6 @@ import { ChevronRight, Home } from "lucide-react";
 
 const ROUTE_LABELS: Record<string, string> = {
   dashboard: "Início",
-  cadista: "CAD",
-  status: "Novo Trabalho",
   fila: "Fila de Espera",
   montagem: "Montagem de Mesa",
   impressoras: "Impressoras",

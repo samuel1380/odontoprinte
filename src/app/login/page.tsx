@@ -32,7 +32,7 @@ export default function LoginPage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [requestedRole, setRequestedRole] = useState<UserRole>("CADISTA");
+  const [requestedRole, setRequestedRole] = useState<UserRole>("OPERADOR_IMPRESSAO");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -339,8 +339,8 @@ export default function LoginPage() {
                   onChange={(e) => setRequestedRole(e.target.value as UserRole)}
                   className="w-full px-4 py-2.5 text-base sm:text-sm rounded-xl border border-slate-700/80 bg-slate-900 text-white focus:outline-none focus:ring-2 focus:ring-cyan-400 transition font-medium"
                 >
-                  <option value="CADISTA">Cadista (Design CAD)</option>
-                  <option value="OPERADOR_IMPRESSAO">Operador de Impressão 3D & Resinas</option>
+                  <option value="OPERADOR_IMPRESSAO">Operador de Resina / Impressão 3D</option>
+                  <option value="ADMIN">Administrador / Gestor</option>
                 </select>
               </div>
             )}

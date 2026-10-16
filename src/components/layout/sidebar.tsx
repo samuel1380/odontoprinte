@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  FileCheck2,
   ListOrdered,
   LayoutGrid,
   FlaskConical,
@@ -57,11 +56,6 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           href: "/montagem",
           icon: LayoutGrid,
         },
-        {
-          title: "Novo Caso (Cadista)",
-          href: "/cadista/status",
-          icon: FileCheck2,
-        },
       ],
     },
     {
@@ -91,6 +85,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           title: "Histórico Completo",
           href: "/historico",
           icon: History,
+          roles: ["ADMIN"],
         },
         {
           title: "Configurações",

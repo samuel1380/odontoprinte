@@ -44,8 +44,8 @@ export function Topbar({ onOpenMobileMenu }: TopbarProps) {
 
   const roleColors: Record<string, string> = {
     ADMIN: "bg-white text-slate-950 border-transparent font-semibold",
-    CADISTA: "bg-cyan-950 text-cyan-300 border-cyan-800/60",
     OPERADOR_IMPRESSAO: "bg-emerald-950 text-emerald-300 border-emerald-800/60",
+    OPERADOR_RESINA: "bg-emerald-950 text-emerald-300 border-emerald-800/60",
   };
 
   return (
