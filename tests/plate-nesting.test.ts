@@ -502,6 +502,47 @@ describe("raster", () => {
     expect(minD).toBeGreaterThanOrEqual(2);
   });
 
+  it("organização máxima: arcos dentários em formato U cabem com entrelaçamento e rotações opostas", async () => {
+    // Modelos de arcos dentários (U 44×36 mm com vão interno 24×26 mm)
+    const rect = (x0: number, y0: number, x1: number, y1: number) => [
+      [[x0, y0], [x1, y0], [x1, y1]],
+      [[x0, y0], [x1, y1], [x0, y1]],
+    ];
+    const dentalArchTris = trisStl([
+      ...rect(0, 0, 10, 36), // ramo esquerdo
+      ...rect(0, 0, 44, 10), // anterior / frente
+      ...rect(34, 0, 44, 36), // ramo direito
+    ]);
+    const archStl = await parseStlTriangles(dentalArchTris);
+    const grid = rasterizeTriangles(archStl.positions, 1);
+
+    const models = Array.from({ length: 12 }, (_, i) => ({
+      id: `arch_${i + 1}`,
+      label: `Paciente ${i + 1}`,
+      w: 44,
+      d: 36,
+      grid,
+    }));
+
+    // Na Halot Sky (198×123mm), com rotações invertidas (180°) e entrelaçamento molar-com-molar
+    const res = packRaster(models, 198, 123, 2, 1.5, 1);
+    expect(res.placed.length).toBeGreaterThanOrEqual(9);
+
+    // Validação de não-sobreposição
+    const owner = new Map<string, string>();
+    for (const p of res.placed) {
+      const pix = p.pix!;
+      for (let j = 0; j < pix.h; j++) {
+        for (let i = 0; i < pix.w; i++) {
+          if (!pix.cells[j * pix.w + i]) continue;
+          const key = `${Math.round(p.x + i)},${Math.round(p.y + j)}`;
+          expect(owner.has(key)).toBe(false);
+          owner.set(key, p.id);
+        }
+      }
+    }
+  });
+
   it("raster é determinístico", async () => {
     const c = await parseStlTriangles(cShapeStl());
     const s = await parseStlTriangles(squareStl(10));

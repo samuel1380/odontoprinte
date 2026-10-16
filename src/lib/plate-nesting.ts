@@ -41,8 +41,10 @@ export interface PlacedItem extends PackItem {
   pix?: PlacedPixels;
 }
 
-/** Ângulos tentados (0/90 exatos + diagonais como no fatiador). */
-export const PACK_ANGLES = [0, 90, 30, -30, 45, -45, 60, -60, 15, -15, 75, -75];
+/** Ângulos tentados (0/90/180/270 cardinais exatos + diagonais para entrelaçar arcos opostos). */
+export const PACK_ANGLES = [
+  0, 180, 90, 270, 45, -45, 135, -135, 30, -30, 150, -150, 60, -60, 120, -120, 15, -15, 75, -75,
+];
 
 /** Caixa alinhada aos eixos de um retângulo girado (horário). */
 export function rotatedBox(w: number, d: number, angleDeg: number): { w: number; d: number } {
@@ -895,7 +897,7 @@ export function packRaster(
     for (let i = 0; i < base.cells.length; i++) if (base.cells[i]) area++;
     const angles: PreparedAngle[] = PACK_ANGLES.map((angle) => {
       const rot = rotateGrid(base, angle);
-      const dil = dilateGrid(rot.grid, r + (rot.safe ? 0 : 1));
+      const dil = dilateGrid(rot.grid, r + (rot.safe ? 0 : (gap > 1 ? 0 : 1)));
       const setCells: number[] = [];
       for (let i = 0; i < dil.cells.length; i++) if (dil.cells[i]) setCells.push(i);
       const box = rotatedBox(m.w, m.d, angle);
@@ -920,11 +922,12 @@ export function packRaster(
   for (const p of preps) prepById.set(p.item.id, p);
 
   const attempts: Prep[][] = [
-    ...PACK_ORDERINGS.slice(0, 4).map((o) =>
+    ...PACK_ORDERINGS.map((o) =>
       [...preps].sort((a, b) => o(a.item, b.item))
     ),
     [...preps].sort((a, b) => b.areaCells - a.areaCells || (a.item.id < b.item.id ? -1 : 1)),
-    ...[7, 42, 123, 999].map((s) => shufflePack(preps, s)),
+    [...preps].sort((a, b) => a.areaCells - b.areaCells || (a.item.id < b.item.id ? -1 : 1)),
+    ...[7, 42, 123, 999, 2026, 3141].map((s) => shufflePack(preps, s)),
   ];
 
   for (const queue of attempts) {
@@ -962,28 +965,28 @@ export function packRaster(
         const a = p.angles[ai];
         for (let cy = 0; cy + a.gh <= ph; cy += step) {
           for (let cx = 0; cx + a.gw <= pw; cx += step) {
-            if (rectFree(cx, cy, a.gw, a.gh)) {
-              // caixa livre: encaixe exato sem varrer células
-              if (!pick || cy < pick.cy || (cy === pick.cy && (cx < pick.cx || (cx === pick.cx && ai < pick.ai)))) {
-                pick = { cx, cy, a, ai };
-              }
-              break; // mais à esquerda nesta fileira
-            }
             let ok = true;
-            for (let k = 0; k < a.setCells.length; k++) {
-              const c = a.setCells[k];
-              const gx = cx + (c % a.gw);
-              const gy = cy + Math.floor(c / a.gw);
-              if (plate[gy * pw + gx]) {
-                ok = false;
-                break;
+            if (!rectFree(cx, cy, a.gw, a.gh)) {
+              for (let k = 0; k < a.setCells.length; k++) {
+                const c = a.setCells[k];
+                const gx = cx + (c % a.gw);
+                const gy = cy + Math.floor(c / a.gw);
+                if (plate[gy * pw + gx]) {
+                  ok = false;
+                  break;
+                }
               }
             }
             if (!ok) continue;
-            if (!pick || cy < pick.cy || (cy === pick.cy && (cx < pick.cx || (cx === pick.cx && ai < pick.ai)))) {
+            // Critério de compactação (Bottom-Left / Bounding Box mínimo)
+            const score = cy * pw + cx;
+            if (
+              !pick ||
+              score < (pick.cy * pw + pick.cx) ||
+              (score === (pick.cy * pw + pick.cx) && ai < pick.ai)
+            ) {
               pick = { cx, cy, a, ai };
             }
-            break; // mais à esquerda nesta fileira
           }
         }
       }
@@ -1089,25 +1092,20 @@ export function packRaster(
         const a = prep.angles[ai];
         for (let cy = 0; cy + a.gh <= ph; cy += 1) {
           for (let cx = 0; cx + a.gw <= pw; cx += 1) {
-            if (rectFree(cx, cy, a.gw, a.gh)) {
-              if (!pick || cy < pick.cy || (cy === pick.cy && (cx < pick.cx || (cx === pick.cx && ai < pick.ai)))) {
-                pick = { cx, cy, a, ai };
-              }
-              break;
-            }
             let ok = true;
-            for (let k = 0; k < a.setCells.length; k++) {
-              const c = a.setCells[k];
-              if (plate[(cy + Math.floor(c / a.gw)) * pw + (cx + (c % a.gw))]) {
-                ok = false;
-                break;
+            if (!rectFree(cx, cy, a.gw, a.gh)) {
+              for (let k = 0; k < a.setCells.length; k++) {
+                const c = a.setCells[k];
+                if (plate[(cy + Math.floor(c / a.gw)) * pw + (cx + (c % a.gw))]) {
+                  ok = false;
+                  break;
+                }
               }
             }
             if (!ok) continue;
             if (!pick || cy < pick.cy || (cy === pick.cy && (cx < pick.cx || (cx === pick.cx && ai < pick.ai)))) {
               pick = { cx, cy, a, ai };
             }
-            break;
           }
         }
       }
@@ -1145,15 +1143,18 @@ export function packRaster(
       };
     }
 
-    // Arruína e recria: remove 2 peças grandes e tenta recolocar tudo
-    // (sobras primeiro) — repete até não melhorar mais (máx 4 rodadas).
+    // Arruína e recria: remove peças e tenta recolocar tudo
+    // (sobras primeiro) — repete até não melhorar mais (máx 8 rodadas).
     // É o "organizar até caber o máximo": só aceita se couber MAIS peças.
-    for (let round = 0; round < 4; round++) {
+    for (let round = 0; round < 8; round++) {
       if (!best || best.unplaced.length === 0 || best.placed.length < 3) break;
       const bySize = [...best.placed].sort(
         (a, b) => b.placedW * b.placedD - a.placedW * a.placedD
       );
-      const victims = [bySize[round % bySize.length], bySize[(round + 1) % bySize.length]];
+      const victims = [
+        bySize[round % bySize.length],
+        bySize[(round + 1) % bySize.length],
+      ];
       const victimIds = new Set(victims.map((v) => v.id));
       plate.fill(0);
       rebuildSat();
@@ -1162,9 +1163,8 @@ export function packRaster(
         const prep = prepById.get(p.id);
         const entry = prep?.angles.find((a) => a.angle === (p as PlacedItem).angle);
         if (!prep || !entry) continue;
-        const pad0 = entry.pad;
-        const cx = Math.round(((p as PlacedItem).x - margin) / cell) - pad0;
-        const cy = Math.round(((p as PlacedItem).y - margin) / cell) - pad0;
+        const cx = Math.round(((p as PlacedItem).x - margin) / cell);
+        const cy = Math.round(((p as PlacedItem).y - margin) / cell);
         markPlaced(cx, cy, entry);
       }
       const retryQueue: { item: PackItem; prep: Prep }[] = [];
@@ -1185,13 +1185,8 @@ export function packRaster(
           const a = prep.angles[ai];
           for (let cy = 0; cy + a.gh <= ph; cy += 1) {
             for (let cx = 0; cx + a.gw <= pw; cx += 1) {
-              if (rectFree(cx, cy, a.gw, a.gh)) {
-                if (!pick || cy < pick.cy || (cy === pick.cy && (cx < pick.cx || (cx === pick.cx && ai < pick.ai)))) {
-                  pick = { cx, cy, a, ai };
-                }
-                break;
-              }
-              let ok = true;
+            let ok = true;
+            if (!rectFree(cx, cy, a.gw, a.gh)) {
               for (let k = 0; k < a.setCells.length; k++) {
                 const c = a.setCells[k];
                 if (plate[(cy + Math.floor(c / a.gw)) * pw + (cx + (c % a.gw))]) {
@@ -1199,11 +1194,11 @@ export function packRaster(
                   break;
                 }
               }
-              if (!ok) continue;
-              if (!pick || cy < pick.cy || (cy === pick.cy && (cx < pick.cx || (cx === pick.cx && ai < pick.ai)))) {
-                pick = { cx, cy, a, ai };
-              }
-              break;
+            }
+            if (!ok) continue;
+            if (!pick || cy < pick.cy || (cy === pick.cy && (cx < pick.cx || (cx === pick.cx && ai < pick.ai)))) {
+              pick = { cx, cy, a, ai };
+            }
             }
           }
         }

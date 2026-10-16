@@ -59,6 +59,7 @@ export default function MontagemPage() {
   const [plateH, setPlateH] = useState("");
   const [savingPlate, setSavingPlate] = useState(false);
   const [gap, setGap] = useState(2);
+  const [margin, setMargin] = useState(1.5);
   const [models, setModels] = useState<UploadModel[]>([]);
   const [copied, setCopied] = useState(false);
   const [building, setBuilding] = useState(false);
@@ -178,6 +179,7 @@ export default function MontagemPage() {
     effW,
     effD,
     gap,
+    margin,
   ]);
   useEffect(() => {
     setPacking(true);
@@ -210,7 +212,7 @@ export default function MontagemPage() {
           setResult(null);
           return;
         }
-        setResult(packRaster(items, effW, effD, Math.max(0, gap), 2));
+        setResult(packRaster(items, effW, effD, Math.max(0, gap), Math.max(0.5, margin)));
       } finally {
         setPacking(false);
       }
@@ -246,7 +248,7 @@ export default function MontagemPage() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.strokeStyle = "#334155";
     ctx.lineWidth = 2;
-    ctx.strokeRect(2 * S, 2 * S, (effW - 4) * S, (effD - 4) * S);
+    ctx.strokeRect(margin * S, margin * S, (effW - margin * 2) * S, (effD - margin * 2) * S);
     result.placed.forEach((p, i) => {
       const color = MAP_COLORS[i % MAP_COLORS.length];
       const pix = (p as any).pix as
@@ -504,17 +506,33 @@ export default function MontagemPage() {
                 <Ruler className="w-3.5 h-3.5" />
                 Salvar medida na impressora
               </Button>
-              <label className="text-[11px] text-slate-400 flex items-center gap-1.5 ml-auto">
-                Espaço p/ conector (mm)
-                <input
-                  type="number"
-                  min={1}
-                  max={10}
-                  value={gap}
-                  onChange={(e) => setGap(Math.max(1, Number(e.target.value) || 1))}
-                  className="w-14 bg-slate-950 border border-slate-700 text-white rounded-lg px-1.5 py-1 text-[11px]"
-                />
-              </label>
+              <div className="flex items-center gap-3 ml-auto flex-wrap">
+                <label className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                  Margem borda (mm)
+                  <input
+                    type="number"
+                    min={0.5}
+                    max={10}
+                    step={0.5}
+                    value={margin}
+                    onChange={(e) => setMargin(Math.max(0.5, Number(e.target.value) || 0.5))}
+                    className="w-14 bg-slate-950 border border-slate-700 text-white rounded-lg px-1.5 py-1 text-[11px]"
+                    title="Distância de segurança das bordas da chapa (padrão 1,5 mm)"
+                  />
+                </label>
+                <label className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                  Folga entre peças (mm)
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={gap}
+                    onChange={(e) => setGap(Math.max(1, Number(e.target.value) || 1))}
+                    className="w-14 bg-slate-950 border border-slate-700 text-white rounded-lg px-1.5 py-1 text-[11px]"
+                    title="Folga mínima entre peças para conector e anti-fusão (padrão 2 mm)"
+                  />
+                </label>
+              </div>
             </div>
           </div>
 
