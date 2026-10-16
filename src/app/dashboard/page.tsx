@@ -6,6 +6,7 @@ import { AppShell } from "@/components/layout/shell";
 import { OdontoPrintService } from "@/services/odontoprint-service";
 import { DashboardMetrics } from "@/types/domain";
 import { ActivityItem } from "@/lib/activity-feed";
+import { useLabSync } from "@/lib/use-lab-sync";
 import {
   Printer,
   ListOrdered,
@@ -35,8 +36,8 @@ export default function DashboardPage() {
   const [, setTick] = useState(0);
 
   useEffect(() => {
-    async function load() {
-      setIsLoading(true);
+    async function load(silent = false) {
+      if (!silent) setIsLoading(true);
       try {
         const [m, a, p] = await Promise.all([
           OdontoPrintService.getDashboardMetrics(),
@@ -54,6 +55,23 @@ export default function DashboardPage() {
     const timer = setInterval(() => setTick((t) => t + 1), 30000);
     return () => clearInterval(timer);
   }, []);
+
+  useLabSync(() => {
+    (async () => {
+      try {
+        const [m, a, p] = await Promise.all([
+          OdontoPrintService.getDashboardMetrics(),
+          OdontoPrintService.getRecentActivities(15),
+          OdontoPrintService.getPrintingOverview(),
+        ]);
+        setMetrics(m);
+        setActivities(a);
+        setPrinting(p);
+      } catch {
+        // silencioso no fundo
+      }
+    })();
+  });
 
   const elapsed = (startedAt?: string | null): string => {
     if (!startedAt) return "";

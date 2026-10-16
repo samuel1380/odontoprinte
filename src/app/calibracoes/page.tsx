@@ -16,19 +16,20 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDate } from "@/lib/utils";
+import { useLabSync } from "@/lib/use-lab-sync";
 import { toast } from "sonner";
 
 export default function CalibracoesPage() {
   const [calibrations, setCalibrations] = useState<ResinCalibrationDetail[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const loadCalibrations = async () => {
-    setIsLoading(true);
+  const loadCalibrations = async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setIsLoading(true);
     try {
       const data = await OdontoPrintService.getCalibrations();
       setCalibrations(data);
     } catch {
-      toast.error("Erro ao carregar calibrações.");
+      if (!opts?.silent) toast.error("Erro ao carregar calibrações.");
     } finally {
       setIsLoading(false);
     }
@@ -37,6 +38,8 @@ export default function CalibracoesPage() {
   useEffect(() => {
     loadCalibrations();
   }, []);
+
+  useLabSync(() => loadCalibrations({ silent: true }));
 
   return (
     <AppShell>

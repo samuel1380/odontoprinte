@@ -19,6 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { Badge } from "@/components/ui/badge";
+import { APP_VERSION } from "@/lib/version";
 
 interface NavItem {
   title: string;
@@ -221,6 +222,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
               Bancada
             </span>
           </div>
+          <p className="text-center text-[9px] text-slate-600 mt-1.5 font-mono">v{APP_VERSION}</p>
         </div>
       </aside>
     </>

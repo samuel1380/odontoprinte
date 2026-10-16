@@ -64,7 +64,27 @@ function loadLocal<T>(key: string, fallback: T): T {
 function saveLocal<T>(key: string, val: T): void {
   if (typeof window !== "undefined") {
     try {
-      localStorage.setItem(key, JSON.stringify(val));
+      let v: any = val;
+      // Teto anti-lentidão: logs e históricos crescem a cada ação e o
+      // parse/stringify de MBs trava o aparelho. Mantém só o recente
+      // (o banco central continua com tudo).
+      if (key === "odontoprint_audit_logs" && Array.isArray(v) && v.length > 300) {
+        v = v.slice(0, 300);
+      }
+      if (key === "odontoprint_item_history" && Array.isArray(v) && v.length > 2000) {
+        v = v.slice(0, 2000);
+      }
+      if (
+        (key === "odontoprint_deleted_batches" ||
+          key === "odontoprint_deleted_cards" ||
+          key === "odontoprint_deleted_resins" ||
+          key === "odontoprint_deleted_printers") &&
+        Array.isArray(v) &&
+        v.length > 2000
+      ) {
+        v = v.slice(-2000);
+      }
+      localStorage.setItem(key, JSON.stringify(v));
     } catch {
       // ignore
     }
@@ -170,32 +190,37 @@ export class OdontoPrintService {
    * continua no banco" nem "salvou aqui e sumiu nos outros aparelhos".
    * Fotografa os mocks (fonte da verdade após os loadLocal de cada método).
    */
-  private static snapLocals(_keys?: string[]): Record<string, any[]> {
-    const deep = (v: any[]): any[] => {
+  private static snapLocals(keys?: string[]): Record<string, any[]> {
+    const ALL: Record<string, any[]> = {
+      odontoprint_batches: mockPrintBatches,
+      odontoprint_job_items: mockPrintJobItems,
+      odontoprint_jobs: mockPrintJobs,
+      odontoprint_print_runs: mockPrintRuns,
+      odontoprint_print_run_items: mockPrintRunItems,
+      odontoprint_item_history: mockPrintItemHistory,
+      odontoprint_finishing_items: mockFinishingItems,
+      odontoprint_cases: mockCases,
+      odontoprint_resin_batches: mockResinBatches,
+      odontoprint_calibrations: mockCalibrations,
+      odontoprint_printers: mockPrinters,
+      odontoprint_maintenances: mockMaintenances,
+    };
+    const snap: Record<string, any[]> = {};
+    for (const k of keys || Object.keys(ALL)) {
+      const arr = ALL[k];
+      if (!Array.isArray(arr)) continue;
       try {
-        return JSON.parse(JSON.stringify(v));
+        snap[k] = JSON.parse(JSON.stringify(arr));
       } catch {
-        return [...v];
+        snap[k] = [...arr];
       }
-    };
-    return {
-      odontoprint_batches: deep(mockPrintBatches),
-      odontoprint_job_items: deep(mockPrintJobItems),
-      odontoprint_jobs: deep(mockPrintJobs),
-      odontoprint_print_runs: deep(mockPrintRuns),
-      odontoprint_print_run_items: deep(mockPrintRunItems),
-      odontoprint_item_history: deep(mockPrintItemHistory),
-      odontoprint_finishing_items: deep(mockFinishingItems),
-      odontoprint_cases: deep(mockCases),
-      odontoprint_resin_batches: deep(mockResinBatches),
-      odontoprint_calibrations: deep(mockCalibrations),
-      odontoprint_printers: deep(mockPrinters),
-      odontoprint_maintenances: deep(mockMaintenances),
-      odontoprint_deleted_resins: deep(loadLocal<string[]>("odontoprint_deleted_resins", [])),
-      odontoprint_deleted_printers: deep(loadLocal<string[]>("odontoprint_deleted_printers", [])),
-      odontoprint_deleted_batches: Array.from(tombstoneBatches),
-      odontoprint_deleted_cards: Array.from(tombstoneCards),
-    };
+    }
+    // Tombstones (pequenos, sempre incluídos)
+    snap.odontoprint_deleted_resins = Array.from(this.deletedIds("odontoprint_deleted_resins"));
+    snap.odontoprint_deleted_printers = Array.from(this.deletedIds("odontoprint_deleted_printers"));
+    snap.odontoprint_deleted_batches = Array.from(tombstoneBatches);
+    snap.odontoprint_deleted_cards = Array.from(tombstoneCards);
+    return snap;
   }
 
   private static restoreLocals(snap: Record<string, any[]>): void {
@@ -503,7 +528,7 @@ export class OdontoPrintService {
     }));
 
     // Persist in mock state & localStorage (com snapshot p/ rollback estrito)
-    const snapCadista = this.snapLocals();
+    const snapCadista = this.snapLocals(["odontoprint_cases", "odontoprint_jobs", "odontoprint_job_items"]);
     mockCases = loadLocal("odontoprint_cases", mockCases);
     mockCases.unshift(newCase);
     saveLocal("odontoprint_cases", mockCases);
@@ -2949,7 +2974,7 @@ export class OdontoPrintService {
       plate_depth_mm: dims.depth_mm && dims.depth_mm > 0 ? dims.depth_mm : null,
       plate_height_mm: dims.height_mm && dims.height_mm > 0 ? dims.height_mm : null,
     };
-    const snap = this.snapLocals();
+    const snap = this.snapLocals(["odontoprint_printers"]);
     printer.plate_width_mm = clean.plate_width_mm;
     printer.plate_depth_mm = clean.plate_depth_mm;
     printer.plate_height_mm = clean.plate_height_mm;
@@ -2981,7 +3006,12 @@ export class OdontoPrintService {
     mockCalibrations = loadLocal<ResinCalibration[]>("odontoprint_calibrations", mockCalibrations);
     mockPrintRuns = loadLocal<PrintRun[]>("odontoprint_print_runs", mockPrintRuns);
 
-    const snap = this.snapLocals();
+    const snap = this.snapLocals([
+      "odontoprint_printers",
+      "odontoprint_maintenances",
+      "odontoprint_calibrations",
+      "odontoprint_print_runs",
+    ]);
 
     // 1. Remove do estado e localStorage de impressoras
     mockPrinters = mockPrinters.filter((p) => p.id !== id);
@@ -3062,7 +3092,7 @@ export class OdontoPrintService {
 
     mockMaintenances = loadLocal("odontoprint_maintenances", mockMaintenances);
 
-    const snapMaint = this.snapLocals();
+    const snapMaint = this.snapLocals(["odontoprint_maintenances"]);
 
     mockMaintenances.unshift(newMaint);
     saveLocal("odontoprint_maintenances", mockMaintenances);
@@ -3235,7 +3265,11 @@ export class OdontoPrintService {
     mockCalibrations = loadLocal<ResinCalibration[]>("odontoprint_calibrations", mockCalibrations);
     mockPrintRuns = loadLocal<PrintRun[]>("odontoprint_print_runs", mockPrintRuns);
 
-    const snap = this.snapLocals();
+    const snap = this.snapLocals([
+      "odontoprint_resin_batches",
+      "odontoprint_calibrations",
+      "odontoprint_print_runs",
+    ]);
 
     // 1. Remove do estado e localStorage de lotes de resina
     mockResinBatches = mockResinBatches.filter((b) => b.id !== id);
@@ -3426,7 +3460,7 @@ export class OdontoPrintService {
     mockCalibrations = loadLocal("odontoprint_calibrations", mockCalibrations);
     mockResinBatches = loadLocal("odontoprint_resin_batches", mockResinBatches);
 
-    const snapCal = this.snapLocals();
+    const snapCal = this.snapLocals(["odontoprint_calibrations", "odontoprint_resin_batches"]);
 
     mockCalibrations.unshift(newCal);
     saveLocal("odontoprint_calibrations", mockCalibrations);
@@ -3625,7 +3659,11 @@ export class OdontoPrintService {
     mockPrintRunItems = loadLocal("odontoprint_print_run_items", mockPrintRunItems);
     mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
 
-    const snapRun = this.snapLocals();
+    const snapRun = this.snapLocals([
+      "odontoprint_print_runs",
+      "odontoprint_print_run_items",
+      "odontoprint_job_items",
+    ]);
 
     mockPrintRuns.unshift(newRun);
     saveLocal("odontoprint_print_runs", mockPrintRuns);
@@ -3721,7 +3759,13 @@ export class OdontoPrintService {
       return { success: false, completed_count: 0, failed_count: 0, error: "Esta impressão já foi finalizada." };
     }
 
-    const snapFinalize = this.snapLocals();
+    const snapFinalize = this.snapLocals([
+      "odontoprint_print_runs",
+      "odontoprint_print_run_items",
+      "odontoprint_job_items",
+      "odontoprint_finishing_items",
+      "odontoprint_jobs",
+    ]);
 
     const now = new Date().toISOString();
     run.status = "FINALIZADA";
@@ -4571,7 +4615,11 @@ export class OdontoPrintService {
     const item = mockFinishingItems.find((f) => f.id === id);
     if (!item) return { success: false, error: "Trabalho não encontrado na bancada de acabamento." };
 
-    const snapFinish = this.snapLocals();
+    const snapFinish = this.snapLocals([
+      "odontoprint_finishing_items",
+      "odontoprint_job_items",
+      "odontoprint_jobs",
+    ]);
 
     const now = new Date().toISOString();
     item.status = "APROVADO_CQ";

@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog } from "@/components/ui/dialog";
 import { formatDate } from "@/lib/utils";
+import { useLabSync } from "@/lib/use-lab-sync";
 import { toast } from "sonner";
 
 export default function ResinasPage() {
@@ -29,13 +30,13 @@ export default function ResinasPage() {
   const [batchToDelete, setBatchToDelete] = useState<ResinBatch | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const loadBatches = async () => {
-    setIsLoading(true);
+  const loadBatches = async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setIsLoading(true);
     try {
       const data = await OdontoPrintService.getResinBatches();
       setBatches(data);
     } catch {
-      toast.error("Erro ao carregar lotes de resina.");
+      if (!opts?.silent) toast.error("Erro ao carregar lotes de resina.");
     } finally {
       setIsLoading(false);
     }
@@ -44,6 +45,8 @@ export default function ResinasPage() {
   useEffect(() => {
     loadBatches();
   }, []);
+
+  useLabSync(() => loadBatches({ silent: true }));
 
   const handleDeleteBatch = async () => {
     if (!batchToDelete) return;

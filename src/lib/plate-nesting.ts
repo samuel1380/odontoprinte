@@ -197,6 +197,20 @@ export async function parseStlTriangles(input: File | Blob | ArrayBuffer): Promi
   if (count === 0) {
     throw new Error("Não foi possível ler a geometria do STL (arquivo vazio ou inválido).");
   }
+  // Normaliza XY para a origem: o raster e o writer giram no MESMO pivô
+  // (canto do bbox), senão o planejado e o gravado divergem e fundem peças.
+  let minX = Infinity,
+    minY = Infinity;
+  for (let i = 0; i < positions.length; i += 3) {
+    if (positions[i] < minX) minX = positions[i];
+    if (positions[i + 1] < minY) minY = positions[i + 1];
+  }
+  if (Number.isFinite(minX) && (minX !== 0 || minY !== 0)) {
+    for (let i = 0; i < positions.length; i += 3) {
+      positions[i] -= minX;
+      positions[i + 1] -= minY;
+    }
+  }
   return { positions, count };
 }
 
@@ -258,15 +272,36 @@ export function buildPositionedStl(parts: PlacementSpec[]): ArrayBuffer {
   const prepared = parts.map((p) => {
     const n = Math.floor(p.positions.length / 9);
     total += n;
-    let minX = Infinity,
-      minY = Infinity,
+    // Caixa do modelo (pivô comum com o raster: canto da caixa).
+    let x0 = Infinity,
+      y0 = Infinity,
+      x1 = -Infinity,
+      y1 = -Infinity,
       minZ = Infinity;
     for (let i = 0; i < p.positions.length; i += 3) {
-      const g = rotPt(p.positions[i], p.positions[i + 1], p.angle);
-      if (g.x < minX) minX = g.x;
-      if (g.y < minY) minY = g.y;
-      if (p.positions[i + 2] < minZ) minZ = p.positions[i + 2];
+      const x = p.positions[i];
+      const y = p.positions[i + 1];
+      const z = p.positions[i + 2];
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) continue;
+      if (x < x0) x0 = x;
+      if (y < y0) y0 = y;
+      if (x > x1) x1 = x;
+      if (y > y1) y1 = y;
+      if (z < minZ) minZ = z;
     }
+    if (!Number.isFinite(x0)) {
+      throw new Error("Geometria inválida em uma das peças (coordenadas fora do padrão).");
+    }
+    // Cantos da caixa girados: mesma convenção do raster (nunca a geometria,
+    // que pode não tocar as bordas em formas ocas como o U).
+    const corners = [
+      rotPt(x0, y0, p.angle),
+      rotPt(x1, y0, p.angle),
+      rotPt(x0, y1, p.angle),
+      rotPt(x1, y1, p.angle),
+    ];
+    const minX = Math.min(corners[0].x, corners[1].x, corners[2].x, corners[3].x);
+    const minY = Math.min(corners[0].y, corners[1].y, corners[2].y, corners[3].y);
     return { n, minX, minY, drop: p.dropToBed === false ? 0 : minZ };
   });
 

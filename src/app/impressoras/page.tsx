@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog } from "@/components/ui/dialog";
 import { formatDate } from "@/lib/utils";
+import { useLabSync } from "@/lib/use-lab-sync";
 import { toast } from "sonner";
 
 export default function ImpressorasPage() {
@@ -39,13 +40,13 @@ export default function ImpressorasPage() {
   const [printerToDelete, setPrinterToDelete] = useState<PrinterWithStatus | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const loadPrinters = async () => {
-    setIsLoading(true);
+  const loadPrinters = async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setIsLoading(true);
     try {
       const data = await OdontoPrintService.getPrinters();
       setPrinters(data);
     } catch {
-      toast.error("Erro ao carregar impressoras.");
+      if (!opts?.silent) toast.error("Erro ao carregar impressoras.");
     } finally {
       setIsLoading(false);
     }
@@ -54,6 +55,8 @@ export default function ImpressorasPage() {
   useEffect(() => {
     loadPrinters();
   }, []);
+
+  useLabSync(() => loadPrinters({ silent: true }));
 
   const handleCreatePrinter = async (e: React.FormEvent) => {
     e.preventDefault();

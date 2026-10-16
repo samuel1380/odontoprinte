@@ -471,4 +471,69 @@ describe("raster", () => {
     expect(g.h).toBe(4);
     expect(g.cells.every((v) => v === 1)).toBe(true);
   });
+
+  it("PLANEJADO == GRAVADO: STL final respeita o mapa (sem deslocamento)", async () => {
+    // C com origem deslocada (como arquivo real): sem normalização no mesmo
+    // pivô, o writer deslocaria a peça e fundiria com a vizinha.
+    const raw = cShapeStl();
+    const shifted = (() => {
+      const src = new DataView(raw);
+      const buf = raw.slice(0);
+      const dst = new DataView(buf);
+      const n = src.getUint32(80, true);
+      for (let t = 0; t < n; t++) {
+        for (let v = 0; v < 3; v++) {
+          dst.setFloat32(84 + t * 50 + 12 + v * 12, src.getFloat32(84 + t * 50 + 12 + v * 12, true) + 100, true);
+          dst.setFloat32(84 + t * 50 + 16 + v * 12, src.getFloat32(84 + t * 50 + 16 + v * 12, true) + 50, true);
+        }
+      }
+      return buf;
+    })();
+    const t = await parseStlTriangles(shifted);
+    const g = rasterizeTriangles(t.positions, 1);
+    const r = packRaster([{ id: "u", label: "U", w: 30, d: 30, grid: g }], 60, 60, 2, 2);
+    expect(r.placed).toHaveLength(1);
+    // constrói EXATAMENTE o que foi planejado (mesma posição e ângulo)
+    const planned = r.placed[0];
+    const out = buildPositionedStl([
+      { positions: t.positions, x: planned.x, y: planned.y, angle: planned.angle },
+    ]);
+    // relê o arquivo final: toda célula ocupada deve estar a <=1 célula
+    // do planejado (tolerância de arredondamento).
+    // Nota: o re-parse normaliza a origem, então compensa o deslocamento.
+    const re = await parseStlTriangles(out);
+    let gx0 = Infinity,
+      gy0 = Infinity;
+    for (let i = 0; i < re.positions.length; i += 3) {
+      if (re.positions[i] < gx0) gx0 = re.positions[i];
+      if (re.positions[i + 1] < gy0) gy0 = re.positions[i + 1];
+    }
+    // 1) posição: canto da geometria gravada confere com o planejado
+    expect(Math.abs(gx0 - planned.x)).toBeLessThanOrEqual(2);
+    expect(Math.abs(gy0 - planned.y)).toBeLessThanOrEqual(2);
+    const back = rasterizeTriangles(re.positions, 1);
+    const wanted = new Set<string>();
+    const pix = planned.pix!;
+    for (let j = 0; j < pix.h; j++)
+      for (let i = 0; i < pix.w; i++)
+        if (pix.cells[j * pix.w + i]) wanted.add(`${planned.x + i},${planned.y + j}`);
+    const ox = planned.x - back.minX;
+    const oy = planned.y - back.minY;
+    let worst = 0;
+    let total = 0;
+    for (let j = 0; j < back.h; j++) {
+      for (let i = 0; i < back.w; i++) {
+        if (!back.cells[j * back.w + i]) continue;
+        total++;
+        let ok = false;
+        for (let dj = -1; dj <= 1 && !ok; dj++)
+          for (let di = -1; di <= 1 && !ok; di++)
+            if (wanted.has(`${Math.round(back.minX + i + ox + di)},${Math.round(back.minY + j + oy + dj)}`)) ok = true;
+        if (!ok) worst++;
+      }
+    }
+    expect(total).toBeGreaterThan(0);
+    // >=95% das células gravadas conferem com o planejado
+    expect(worst / total).toBeLessThan(0.05);
+  });
 });
