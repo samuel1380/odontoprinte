@@ -382,6 +382,32 @@ export function packPlate(
 
   let best: PackResult | null = null;
 
+  const consider = (placed: PlacedItem[], unplaced: PackItem[]) => {
+    const usedArea = placed.reduce((s, p) => s + p.w * p.d, 0);
+    const plateArea = plateW * plateD;
+    const candidate: PackResult = {
+      placed,
+      unplaced,
+      utilization: plateArea > 0 ? Math.min(1, usedArea / plateArea) : 0,
+    };
+    if (
+      !best ||
+      candidate.placed.length > best.placed.length ||
+      (candidate.placed.length === best.placed.length && candidate.utilization > best.utilization)
+    ) {
+      best = candidate;
+    }
+  };
+
+  const isPerfect = () => !!best && best.placed.length === valid.length;
+
+  const footprintOptions = (m: PackItem) =>
+    PACK_ANGLES.map((angle) => {
+      const box = rotatedBox(m.w, m.d, angle);
+      return { w: box.w + g, d: box.d + g, angle, rotated: angle !== 0 };
+    });
+
+  // ---- Estratégia 1: MaxRects (guilhotina + melhor encaixe) ----
   for (const order of orderings) {
     for (const scoring of scorings) {
     const queue = [...valid].sort(order);
@@ -405,10 +431,7 @@ export function packPlate(
     };
 
       for (const m of queue) {
-        const options = PACK_ANGLES.map((angle) => {
-          const box = rotatedBox(m.w, m.d, angle);
-          return { w: box.w + g, d: box.d + g, angle, rotated: angle !== 0 };
-        });
+        const options = footprintOptions(m);
         let bestScore: Score | null = null;
         let bestPick: { fx: number; fy: number; fi: number; o: (typeof options)[0] } | null = null;
 
@@ -450,23 +473,103 @@ export function packPlate(
       prune();
     }
 
-      const usedArea = placed.reduce((s, p) => s + p.w * p.d, 0);
-    const plateArea = plateW * plateD;
-    const candidate: PackResult = {
-      placed,
-      unplaced,
-      utilization: plateArea > 0 ? Math.min(1, usedArea / plateArea) : 0,
+      consider(placed, unplaced);
+      if (isPerfect()) break;
+    }
+    if (isPerfect()) break;
+  }
+
+  // ---- Estratégia 2: Bottom-Left-Fill multi-tentativa (ordens heurísticas + embaralhadas) ----
+  if (!isPerfect()) {
+    const mulberry32 = (seed: number) => () => {
+      seed |= 0;
+      seed = (seed + 0x6d2b79f5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
-    if (
-      !best ||
-      candidate.placed.length > best.placed.length ||
-      (candidate.placed.length === best.placed.length && candidate.utilization > best.utilization)
-    ) {
-      best = candidate;
+    const shuffle = (arr: PackItem[], seed: number): PackItem[] => {
+      const a = [...arr];
+      const rnd = mulberry32(seed);
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(rnd() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    };
+
+    const blfPack = (queue: PackItem[]): { placed: PlacedItem[]; unplaced: PackItem[] } => {
+      const placed: PlacedItem[] = [];
+      const unplaced: PackItem[] = [];
+      const rects: { x: number; y: number; w: number; h: number }[] = [];
+      const limX = margin + usableW;
+      const limY = margin + usableD;
+
+      for (const m of queue) {
+        const options = footprintOptions(m);
+        const xs = new Set<number>([margin]);
+        const ys = new Set<number>([margin]);
+        for (const r of rects) {
+          xs.add(r.x + r.w);
+          ys.add(r.y + r.h);
+        }
+        const xsU = Array.from(xs).sort((a, b) => a - b);
+        const ysU = Array.from(ys).sort((a, b) => a - b);
+        const cands: { x: number; y: number; o: (typeof options)[0]; oi: number }[] = [];
+
+        options.forEach((o, oi) => {
+          for (const cy of ysU) {
+            if (cy + o.d > limY + EPS) continue;
+            for (const cx of xsU) {
+              if (cx + o.w > limX + EPS) continue;
+              let ok = true;
+              for (const r of rects) {
+                if (
+                  cx < r.x + r.w - EPS &&
+                  r.x < cx + o.w - EPS &&
+                  cy < r.y + r.h - EPS &&
+                  r.y < cy + o.d - EPS
+                ) {
+                  ok = false;
+                  break;
+                }
+              }
+              if (!ok) continue;
+              cands.push({ x: cx, y: cy, o, oi });
+              break; // mais à esquerda nesta fileira
+            }
+          }
+        });
+
+        if (cands.length === 0) {
+          unplaced.push(m);
+          continue;
+        }
+        cands.sort((a, b) => a.y - b.y || a.x - b.x || a.oi - b.oi);
+        const c = cands[0];
+        placed.push({
+          ...m,
+          x: round1(c.x),
+          y: round1(c.y),
+          angle: c.o.angle,
+          rotated: c.o.rotated,
+          placedW: round1(c.o.w - g),
+          placedD: round1(c.o.d - g),
+        });
+        rects.push({ x: c.x, y: c.y, w: c.o.w, h: c.o.d });
+      }
+      return { placed, unplaced };
+    };
+
+    const blfQueues: PackItem[][] = [
+      ...orderings.map((o) => [...valid].sort(o)),
+      ...[7, 42, 123, 999, 2026].map((s) => shuffle(valid, s)),
+    ];
+    for (const queue of blfQueues) {
+      const { placed, unplaced } = blfPack(queue);
+      consider(placed, unplaced);
+      if (isPerfect()) break;
     }
-    if (best && best.placed.length === valid.length) break; // perfeito: coube tudo
-    }
-    if (best && best.placed.length === valid.length) break;
   }
 
   return best || { placed: [], unplaced: [...models], utilization: 0 };

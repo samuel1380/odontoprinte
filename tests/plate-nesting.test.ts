@@ -209,7 +209,8 @@ describe("packPlate", () => {
     expect(unplacedReason({ id: "x", label: "X", w: 60, d: 55 }, 198, 123, 2, 2)).toBe("no-space");
   });
 
-  it("8 arcos grandes na Sky 2022: teto honesto, sem sobreposição", () => {    const arch = (id: string) => ({ id, label: id, w: 62, d: 55 });
+    it("8 arcos grandes na Sky 2022: teto honesto, sem sobreposição", () => {
+    const arch = (id: string) => ({ id, label: id, w: 62, d: 55 });
     const models = ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8"].map(arch);
     const r = packPlate(models, 198, 123, 2, 2);
     // 3 por fileira × 2 fileiras = teto geométrico sem entrelaçar o U
@@ -219,6 +220,27 @@ describe("packPlate", () => {
     for (const u of r.unplaced) {
       expect(unplacedReason(u, 198, 123, 2, 2)).toBe("no-space");
     }
+  });
+
+  it("set pesado na Mono 4: multi-tentativa supera passada única (>=9)", () => {
+    const models = [
+      { id: "a1", label: "A", w: 64, d: 56 },
+      { id: "a2", label: "A", w: 62, d: 55 },
+      { id: "a3", label: "A", w: 61, d: 54 },
+      { id: "an1", label: "AN", w: 62, d: 32 },
+      { id: "an2", label: "AN", w: 60, d: 30 },
+      { id: "t1", label: "T", w: 26, d: 19 },
+      { id: "t2", label: "T", w: 26, d: 19 },
+      { id: "t3", label: "T", w: 25, d: 18 },
+      { id: "t4", label: "T", w: 25, d: 18 },
+      { id: "g", label: "G", w: 32, d: 22 },
+      { id: "p", label: "P", w: 48, d: 26 },
+      { id: "c", label: "C", w: 24, d: 17 },
+    ];
+    const r = packPlate(models, 153.4, 87, 2, 2);
+    expect(r.placed.length).toBeGreaterThanOrEqual(9);
+    assertNoOverlap(r, 2);
+    assertInside(r, 153.4, 87, 2);
   });
 });
 
