@@ -10,6 +10,7 @@ import {
   buildPositionedStl,
   packPlate,
   detectPlate,
+  unplacedReason,
   fmtMm,
   type ModelSize,
   type PackResult,
@@ -167,7 +168,7 @@ export default function MontagemPage() {
       })
       .filter(Boolean) as { id: string; label: string; w: number; d: number }[];
     if (items.length === 0) return null;
-    return packPlate(items, effW, effD, Math.max(0, gap), 3);
+    return packPlate(items, effW, effD, Math.max(0, gap), 2);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [models, effW, effD, gap]);
 
@@ -198,7 +199,14 @@ export default function MontagemPage() {
         (p, i) =>
           `${i + 1}. ${labelById.get(p.id)} → x=${p.x} y=${p.y} ${p.placedW}×${p.placedD}mm${p.rotated ? " (GIRAR 90°)" : ""}`
       ),
-      ...result.unplaced.map((u) => `FORA: ${labelById.get(u.id)} — próxima mesa`),
+      ...result.unplaced.map(
+        (u) =>
+          `FORA: ${labelById.get(u.id)} (${u.w}×${u.d}mm) — ${
+            unplacedReason(u, effW, effD, gap, 2) === "too-big"
+              ? "grande demais para esta chapa"
+              : "próxima mesa"
+          }`
+      ),
     ];
     try {
       await navigator.clipboard.writeText(lines.join("\n"));
@@ -256,7 +264,10 @@ export default function MontagemPage() {
   };
 
   const savePlate = async () => {
-    if (!printer) return;
+    if (!printer) {
+      toast.error("Selecione uma impressora primeiro (cadastre em Impressoras se a lista estiver vazia).");
+      return;
+    }
     const w = Number(plateW);
     const d = Number(plateD);
     const h = Number(plateH);
@@ -333,6 +344,11 @@ export default function MontagemPage() {
                   </option>
                 ))}
               </select>
+            )}
+            {printers.length === 0 && !loadingPrinters && (
+              <p className="text-[11px] text-amber-300">
+                Nenhuma impressora cadastrada — cadastre em Impressoras para montar a mesa.
+              </p>
             )}
             {printer && (
               <p className="text-[11px] text-slate-400">
@@ -583,7 +599,10 @@ export default function MontagemPage() {
                   ))}
                   {result.unplaced.map((u) => (
                     <li key={u.id} className="text-amber-300">
-                      FORA: {labelById.get(u.id)} — próxima mesa
+                      FORA: {labelById.get(u.id)} ({fmtMm(u.w)} × {fmtMm(u.d)}) —{" "}
+                      {unplacedReason(u, effW, effD, gap, 2) === "too-big"
+                        ? "grande demais para esta chapa"
+                        : "sem espaço (vai na próxima mesa)"}
                     </li>
                   ))}
                 </ol>

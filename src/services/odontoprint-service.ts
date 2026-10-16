@@ -2964,7 +2964,11 @@ export class OdontoPrintService {
         );
       } catch (err: any) {
         this.restoreLocals(snap);
-        return { success: false, error: err?.message || "Erro ao salvar medidas no banco." };
+        const raw = err?.message || "Erro ao salvar medidas no banco.";
+        const hint = /plate_width_mm|plate_depth_mm|plate_height_mm|schema cache|PGRST/i.test(raw)
+          ? `${raw} (banco desatualizado: rode o setup_completo.sql ou aguarde o migrate do deploy)`
+          : raw;
+        return { success: false, error: hint };
       }
     }
     return { success: true };

@@ -5,6 +5,7 @@ import {
   buildPositionedStl,
   packPlate,
   detectPlate,
+  unplacedReason,
   fmtMm,
 } from "../src/lib/plate-nesting";
 
@@ -202,6 +203,24 @@ describe("packPlate", () => {
     expect(r.placed).toHaveLength(2);
     assertNoOverlap(r, 1);
   });
+
+  it("unplacedReason distingue grande demais de sem espaço", () => {
+    expect(unplacedReason({ id: "x", label: "X", w: 200, d: 200 }, 198, 123, 2, 2)).toBe("too-big");
+    expect(unplacedReason({ id: "x", label: "X", w: 60, d: 55 }, 198, 123, 2, 2)).toBe("no-space");
+  });
+
+  it("8 arcos grandes na Sky 2022: teto honesto, sem sobreposição", () => {
+    const arch = (id: string) => ({ id, label: id, w: 62, d: 55 });
+    const models = ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8"].map(arch);
+    const r = packPlate(models, 198, 123, 2, 2);
+    // 3 por fileira × 2 fileiras = teto geométrico sem entrelaçar o U
+    expect(r.placed.length).toBeGreaterThanOrEqual(6);
+    assertNoOverlap(r, 2);
+    assertInside(r, 198, 123, 2);
+    for (const u of r.unplaced) {
+      expect(unplacedReason(u, 198, 123, 2, 2)).toBe("no-space");
+    }
+  });
 });
 
 describe("detectPlate", () => {
@@ -211,6 +230,8 @@ describe("detectPlate", () => {
     expect(sky2022.w).toBe(198);
     expect(sky2022.d).toBe(123);
     expect(sky2022.h).toBe(200);
+    // nome curto como cadastrado no laboratório
+    expect(detectPlate("Halot", "sky 22").w).toBe(198);
     expect(detectPlate("Creality", "Halot Sky").w).toBe(192);
   });
 

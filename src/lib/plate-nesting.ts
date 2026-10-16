@@ -51,8 +51,9 @@ export const PLATE_PRESETS: Array<{ match: RegExp; plate: PlateDef }> = [
     plate: { w: 153.4, d: 87, h: 165, label: "Anycubic Photon Mono 4 (153,4 × 87 mm)" },
   },
   {
-    // Halot Sky 2022 (tela 6K 9,25"): área expandida 198 × 123 × 200 mm
-    match: /sky.*2022|2022.*sky/i,
+    // Halot Sky 2022 (tela 6K 9,25"): área expandida 198 × 123 × 200 mm.
+    // Aceita "Sky 2022", "sky 22", "sky22", "halot sky v2" etc.
+    match: /sky[\s_\-]*2\d|2022.*sky|sky.*2022|halot.*v2/i,
     plate: { w: 198, d: 123, h: 200, label: "Halot Sky 2022 (198 × 123 mm)" },
   },
   {
@@ -303,6 +304,7 @@ export function packPlate(
 ): PackResult {
   // Anti-fusão: nunca menos de 1mm entre modelos
   const g = Math.max(1, gap || 0);
+  const EPS = 1e-9;
   const usableW = plateW - margin * 2;
   const usableD = plateD - margin * 2;
   const valid = models.filter((m) => m.w > 0 && m.d > 0);
@@ -317,22 +319,52 @@ export function packPlate(
     h: number;
   }
 
+  type Score = [number, number, number, number];
+
+  // Heurísticas de escolha (testa todas, fica com a melhor):
+  // BSSF = menor sobra no lado curto; LOW = base (y+altura) mais baixa.
+  const scorings: Array<{
+    fn: (f: FreeRect, o: { w: number; d: number }, leftoverH: number, leftoverV: number) => Score;
+  }> = [
+    {
+      fn: (f, _o, leftoverH, leftoverV) => [
+        Math.min(leftoverH, leftoverV),
+        Math.max(leftoverH, leftoverV),
+        f.y,
+        f.x,
+      ],
+    },
+    {
+      fn: (f, o, leftoverH, leftoverV) => [f.y + o.d, leftoverH * leftoverV, f.y, f.x],
+    },
+  ];
+
+  const lessThan = (a: Score, b: Score): boolean => {
+    for (let i = 0; i < 4; i++) {
+      if (a[i] < b[i] - EPS) return true;
+      if (a[i] > b[i] + EPS) return false;
+    }
+    return false;
+  };
+
   const orderings: Array<(a: PackItem, b: PackItem) => number> = [
     (a, b) => b.w * b.d - a.w * a.d || Math.max(b.w, b.d) - Math.max(a.w, a.d) || (a.id < b.id ? -1 : 1),
     (a, b) => Math.max(b.w, b.d) - Math.max(a.w, a.d) || b.w * b.d - a.w * a.d || (a.id < b.id ? -1 : 1),
     (a, b) => b.w - a.w || b.d - a.d || (a.id < b.id ? -1 : 1),
     (a, b) => b.d - a.d || b.w - a.w || (a.id < b.id ? -1 : 1),
     (a, b) => 2 * (b.w + b.d) - 2 * (a.w + a.d) || (a.id < b.id ? -1 : 1),
+    (a, b) => Math.min(b.w, b.d) - Math.min(a.w, a.d) || b.w * b.d - a.w * a.d || (a.id < b.id ? -1 : 1),
+    (a, b) => a.w * a.d - b.w * b.d || Math.min(a.w, a.d) - Math.min(b.w, b.d) || (a.id < b.id ? -1 : 1),
   ];
 
   let best: PackResult | null = null;
 
   for (const order of orderings) {
+    for (const scoring of scorings) {
     const queue = [...valid].sort(order);
     let free: FreeRect[] = [{ x: margin, y: margin, w: usableW, h: usableD }];
     const placed: PlacedItem[] = [];
     const unplaced: PackItem[] = [];
-    const EPS = 1e-9;
 
     const prune = () => {
       free = free.filter((f) => f.w > EPS && f.h > EPS);
@@ -354,27 +386,15 @@ export function packPlate(
         { w: m.w + g, d: m.d + g, rotated: false },
         { w: m.d + g, d: m.w + g, rotated: true },
       ];
-      let bestScore: [number, number, number, number] | null = null;
+      let bestScore: Score | null = null;
       let bestPick: { fx: number; fy: number; fi: number; o: (typeof options)[0] } | null = null;
 
       for (let fi = 0; fi < free.length; fi++) {
         const f = free[fi];
         for (const o of options) {
           if (o.w > f.w + EPS || o.d > f.h + EPS) continue;
-          const leftoverH = Math.abs(f.w - o.w);
-          const leftoverV = Math.abs(f.h - o.d);
-          const shortSide = Math.min(leftoverH, leftoverV);
-          const longSide = Math.max(leftoverH, leftoverV);
-          const score: [number, number, number, number] = [shortSide, longSide, f.y, f.x];
-          if (
-            !bestScore ||
-            score[0] < bestScore[0] - EPS ||
-            (Math.abs(score[0] - bestScore[0]) <= EPS && score[1] < bestScore[1] - EPS) ||
-            (Math.abs(score[0] - bestScore[0]) <= EPS &&
-              Math.abs(score[1] - bestScore[1]) <= EPS &&
-              (score[2] < bestScore[2] - EPS ||
-                (Math.abs(score[2] - bestScore[2]) <= EPS && score[3] < bestScore[3] - EPS)))
-          ) {
+          const score = scoring.fn(f, o, f.w - o.w, f.h - o.d);
+          if (!bestScore || lessThan(score, bestScore)) {
             bestScore = score;
             bestPick = { fx: f.x, fy: f.y, fi, o };
           }
@@ -419,10 +439,28 @@ export function packPlate(
     ) {
       best = candidate;
     }
-    if (best.placed.length === valid.length) break; // perfeito: coube tudo
+    if (best && best.placed.length === valid.length) break; // perfeito: coube tudo
+    }
+    if (best && best.placed.length === valid.length) break;
   }
 
   return best || { placed: [], unplaced: [...models], utilization: 0 };
+}
+
+/** Por que o modelo ficou de fora: grande demais p/ a chapa ou sem espaço. */
+export function unplacedReason(
+  item: PackItem,
+  plateW: number,
+  plateD: number,
+  gap = 2,
+  margin = 3
+): "too-big" | "no-space" {
+  const g = Math.max(1, gap || 0);
+  const uw = plateW - margin * 2;
+  const ud = plateD - margin * 2;
+  const fitsNormal = item.w + g <= uw + 1e-9 && item.d + g <= ud + 1e-9;
+  const fitsRotated = item.d + g <= uw + 1e-9 && item.w + g <= ud + 1e-9;
+  return fitsNormal || fitsRotated ? "no-space" : "too-big";
 }
 
 /** mm → texto "12,5 mm" */
