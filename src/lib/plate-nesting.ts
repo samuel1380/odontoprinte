@@ -42,7 +42,7 @@ export interface PlacedItem extends PackItem {
 }
 
 /** Ângulos tentados (0/90 exatos + diagonais como no fatiador). */
-export const PACK_ANGLES = [0, 90, 30, -30, 45, -45];
+export const PACK_ANGLES = [0, 90, 30, -30, 45, -45, 60, -60];
 
 /** Caixa alinhada aos eixos de um retângulo girado (horário). */
 export function rotatedBox(w: number, d: number, angleDeg: number): { w: number; d: number } {
@@ -902,15 +902,41 @@ export function packRaster(
 
   let best: PackResult | null = null;
 
+  const prepById = new Map<string, Prep>();
+  for (const p of preps) prepById.set(p.item.id, p);
+
   const attempts: Prep[][] = [
     ...PACK_ORDERINGS.slice(0, 4).map((o) =>
       [...preps].sort((a, b) => o(a.item, b.item))
     ),
-    ...[7, 42, 123].map((s) => shufflePack(preps, s)),
+    ...[7, 42, 123, 999].map((s) => shufflePack(preps, s)),
   ];
 
   for (const queue of attempts) {
     const plate = new Uint8Array(pw * ph);
+    // imagem integral da ocupação: teste O(1) se a caixa está livre
+    const sat = new Int32Array((pw + 1) * (ph + 1));
+    const rebuildSat = () => {
+      for (let y = 0; y <= ph; y++) {
+        let row = 0;
+        for (let x = 0; x <= pw; x++) {
+          const v = x > 0 && y > 0 ? plate[(y - 1) * pw + (x - 1)] : 0;
+          row += v;
+          sat[y * (pw + 1) + x] = row + (y > 0 ? sat[(y - 1) * (pw + 1) + x] : 0);
+        }
+      }
+    };
+    const rectFree = (cx: number, cy: number, w: number, h: number): boolean => {
+      const x1 = cx + w;
+      const y1 = cy + h;
+      return (
+        sat[y1 * (pw + 1) + x1] -
+          sat[y1 * (pw + 1) + cx] -
+          sat[cy * (pw + 1) + x1] +
+          sat[cy * (pw + 1) + cx] ===
+        0
+      );
+    };
     const placed: PlacedItem[] = [];
     const unplaced: PackItem[] = [];
     let cellArea = 0;
@@ -921,6 +947,13 @@ export function packRaster(
         const a = p.angles[ai];
         for (let cy = 0; cy + a.gh <= ph; cy += step) {
           for (let cx = 0; cx + a.gw <= pw; cx += step) {
+            if (rectFree(cx, cy, a.gw, a.gh)) {
+              // caixa livre: encaixe exato sem varrer células
+              if (!pick || cy < pick.cy || (cy === pick.cy && (cx < pick.cx || (cx === pick.cx && ai < pick.ai)))) {
+                pick = { cx, cy, a, ai };
+              }
+              break; // mais à esquerda nesta fileira
+            }
             let ok = true;
             for (let k = 0; k < a.setCells.length; k++) {
               const c = a.setCells[k];
@@ -947,6 +980,7 @@ export function packRaster(
         const c = pick.a.setCells[k];
         plate[(pick.cy + Math.floor(c / pick.a.gw)) * pw + (pick.cx + (c % pick.a.gw))] = 1;
       }
+      rebuildSat();
       const mmX = round1(margin + pick.cx * cell);
       const mmY = round1(margin + pick.cy * cell);
       placed.push({
@@ -982,6 +1016,119 @@ export function packRaster(
     }
     const done: PackResult | null = best;
     if (done && done.placed.length === valid.length) break;
+  }
+
+  // Passada fina: tenta encaixar as sobras nos buracos em grade de 1mm
+  // (a passada principal usa grade 2mm e pode deixar vãos aproveitáveis).
+  if (best && best.unplaced.length > 0) {
+    const plate = new Uint8Array(pw * ph);
+    const markPlaced = (x: number, y: number, a: PreparedAngle) => {
+      for (let k = 0; k < a.setCells.length; k++) {
+        const c = a.setCells[k];
+        plate[(y + Math.floor(c / a.gw)) * pw + (x + (c % a.gw))] = 1;
+      }
+      rebuildSat();
+    };
+    const sat = new Int32Array((pw + 1) * (ph + 1));
+    const rebuildSat = () => {
+      for (let y = 0; y <= ph; y++) {
+        let row = 0;
+        for (let x = 0; x <= pw; x++) {
+          const v = x > 0 && y > 0 ? plate[(y - 1) * pw + (x - 1)] : 0;
+          row += v;
+          sat[y * (pw + 1) + x] = row + (y > 0 ? sat[(y - 1) * (pw + 1) + x] : 0);
+        }
+      }
+    };
+    const rectFree = (cx: number, cy: number, w: number, h: number): boolean => {
+      const x1 = cx + w;
+      const y1 = cy + h;
+      return (
+        sat[y1 * (pw + 1) + x1] -
+          sat[y1 * (pw + 1) + cx] -
+          sat[cy * (pw + 1) + x1] +
+          sat[cy * (pw + 1) + cx] ===
+        0
+      );
+    };
+    // reconstroi ocupação a partir do melhor resultado
+    for (const p of best.placed) {
+      const prep = prepById.get(p.id);
+      const entry = prep?.angles.find((a) => a.angle === (p as PlacedItem).angle);
+      if (!prep || !entry) continue;
+      const cx = Math.round(((p as PlacedItem).x - margin) / cell);
+      const cy = Math.round(((p as PlacedItem).y - margin) / cell);
+      markPlaced(cx, cy, entry);
+    }
+    const stillOut: PackItem[] = [];
+    const extraPlaced: PlacedItem[] = [];
+    let extraArea = 0;
+    for (const u of best.unplaced) {
+      const prep = prepById.get(u.id);
+      if (!prep) {
+        stillOut.push(u);
+        continue;
+      }
+      let pick: { cx: number; cy: number; a: PreparedAngle; ai: number } | null = null;
+      for (let ai = 0; ai < prep.angles.length; ai++) {
+        const a = prep.angles[ai];
+        for (let cy = 0; cy + a.gh <= ph; cy += 1) {
+          for (let cx = 0; cx + a.gw <= pw; cx += 1) {
+            if (rectFree(cx, cy, a.gw, a.gh)) {
+              if (!pick || cy < pick.cy || (cy === pick.cy && (cx < pick.cx || (cx === pick.cx && ai < pick.ai)))) {
+                pick = { cx, cy, a, ai };
+              }
+              break;
+            }
+            let ok = true;
+            for (let k = 0; k < a.setCells.length; k++) {
+              const c = a.setCells[k];
+              if (plate[(cy + Math.floor(c / a.gw)) * pw + (cx + (c % a.gw))]) {
+                ok = false;
+                break;
+              }
+            }
+            if (!ok) continue;
+            if (!pick || cy < pick.cy || (cy === pick.cy && (cx < pick.cx || (cx === pick.cx && ai < pick.ai)))) {
+              pick = { cx, cy, a, ai };
+            }
+            break;
+          }
+        }
+      }
+      if (!pick) {
+        stillOut.push(u);
+        continue;
+      }
+      markPlaced(pick.cx, pick.cy, pick.a);
+      extraPlaced.push({
+        ...u,
+        x: round1(margin + pick.cx * cell),
+        y: round1(margin + pick.cy * cell),
+        angle: pick.a.angle,
+        rotated: pick.a.angle !== 0,
+        placedW: round1(pick.a.boxW),
+        placedD: round1(pick.a.boxH),
+        pix: {
+          w: pick.a.draw.w,
+          h: pick.a.draw.h,
+          cells: Array.from(pick.a.draw.cells),
+          cell: pick.a.draw.cell,
+          angle: pick.a.angle,
+        },
+      } as PlacedItem);
+      extraArea += prep.areaCells;
+    }
+    if (extraPlaced.length > 0) {
+      const placed = [...best.placed, ...extraPlaced];
+      const plateArea = plateW * plateD;
+      const prevArea = best.utilization * plateArea;
+      best = {
+        placed,
+        unplaced: stillOut,
+        utilization: plateArea > 0 ? Math.min(1, (prevArea + extraArea * cell * cell) / plateArea) : 0,
+      };
+    }
   }
 
   return best || { placed: [], unplaced: [...models], utilization: 0 };
