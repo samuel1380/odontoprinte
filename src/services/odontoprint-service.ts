@@ -2931,6 +2931,45 @@ export class OdontoPrintService {
     return newPrinter;
   }
 
+  /**
+   * Salva as medidas da mesa/chapa da impressora (montagem automática).
+   * Valores precisam ser > 0; null limpa (volta a detectar pelo modelo).
+   */
+  static async updatePrinterDimensions(
+    printerId: string,
+    dims: { width_mm?: number | null; depth_mm?: number | null; height_mm?: number | null }
+  ): Promise<{ success: boolean; error?: string }> {
+    mockPrinters = loadLocal<Printer[]>("odontoprint_printers", mockPrinters);
+    const printer = mockPrinters.find((p) => p.id === printerId);
+    if (!printer) return { success: false, error: "Impressora não encontrada." };
+
+    const clean = {
+      plate_width_mm: dims.width_mm && dims.width_mm > 0 ? dims.width_mm : null,
+      plate_depth_mm: dims.depth_mm && dims.depth_mm > 0 ? dims.depth_mm : null,
+      plate_height_mm: dims.height_mm && dims.height_mm > 0 ? dims.height_mm : null,
+    };
+    const snap = this.snapLocals();
+    printer.plate_width_mm = clean.plate_width_mm;
+    printer.plate_depth_mm = clean.plate_depth_mm;
+    printer.plate_height_mm = clean.plate_height_mm;
+    printer.updated_at = new Date().toISOString();
+    saveLocal("odontoprint_printers", mockPrinters);
+
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        assertDbOk(
+          await client.from("printers").update({ ...clean, updated_at: printer.updated_at }).eq("id", printerId),
+          "Falha ao salvar medidas da mesa"
+        );
+      } catch (err: any) {
+        this.restoreLocals(snap);
+        return { success: false, error: err?.message || "Erro ao salvar medidas no banco." };
+      }
+    }
+    return { success: true };
+  }
+
   static async deletePrinter(id: string): Promise<{ success: boolean; error?: string }> {
     mockPrinters = loadLocal<Printer[]>("odontoprint_printers", mockPrinters);
     mockMaintenances = loadLocal<PrinterMaintenance[]>("odontoprint_maintenances", mockMaintenances);

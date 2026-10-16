@@ -146,6 +146,9 @@ CREATE TABLE IF NOT EXISTS public.printers (
     serial_number TEXT NOT NULL,
     maintenance_contact TEXT,
     active BOOLEAN NOT NULL DEFAULT true,
+    plate_width_mm NUMERIC,
+    plate_depth_mm NUMERIC,
+    plate_height_mm NUMERIC,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

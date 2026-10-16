@@ -86,8 +86,7 @@ describe("resina da mesa: escolha ao iniciar impressão", () => {
     expect(res.error).toMatch(/sem calibração aprovada/);
   });
 
-  it("sem resina informada mantém o comportamento automático anterior", async () => {
-    const { printer, order } = await setupMesa();
+  it("sem resina informada mantém o comportamento automático anterior", async () => {    const { printer, order } = await setupMesa();
     const options = await OdontoPrintService.getEligibleOptions();
     const firstEligible = options.resins.find((r) => r.printer_id === printer.id);
     expect(firstEligible).toBeDefined();
@@ -101,5 +100,30 @@ describe("resina da mesa: escolha ao iniciar impressão", () => {
     // mesma resina que o fluxo automático escolheria
     expect(run?.resin_batch_id).toBe(firstEligible!.resin_batch_id);
     expect(run?.calibration_id).toBe(firstEligible!.calibration_id);
+  });
+
+  it("salva e rejeita medidas da mesa da impressora", async () => {
+    const printer = await OdontoPrintService.createPrinter({
+      name: "Saturn-Plate",
+      brand: "Elegoo",
+      model: "Saturn 4",
+      serial_number: "SN-PLATE-1",
+    });
+    const ok = await OdontoPrintService.updatePrinterDimensions(printer.id, {
+      width_mm: 153.4,
+      depth_mm: 87,
+      height_mm: 165,
+    });
+    expect(ok.success).toBe(true);
+    const printers = await OdontoPrintService.getPrinters();
+    const saved = printers.find((p) => p.id === printer.id);
+    expect(saved?.plate_width_mm).toBe(153.4);
+    expect(saved?.plate_depth_mm).toBe(87);
+
+    const bad = await OdontoPrintService.updatePrinterDimensions("id-inexistente", {
+      width_mm: 10,
+      depth_mm: 10,
+    });
+    expect(bad.success).toBe(false);
   });
 });

@@ -127,6 +127,10 @@ export interface Printer {
   serial_number: string;
   maintenance_contact?: string | null;
   active: boolean;
+  /** Medidas da mesa/chapa em mm (editável; null = detectar pelo modelo) */
+  plate_width_mm?: number | null;
+  plate_depth_mm?: number | null;
+  plate_height_mm?: number | null;
   created_at: string;
   updated_at?: string;
 }

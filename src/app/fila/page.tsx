@@ -59,6 +59,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AutoLayoutModal } from "@/components/fila/auto-layout-modal";
 import { toast } from "sonner";
 
 // Interface do item em processo de upload (somente metadados: o conteúdo
@@ -138,6 +139,8 @@ export default function FilaPage() {
 
   // Modal de Iniciar Impressão Direto na Mesa (vincular impressora + resina)
   const [batchToPrintDirectly, setBatchToPrintDirectly] = useState<OrderGroup | null>(null);
+  // Modal de Montagem Automática da mesa
+  const [autoLayoutGroup, setAutoLayoutGroup] = useState<OrderGroup | null>(null);
   const [selectedPrinterForBatch, setSelectedPrinterForBatch] = useState<string>("");
   const [selectedResinBatchId, setSelectedResinBatchId] = useState<string>("");
   const [eligibleResins, setEligibleResins] = useState<EligibleResinOption[]>([]);
@@ -1962,6 +1965,21 @@ export default function FilaPage() {
                         </Button>
                       )}
 
+                      {group.batchId && !group.isPrinting && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAutoLayoutGroup(group);
+                          }}
+                          className="h-9 sm:h-8 px-3 text-[11px] font-bold bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/40 rounded-lg flex-1 sm:flex-none flex items-center justify-center gap-1.5 transition"
+                          title="Montagem automática: encaixar os modelos na chapa"
+                        >
+                          <LayoutGrid className="w-3.5 h-3.5" />
+                          Montar mesa
+                        </button>
+                      )}
+
                       {group.batchId && (
                         <button
                           type="button"
@@ -3077,6 +3095,18 @@ export default function FilaPage() {
             </div>
           </div>
         </Dialog>
+
+        {/* ==================================================================== */}
+        {/* MODAL: MONTAGEM AUTOMÁTICA DA MESA */}
+        {/* ==================================================================== */}
+        {autoLayoutGroup && (
+          <AutoLayoutModal
+            group={autoLayoutGroup}
+            printers={printers}
+            onClose={() => setAutoLayoutGroup(null)}
+            onPrintersChanged={() => loadData()}
+          />
+        )}
 
         {/* ==================================================================== */}
         {/* MODAL 6: HISTÓRICO COMPLETO DO PACIENTE */}
