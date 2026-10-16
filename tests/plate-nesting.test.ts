@@ -209,8 +209,7 @@ describe("packPlate", () => {
     expect(unplacedReason({ id: "x", label: "X", w: 60, d: 55 }, 198, 123, 2, 2)).toBe("no-space");
   });
 
-  it("8 arcos grandes na Sky 2022: teto honesto, sem sobreposição", () => {
-    const arch = (id: string) => ({ id, label: id, w: 62, d: 55 });
+  it("8 arcos grandes na Sky 2022: teto honesto, sem sobreposição", () => {    const arch = (id: string) => ({ id, label: id, w: 62, d: 55 });
     const models = ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8"].map(arch);
     const r = packPlate(models, 198, 123, 2, 2);
     // 3 por fileira × 2 fileiras = teto geométrico sem entrelaçar o U
@@ -244,7 +243,7 @@ describe("buildPositionedStl", () => {
   it("posiciona, gira e desce para a mesa (round-trip exato)", async () => {
     const a = await parseStlTriangles(binaryStl()); // 10×5×2 em (0,0,0)
     const out = buildPositionedStl([
-      { positions: a.positions, x: 30, y: 40, rotated: true, dropToBed: true },
+      { positions: a.positions, x: 30, y: 40, angle: 90, dropToBed: true },
     ]);
     // cabeçalho + 1 triângulo
     expect(out.byteLength).toBe(84 + 50);
@@ -271,7 +270,7 @@ describe("buildPositionedStl", () => {
     );
     expect(layout.unplaced).toEqual([]);
     const out = buildPositionedStl(
-      layout.placed.map((p) => ({ positions: a.positions, x: p.x, y: p.y, rotated: p.rotated }))
+      layout.placed.map((p) => ({ positions: a.positions, x: p.x, y: p.y, angle: p.angle }))
     );
     expect(new DataView(out).getUint32(80, true)).toBe(2);
     // volta a ler: caixas das peças posicionadas não se tocam
@@ -285,8 +284,27 @@ describe("buildPositionedStl", () => {
     // desloca Z para [5,7]
     const shifted = new Float32Array(a.positions);
     for (let i = 2; i < shifted.length; i += 3) shifted[i] += 5;
-    const out = buildPositionedStl([{ positions: shifted, x: 0, y: 0, rotated: false, dropToBed: false }]);
+    const out = buildPositionedStl([{ positions: shifted, x: 0, y: 0, angle: 0, dropToBed: false }]);
     const back = await parseStlDimensions(out);
     expect(back.z).toBe(2);
+  });
+
+  it("peça longa entra na diagonal quando não cabe reta", () => {
+    // 110×20 não cabe reta nem em pé em 100×100, mas cabe a 45°
+    const r = packPlate([{ id: "long", label: "L", w: 110, d: 20 }], 100, 100, 1, 0);
+    expect(r.unplaced).toEqual([]);
+    expect(r.placed).toHaveLength(1);
+    expect(r.placed[0].angle).not.toBe(0);
+    expect(r.placed[0].angle).not.toBe(90);
+  });
+
+  it("writer com ângulo: bbox relida confere com a peça girada", async () => {
+    const a = await parseStlTriangles(binaryStl()); // triângulo (0,0)-(10,0)-(0,5)
+    const out = buildPositionedStl([{ positions: a.positions, x: 20, y: 30, angle: 30 }]);
+    const back = await parseStlDimensions(out);
+    // vértices girados 30° (horário): (0,0), (8.66,-5), (2.5,4.33) → caixa 8,66 × 9,33
+    expect(back.x).toBeCloseTo(8.7, 0);
+    expect(back.y).toBeCloseTo(9.3, 0);
+    expect(back.triangles).toBe(1);
   });
 });

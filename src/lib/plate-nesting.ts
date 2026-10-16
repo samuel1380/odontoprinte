@@ -32,9 +32,25 @@ export interface PackItem {
 export interface PlacedItem extends PackItem {
   x: number;
   y: number;
+  /** 0 | 90 | 30 | -30 | 45 | -45 (horário) */
+  angle: number;
   rotated: boolean;
   placedW: number;
   placedD: number;
+}
+
+/** Ângulos tentados (0/90 exatos + diagonais como no fatiador). */
+export const PACK_ANGLES = [0, 90, 30, -30, 45, -45];
+
+/** Caixa alinhada aos eixos de um retângulo girado (horário). */
+export function rotatedBox(w: number, d: number, angleDeg: number): { w: number; d: number } {
+  const a = ((angleDeg % 360) + 360) % 360;
+  if (a === 0 || a === 180) return { w, d };
+  if (a === 90 || a === 270) return { w: d, d: w };
+  const r = (angleDeg * Math.PI) / 180;
+  const c = Math.abs(Math.cos(r));
+  const s = Math.abs(Math.sin(r));
+  return { w: w * c + d * s, d: w * s + d * c };
 }
 
 export interface PackResult {
@@ -187,16 +203,23 @@ export interface PlacementSpec {
   /** canto inferior-esquerdo alvo na chapa (mm) */
   x: number;
   y: number;
-  /** gira 90° (troca L×P, igual ao mapa) */
-  rotated: boolean;
+  /** giro horário em graus (0 | 90 | 30 | -30 | 45 | -45) */
+  angle: number;
   /** desce o modelo até Z=0 (padrão: sim) */
   dropToBed?: boolean;
 }
 
-/** Gira -90° em Z quando rotated (L×P vira P×L). */
-function rotXY(x: number, y: number, rotated: boolean): { x: number; y: number } {
-  if (!rotated) return { x, y };
-  return { x: y, y: -x };
+/** Gira em sentido horário (90° exatos preservados). */
+function rotPt(x: number, y: number, angleDeg: number): { x: number; y: number } {
+  const a = ((angleDeg % 360) + 360) % 360;
+  if (a === 0) return { x, y };
+  if (a === 90) return { x: y, y: -x };
+  if (a === 180) return { x: -x, y: -y };
+  if (a === 270) return { x: -y, y: x };
+  const r = (angleDeg * Math.PI) / 180;
+  const c = Math.cos(r);
+  const s = Math.sin(r);
+  return { x: x * c + y * s, y: -x * s + y * c };
 }
 
 function triNormal(
@@ -237,7 +260,7 @@ export function buildPositionedStl(parts: PlacementSpec[]): ArrayBuffer {
       minY = Infinity,
       minZ = Infinity;
     for (let i = 0; i < p.positions.length; i += 3) {
-      const g = rotXY(p.positions[i], p.positions[i + 1], p.rotated);
+      const g = rotPt(p.positions[i], p.positions[i + 1], p.angle);
       if (g.x < minX) minX = g.x;
       if (g.y < minY) minY = g.y;
       if (p.positions[i + 2] < minZ) minZ = p.positions[i + 2];
@@ -258,9 +281,9 @@ export function buildPositionedStl(parts: PlacementSpec[]): ArrayBuffer {
     const tx = p.x - prep.minX;
     const ty = p.y - prep.minY;
     for (let i = 0; i < p.positions.length; i += 9) {
-      const a = rotXY(p.positions[i], p.positions[i + 1], p.rotated);
-      const b = rotXY(p.positions[i + 3], p.positions[i + 4], p.rotated);
-      const c = rotXY(p.positions[i + 6], p.positions[i + 7], p.rotated);
+      const a = rotPt(p.positions[i], p.positions[i + 1], p.angle);
+      const b = rotPt(p.positions[i + 3], p.positions[i + 4], p.angle);
+      const c = rotPt(p.positions[i + 6], p.positions[i + 7], p.angle);
       const az = p.positions[i + 2] - prep.drop;
       const bz = p.positions[i + 5] - prep.drop;
       const cz = p.positions[i + 8] - prep.drop;
@@ -381,13 +404,13 @@ export function packPlate(
       }
     };
 
-    for (const m of queue) {
-      const options = [
-        { w: m.w + g, d: m.d + g, rotated: false },
-        { w: m.d + g, d: m.w + g, rotated: true },
-      ];
-      let bestScore: Score | null = null;
-      let bestPick: { fx: number; fy: number; fi: number; o: (typeof options)[0] } | null = null;
+      for (const m of queue) {
+        const options = PACK_ANGLES.map((angle) => {
+          const box = rotatedBox(m.w, m.d, angle);
+          return { w: box.w + g, d: box.d + g, angle, rotated: angle !== 0 };
+        });
+        let bestScore: Score | null = null;
+        let bestPick: { fx: number; fy: number; fi: number; o: (typeof options)[0] } | null = null;
 
       for (let fi = 0; fi < free.length; fi++) {
         const f = free[fi];
@@ -412,7 +435,9 @@ export function packPlate(
         ...m,
         x: round1(fx),
         y: round1(fy),
+        angle: o.angle,
         rotated: o.rotated,
+        // caixa ocupada (modelo + folga); área real do modelo p/ ocupação
         placedW: round1(o.w - g),
         placedD: round1(o.d - g),
       });
@@ -425,7 +450,7 @@ export function packPlate(
       prune();
     }
 
-    const usedArea = placed.reduce((s, p) => s + p.placedW * p.placedD, 0);
+      const usedArea = placed.reduce((s, p) => s + p.w * p.d, 0);
     const plateArea = plateW * plateD;
     const candidate: PackResult = {
       placed,
@@ -458,9 +483,11 @@ export function unplacedReason(
   const g = Math.max(1, gap || 0);
   const uw = plateW - margin * 2;
   const ud = plateD - margin * 2;
-  const fitsNormal = item.w + g <= uw + 1e-9 && item.d + g <= ud + 1e-9;
-  const fitsRotated = item.d + g <= uw + 1e-9 && item.w + g <= ud + 1e-9;
-  return fitsNormal || fitsRotated ? "no-space" : "too-big";
+  for (const angle of PACK_ANGLES) {
+    const box = rotatedBox(item.w, item.d, angle);
+    if (box.w + g <= uw + 1e-9 && box.d + g <= ud + 1e-9) return "no-space";
+  }
+  return "too-big";
 }
 
 /** mm → texto "12,5 mm" */

@@ -197,7 +197,7 @@ export default function MontagemPage() {
       `Ocupação: ${Math.round(result.utilization * 100)}% · ${result.placed.length} na chapa, ${result.unplaced.length} de fora`,
       ...result.placed.map(
         (p, i) =>
-          `${i + 1}. ${labelById.get(p.id)} → x=${p.x} y=${p.y} ${p.placedW}×${p.placedD}mm${p.rotated ? " (GIRAR 90°)" : ""}`
+          `${i + 1}. ${labelById.get(p.id)} → x=${p.x} y=${p.y} ${p.placedW}×${p.placedD}mm${p.angle !== 0 ? ` (GIRAR ${p.angle}°)` : ""}`
       ),
       ...result.unplaced.map(
         (u) =>
@@ -238,7 +238,7 @@ export default function MontagemPage() {
           positions: trianglesById.current.get(p.id)!,
           x: p.x,
           y: p.y,
-          rotated: p.rotated,
+          angle: p.angle,
         }))
       );
       const blob = new Blob([buffer], { type: "model/stl" });
@@ -568,7 +568,7 @@ export default function MontagemPage() {
                       width={p.placedW}
                       height={p.placedD}
                       rx={1.2}
-                      fill={p.rotated ? "rgba(34,211,238,0.22)" : "rgba(34,211,238,0.12)"}
+                      fill={p.angle !== 0 ? "rgba(34,211,238,0.22)" : "rgba(34,211,238,0.12)"}
                       stroke="#22d3ee"
                       strokeWidth={0.7}
                     />
@@ -593,7 +593,7 @@ export default function MontagemPage() {
                       <span className="font-mono font-bold text-cyan-300 w-5">{i + 1}.</span>
                       <span className="font-semibold text-white truncate">{labelById.get(p.id)}</span>
                       <span>
-                        x={p.x} y={p.y}{p.rotated ? " · GIRAR 90°" : ""}
+                        x={p.x} y={p.y}{p.angle !== 0 ? ` · GIRAR ${p.angle}°` : ""}
                       </span>
                     </li>
                   ))}
