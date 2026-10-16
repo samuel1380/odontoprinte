@@ -37,6 +37,8 @@ export interface PlacedItem extends PackItem {
   rotated: boolean;
   placedW: number;
   placedD: number;
+  /** pixels do modelo girado (mapa exato); ausente no packer por caixas */
+  pix?: PlacedPixels;
 }
 
 /** Ângulos tentados (0/90 exatos + diagonais como no fatiador). */
@@ -311,6 +313,37 @@ function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
+/** Ordenações tentadas pelos empacotadores (determinísticas). */
+const PACK_ORDERINGS: Array<(a: PackItem, b: PackItem) => number> = [
+  (a, b) => b.w * b.d - a.w * a.d || Math.max(b.w, b.d) - Math.max(a.w, a.d) || (a.id < b.id ? -1 : 1),
+  (a, b) => Math.max(b.w, b.d) - Math.max(a.w, a.d) || b.w * b.d - a.w * a.d || (a.id < b.id ? -1 : 1),
+  (a, b) => b.w - a.w || b.d - a.d || (a.id < b.id ? -1 : 1),
+  (a, b) => b.d - a.d || b.w - a.w || (a.id < b.id ? -1 : 1),
+  (a, b) => 2 * (b.w + b.d) - 2 * (a.w + a.d) || (a.id < b.id ? -1 : 1),
+  (a, b) => Math.min(b.w, b.d) - Math.min(a.w, a.d) || b.w * b.d - a.w * a.d || (a.id < b.id ? -1 : 1),
+  (a, b) => a.w * a.d - b.w * b.d || Math.min(a.w, a.d) - Math.min(b.w, b.d) || (a.id < b.id ? -1 : 1),
+];
+
+function mulberry32(seed: number): () => number {
+  return () => {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function shufflePack<T>(arr: T[], seed: number): T[] {
+  const a = [...arr];
+  const rnd = mulberry32(seed);
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 /**
  * Encaixa retângulos na chapa (MaxRects + melhor encaixe: tenta várias ordens
  * e orientações, fica com a que couber mais modelos). Determinístico.
@@ -370,16 +403,6 @@ export function packPlate(
     return false;
   };
 
-  const orderings: Array<(a: PackItem, b: PackItem) => number> = [
-    (a, b) => b.w * b.d - a.w * a.d || Math.max(b.w, b.d) - Math.max(a.w, a.d) || (a.id < b.id ? -1 : 1),
-    (a, b) => Math.max(b.w, b.d) - Math.max(a.w, a.d) || b.w * b.d - a.w * a.d || (a.id < b.id ? -1 : 1),
-    (a, b) => b.w - a.w || b.d - a.d || (a.id < b.id ? -1 : 1),
-    (a, b) => b.d - a.d || b.w - a.w || (a.id < b.id ? -1 : 1),
-    (a, b) => 2 * (b.w + b.d) - 2 * (a.w + a.d) || (a.id < b.id ? -1 : 1),
-    (a, b) => Math.min(b.w, b.d) - Math.min(a.w, a.d) || b.w * b.d - a.w * a.d || (a.id < b.id ? -1 : 1),
-    (a, b) => a.w * a.d - b.w * b.d || Math.min(a.w, a.d) - Math.min(b.w, b.d) || (a.id < b.id ? -1 : 1),
-  ];
-
   let best: PackResult | null = null;
 
   const consider = (placed: PlacedItem[], unplaced: PackItem[]) => {
@@ -408,7 +431,7 @@ export function packPlate(
     });
 
   // ---- Estratégia 1: MaxRects (guilhotina + melhor encaixe) ----
-  for (const order of orderings) {
+  for (const order of PACK_ORDERINGS) {
     for (const scoring of scorings) {
     const queue = [...valid].sort(order);
     let free: FreeRect[] = [{ x: margin, y: margin, w: usableW, h: usableD }];
@@ -562,7 +585,7 @@ export function packPlate(
     };
 
     const blfQueues: PackItem[][] = [
-      ...orderings.map((o) => [...valid].sort(o)),
+      ...PACK_ORDERINGS.map((o) => [...valid].sort(o)),
       ...[7, 42, 123, 999, 2026].map((s) => shuffle(valid, s)),
     ];
     for (const queue of blfQueues) {
@@ -596,4 +619,335 @@ export function unplacedReason(
 /** mm → texto "12,5 mm" */
 export function fmtMm(n: number): string {
   return `${String(Math.round(n * 10) / 10).replace(".", ",")} mm`;
+}
+
+/* ================================================================== */
+/* NESTING POR PIXELS — enxerga o vazio dentro do U e entrelaça peças  */
+/* ================================================================== */
+
+export interface ModelGrid {
+  /** células em nº de colunas × linhas */
+  w: number;
+  h: number;
+  /** 1 = ocupado */
+  cells: Uint8Array;
+  /** origem mm do canto da grade (canto do bbox) */
+  minX: number;
+  minY: number;
+  /** tamanho da célula em mm */
+  cell: number;
+}
+
+/** Rotação horária exata (graus) de um ponto. */
+function rotCw(x: number, y: number, angleDeg: number): { x: number; y: number } {
+  const a = ((angleDeg % 360) + 360) % 360;
+  if (a === 0) return { x, y };
+  if (a === 90) return { x: y, y: -x };
+  if (a === 180) return { x: -x, y: -y };
+  if (a === 270) return { x: -y, y: x };
+  const r = (angleDeg * Math.PI) / 180;
+  const c = Math.cos(r);
+  const s = Math.sin(r);
+  return { x: x * c + y * s, y: -x * s + y * c };
+}
+
+/**
+ * Rasteriza os triângulos (projeção XY) numa grade de `cell` mm.
+ * Célula marcada se o centro estiver dentro de algum triângulo.
+ */
+export function rasterizeTriangles(positions: Float32Array, cell = 1): ModelGrid {
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
+  const n = Math.floor(positions.length / 9);
+  for (let t = 0; t < n; t++) {
+    for (let v = 0; v < 3; v++) {
+      const x = positions[(t * 9 + v * 3)];
+      const y = positions[(t * 9 + v * 3) + 1];
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+  }
+  if (!Number.isFinite(minX)) {
+    return { w: 0, h: 0, cells: new Uint8Array(0), minX: 0, minY: 0, cell };
+  }
+  const w = Math.max(1, Math.ceil((maxX - minX) / cell));
+  const h = Math.max(1, Math.ceil((maxY - minY) / cell));
+  const cells = new Uint8Array(w * h);
+
+  const inside = (px: number, py: number, ax: number, ay: number, bx: number, by: number, cx: number, cy: number): boolean => {
+    const d1 = (px - bx) * (ay - by) - (ax - bx) * (py - by);
+    const d2 = (px - cx) * (by - cy) - (bx - cx) * (py - cy);
+    const d3 = (px - ax) * (cy - ay) - (cx - ax) * (py - ay);
+    const neg = d1 < -1e-9 || d2 < -1e-9 || d3 < -1e-9;
+    const pos = d1 > 1e-9 || d2 > 1e-9 || d3 > 1e-9;
+    return !(neg && pos);
+  };
+
+  for (let t = 0; t < n; t++) {
+    const ax = positions[t * 9];
+    const ay = positions[t * 9 + 1];
+    const bx = positions[t * 9 + 3];
+    const by = positions[t * 9 + 4];
+    const cx = positions[t * 9 + 6];
+    const cy = positions[t * 9 + 7];
+    if (![ax, ay, bx, by, cx, cy].every(Number.isFinite)) continue;
+    const area2 = Math.abs((bx - ax) * (cy - ay) - (cx - ax) * (by - ay));
+    if (area2 < 1e-12) continue;
+    const x0 = Math.max(0, Math.floor((Math.min(ax, bx, cx) - minX) / cell));
+    const x1 = Math.min(w - 1, Math.floor((Math.max(ax, bx, cx) - minX) / cell));
+    const y0 = Math.max(0, Math.floor((Math.min(ay, by, cy) - minY) / cell));
+    const y1 = Math.min(h - 1, Math.floor((Math.max(ay, by, cy) - minY) / cell));
+    for (let j = y0; j <= y1; j++) {
+      for (let i = x0; i <= x1; i++) {
+        if (inside(minX + (i + 0.5) * cell, minY + (j + 0.5) * cell, ax, ay, bx, by, cx, cy)) {
+          cells[j * w + i] = 1;
+        }
+      }
+    }
+  }
+  return { w, h, cells, minX, minY, cell };
+}
+
+/** Grade cheia (para medidas manuais / sem geometria): comporta-se como retângulo. */
+export function filledGrid(wMm: number, dMm: number, cell = 1): ModelGrid {
+  const w = Math.max(1, Math.ceil(wMm / cell));
+  const h = Math.max(1, Math.ceil(dMm / cell));
+  return { w, h, cells: new Uint8Array(w * h).fill(1), minX: 0, minY: 0, cell };
+}
+
+/** Dilata a máscara em `radius` células (Chebyshev). Inclui as originais. */
+export function dilateGrid(g: ModelGrid, radius: number): Uint8Array {
+  const out = new Uint8Array(g.w * g.h);
+  if (radius <= 0) {
+    out.set(g.cells);
+    return out;
+  }
+  for (let j = 0; j < g.h; j++) {
+    for (let i = 0; i < g.w; i++) {
+      if (!g.cells[j * g.w + i]) continue;
+      for (let dj = -radius; dj <= radius; dj++) {
+        const jj = j + dj;
+        if (jj < 0 || jj >= g.h) continue;
+        for (let di = -radius; di <= radius; di++) {
+          const ii = i + di;
+          if (ii < 0 || ii >= g.w) continue;
+          out[jj * g.w + ii] = 1;
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Gira a máscara (reamostragem pelo centro da célula destino).
+ * Ângulos não-cardinais ganham +1 célula de segurança (conservador).
+ */
+export function rotateGrid(g: ModelGrid, angleDeg: number): { grid: ModelGrid; safe: boolean } {
+  const a = ((angleDeg % 360) + 360) % 360;
+  const exact = a === 0 || a === 90 || a === 180 || a === 270;
+  // cantos do bbox girados em torno da origem da grade
+  const corners = [
+    rotCw(0, 0, angleDeg),
+    rotCw(g.w * g.cell, 0, angleDeg),
+    rotCw(0, g.h * g.cell, angleDeg),
+    rotCw(g.w * g.cell, g.h * g.cell, angleDeg),
+  ];
+  const rMinX = Math.min(...corners.map((c) => c.x));
+  const rMinY = Math.min(...corners.map((c) => c.y));
+  const rMaxX = Math.max(...corners.map((c) => c.x));
+  const rMaxY = Math.max(...corners.map((c) => c.y));
+  const w = Math.max(1, Math.ceil((rMaxX - rMinX) / g.cell));
+  const h = Math.max(1, Math.ceil((rMaxY - rMinY) / g.cell));
+  const cells = new Uint8Array(w * h);
+  const inv = (360 - a) % 360;
+  for (let j = 0; j < h; j++) {
+    for (let i = 0; i < w; i++) {
+      // centro da célula destino -> desfaz o giro -> célula da grade original
+      const qx = rMinX + (i + 0.5) * g.cell;
+      const qy = rMinY + (j + 0.5) * g.cell;
+      const p = rotCw(qx, qy, inv);
+      const gi = Math.floor((p.x - g.minX) / g.cell + 1e-9);
+      const gj = Math.floor((p.y - g.minY) / g.cell + 1e-9);
+      if (gi >= 0 && gi < g.w && gj >= 0 && gj < g.h && g.cells[gj * g.w + gi]) {
+        cells[j * w + i] = 1;
+      }
+    }
+  }
+  return {
+    grid: { w, h, cells, minX: 0, minY: 0, cell: g.cell },
+    safe: exact,
+  };
+}
+
+/* ================================================================== */
+/* PACK RASTER — nesting por pixels (entrelaça o U com segurança)      */
+/* ================================================================== */
+
+export interface RasterPackItem extends PackItem {
+  /** grade do modelo (origem no canto do bbox); null = retângulo cheio */
+  grid: ModelGrid | null;
+}
+
+export interface PlacedPixels {
+  w: number;
+  h: number;
+  cells: number[];
+  cell: number;
+  angle: number;
+}
+
+interface PreparedAngle {
+  angle: number;
+  gw: number;
+  gh: number;
+  blocked: Uint8Array;
+  setCells: number[];
+  boxW: number;
+  boxH: number;
+  draw: ModelGrid;
+}
+
+/**
+ * Encaixa usando a geometria real: peças podem ocupar o vazio dentro do U
+ * umas das outras. Separação mínima garantida por dilatação (>= gap).
+ * Determinístico. Modelos sem grade caem para retângulo cheio.
+ */
+export function packRaster(
+  models: RasterPackItem[],
+  plateW: number,
+  plateD: number,
+  gap = 2,
+  margin = 3,
+  cell = 1
+): PackResult {
+  const valid = models.filter((m) => m.w > 0 && m.d > 0);
+  const pw = Math.max(1, Math.round((plateW - margin * 2) / cell));
+  const ph = Math.max(1, Math.round((plateD - margin * 2) / cell));
+  if (plateW - margin * 2 <= 0 || plateD - margin * 2 <= 0 || valid.length === 0) {
+    return { placed: [], unplaced: [...models], utilization: 0 };
+  }
+  const r = Math.max(1, Math.ceil(gap / 2 / cell));
+  const step = Math.max(1, Math.round(2 / cell));
+
+  interface Prep {
+    item: RasterPackItem;
+    areaCells: number;
+    angles: PreparedAngle[];
+  }
+  const preps: Prep[] = valid.map((m) => {
+    const base: ModelGrid =
+      m.grid && m.grid.w > 0 && m.grid.h > 0 ? m.grid : filledGrid(m.w, m.d, cell);
+    let area = 0;
+    for (let i = 0; i < base.cells.length; i++) if (base.cells[i]) area++;
+    const angles: PreparedAngle[] = PACK_ANGLES.map((angle) => {
+      const rot = rotateGrid(base, angle);
+      const blocked = dilateGrid(rot.grid, r + (rot.safe ? 0 : 1));
+      const setCells: number[] = [];
+      for (let i = 0; i < blocked.length; i++) if (blocked[i]) setCells.push(i);
+      const box = rotatedBox(m.w, m.d, angle);
+      return {
+        angle,
+        gw: rot.grid.w,
+        gh: rot.grid.h,
+        blocked,
+        setCells,
+        boxW: box.w,
+        boxH: box.d,
+        draw: rot.grid,
+      };
+    });
+    return { item: m, areaCells: area, angles };
+  });
+
+  let best: PackResult | null = null;
+
+  const attempts: Prep[][] = [
+    ...PACK_ORDERINGS.slice(0, 4).map((o) =>
+      [...preps].sort((a, b) => o(a.item, b.item))
+    ),
+    ...[7, 42, 123].map((s) => shufflePack(preps, s)),
+  ];
+
+  for (const queue of attempts) {
+    const plate = new Uint8Array(pw * ph);
+    const placed: PlacedItem[] = [];
+    const unplaced: PackItem[] = [];
+    let cellArea = 0;
+
+    for (const p of queue) {
+      let pick: { cx: number; cy: number; a: PreparedAngle; ai: number } | null = null;
+      for (let ai = 0; ai < p.angles.length; ai++) {
+        const a = p.angles[ai];
+        for (let cy = 0; cy + a.gh <= ph; cy += step) {
+          for (let cx = 0; cx + a.gw <= pw; cx += step) {
+            let ok = true;
+            for (let k = 0; k < a.setCells.length; k++) {
+              const c = a.setCells[k];
+              const gx = cx + (c % a.gw);
+              const gy = cy + Math.floor(c / a.gw);
+              if (plate[gy * pw + gx]) {
+                ok = false;
+                break;
+              }
+            }
+            if (!ok) continue;
+            if (!pick || cy < pick.cy || (cy === pick.cy && (cx < pick.cx || (cx === pick.cx && ai < pick.ai)))) {
+              pick = { cx, cy, a, ai };
+            }
+            break; // mais à esquerda nesta fileira
+          }
+        }
+      }
+      if (!pick) {
+        unplaced.push(p.item);
+        continue;
+      }
+      for (let k = 0; k < pick.a.setCells.length; k++) {
+        const c = pick.a.setCells[k];
+        plate[(pick.cy + Math.floor(c / pick.a.gw)) * pw + (pick.cx + (c % pick.a.gw))] = 1;
+      }
+      const mmX = round1(margin + pick.cx * cell);
+      const mmY = round1(margin + pick.cy * cell);
+      placed.push({
+        ...p.item,
+        x: mmX,
+        y: mmY,
+        angle: pick.a.angle,
+        rotated: pick.a.angle !== 0,
+        placedW: round1(pick.a.boxW),
+        placedD: round1(pick.a.boxH),
+        pix: {
+          w: pick.a.draw.w,
+          h: pick.a.draw.h,
+          cells: Array.from(pick.a.draw.cells),
+          cell: pick.a.draw.cell,
+          angle: pick.a.angle,
+        },
+      } as PlacedItem);
+      cellArea += p.areaCells;
+    }
+    const plateArea = plateW * plateD;
+    const candidate: PackResult = {
+      placed,
+      unplaced,
+      utilization: plateArea > 0 ? Math.min(1, (cellArea * cell * cell) / plateArea) : 0,
+    };
+    if (
+      !best ||
+      candidate.placed.length > best.placed.length ||
+      (candidate.placed.length === best.placed.length && candidate.utilization > best.utilization)
+    ) {
+      best = candidate;
+    }
+    const done: PackResult | null = best;
+    if (done && done.placed.length === valid.length) break;
+  }
+
+  return best || { placed: [], unplaced: [...models], utilization: 0 };
 }

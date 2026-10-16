@@ -4,6 +4,11 @@ import {
   parseStlTriangles,
   buildPositionedStl,
   packPlate,
+  packRaster,
+  rasterizeTriangles,
+  dilateGrid,
+  rotateGrid,
+  filledGrid,
   detectPlate,
   unplacedReason,
   fmtMm,
@@ -328,5 +333,142 @@ describe("buildPositionedStl", () => {
     expect(back.x).toBeCloseTo(8.7, 0);
     expect(back.y).toBeCloseTo(9.3, 0);
     expect(back.triangles).toBe(1);
+  });
+});
+
+// STL binário montado de lista de triângulos [[x,y]×3] (50 bytes cada)
+function trisStl(tris: number[][][]): ArrayBuffer {
+  const buf = new ArrayBuffer(84 + tris.length * 50);
+  const view = new DataView(buf);
+  view.setUint32(80, tris.length, true);
+  let off = 84;
+  for (const t of tris) {
+    // normal zerada (12 bytes) já é zero; 3 vértices × 12 bytes; atributo (2 bytes)
+    for (let v = 0; v < 3; v++) {
+      view.setFloat32(off + 12 + v * 12, t[v][0], true);
+      view.setFloat32(off + 16 + v * 12, t[v][1], true);
+      view.setFloat32(off + 20 + v * 12, 0, true);
+    }
+    off += 50;
+  }
+  return buf;
+}
+
+// U 30×30 oco (barras de 6mm, vão interno 24×18 aberto à direita)
+function cShapeStl(): ArrayBuffer {
+  const rect = (x0: number, y0: number, x1: number, y1: number) => [
+    [[x0, y0], [x1, y0], [x1, y1]],
+    [[x0, y0], [x1, y1], [x0, y1]],
+  ];
+  return trisStl([
+    ...rect(0, 0, 6, 30),
+    ...rect(0, 0, 30, 6),
+    ...rect(0, 24, 30, 30),
+  ]);
+}
+
+function squareStl(s: number): ArrayBuffer {
+  return trisStl([
+    [[0, 0], [s, 0], [s, s]],
+    [[0, 0], [s, s], [0, s]],
+  ]);
+}
+
+describe("raster", () => {
+  it("rasteriza o U com o vão vazio", async () => {
+    const t = await parseStlTriangles(cShapeStl());
+    const g = rasterizeTriangles(t.positions, 1);
+    expect(g.w).toBe(30);
+    expect(g.h).toBe(30);
+    const at = (x: number, y: number) => g.cells[y * g.w + x];
+    expect(at(3, 15)).toBe(1); // barra esquerda
+    expect(at(15, 3)).toBe(1); // barra inferior
+    expect(at(15, 15)).toBe(0); // vão vazio
+    expect(at(28, 15)).toBe(0); // abertura direita
+  });
+
+  it("dilata em anel de segurança (cortado na borda da grade)", () => {
+    const cells = new Uint8Array(16);
+    cells[1 * 4 + 1] = 1;
+    cells[1 * 4 + 2] = 1;
+    cells[2 * 4 + 1] = 1;
+    cells[2 * 4 + 2] = 1;
+    const d = dilateGrid({ w: 4, h: 4, cells, minX: 0, minY: 0, cell: 1 }, 1);
+    expect(d.length).toBe(16);
+    // 2×2 central dilatado em 1 preenche a grade 4×4 inteira
+    expect(d.reduce((s, v) => s + v, 0)).toBe(16);
+    const d0 = dilateGrid({ w: 4, h: 4, cells, minX: 0, minY: 0, cell: 1 }, 0);
+    expect(d0.reduce((s, v) => s + v, 0)).toBe(4);
+  });
+
+  it("gira 90° trocando largura/altura", async () => {
+    const t = await parseStlTriangles(squareStl(10));
+    const g = rasterizeTriangles(t.positions, 1);
+    const r = rotateGrid(g, 90);
+    expect(r.grid.w).toBe(g.h);
+    expect(r.grid.h).toBe(g.w);
+    expect(r.safe).toBe(true);
+    const r30 = rotateGrid(g, 30);
+    expect(r30.safe).toBe(false);
+  });
+
+  it("ENTRELAÇA: quadrado 10×10 mora no vão do U (caixas não caberiam)", async () => {
+    const c = await parseStlTriangles(cShapeStl());
+    const s = await parseStlTriangles(squareStl(10));
+    const cg = rasterizeTriangles(c.positions, 1);
+    const sg = rasterizeTriangles(s.positions, 1);
+    const r = packRaster(
+      [
+        { id: "u", label: "U", w: 30, d: 30, grid: cg },
+        { id: "q", label: "Q", w: 10, d: 10, grid: sg },
+      ],
+      40,
+      40,
+      2,
+      2
+    );
+    // por caixas seria impossível (30+12 > 38 lado a lado); entrelaçado cabem os 2
+    expect(r.unplaced).toEqual([]);
+    expect(r.placed).toHaveLength(2);
+    const u = r.placed.find((p) => p.id === "u")!;
+    const q = r.placed.find((p) => p.id === "q")!;
+    // quadrado dentro da região do U (entrelaçado de verdade)
+    expect(q.x).toBeGreaterThanOrEqual(u.x);
+    expect(q.x + 10).toBeLessThanOrEqual(u.x + 30);
+    // sem toque: distância Chebyshev entre células dos modelos >= 2 células
+    const cellsOf = (p: typeof u) => {
+      const pix = p.pix!;
+      const out: [number, number][] = [];
+      for (let j = 0; j < pix.h; j++)
+        for (let i = 0; i < pix.w; i++)
+          if (pix.cells[j * pix.w + i]) out.push([p.x + i, p.y + j]);
+      return out;
+    };
+    const cu = cellsOf(u);
+    const cq = cellsOf(q);
+    let minD = Infinity;
+    for (const [ax, ay] of cu)
+      for (const [bx, by] of cq)
+        minD = Math.min(minD, Math.max(Math.abs(ax - bx), Math.abs(ay - by)));
+    expect(minD).toBeGreaterThanOrEqual(2);
+  });
+
+  it("raster é determinístico", async () => {
+    const c = await parseStlTriangles(cShapeStl());
+    const s = await parseStlTriangles(squareStl(10));
+    const cg = rasterizeTriangles(c.positions, 1);
+    const sg = rasterizeTriangles(s.positions, 1);
+    const mk = () => [
+      { id: "u", label: "U", w: 30, d: 30, grid: cg },
+      { id: "q", label: "Q", w: 10, d: 10, grid: sg },
+    ];
+    expect(packRaster(mk(), 40, 40, 2, 2)).toEqual(packRaster(mk(), 40, 40, 2, 2));
+  });
+
+  it("filledGrid comporta-se como retângulo", () => {
+    const g = filledGrid(5, 4, 1);
+    expect(g.w).toBe(5);
+    expect(g.h).toBe(4);
+    expect(g.cells.every((v) => v === 1)).toBe(true);
   });
 });

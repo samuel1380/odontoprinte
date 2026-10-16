@@ -7,12 +7,14 @@ import type { PrinterWithStatus } from "@/types/domain";
 import {
   parseStlDimensions,
   parseStlTriangles,
+  rasterizeTriangles,
   buildPositionedStl,
-  packPlate,
+  packRaster,
   detectPlate,
   unplacedReason,
   fmtMm,
   type ModelSize,
+  type ModelGrid,
   type PackResult,
 } from "@/lib/plate-nesting";
 import { parseFileName } from "@/lib/parse-filename";
@@ -62,6 +64,8 @@ export default function MontagemPage() {
   const [building, setBuilding] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const trianglesById = useRef(new Map<string, Float32Array>());
+  const gridsById = useRef(new Map<string, ModelGrid>());
+  const mapRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     OdontoPrintService.getPrinters()
@@ -130,7 +134,14 @@ export default function MontagemPage() {
               : Promise.resolve(null),
           ]);
           if (cancelled) return;
-          if (tris) trianglesById.current.set(m.id, tris.positions);
+          if (tris) {
+            trianglesById.current.set(m.id, tris.positions);
+            try {
+              gridsById.current.set(m.id, rasterizeTriangles(tris.positions, 1));
+            } catch {
+              // sem grade: cai para retângulo cheio no encaixe
+            }
+          }
           setModels((prev) => prev.map((p) => (p.id === m.id ? { ...p, size, parsing: false } : p)));
         } catch (err: any) {
           if (cancelled) return;
@@ -158,19 +169,126 @@ export default function MontagemPage() {
     return null;
   };
 
-  const result: PackResult | null = useMemo(() => {
-    if (effW <= 0 || effD <= 0) return null;
-    const items = models
-      .map((m) => {
-        const s = sized(m);
-        if (!s) return null;
-        return { id: m.id, label: m.patient, w: s.w, d: s.d };
-      })
-      .filter(Boolean) as { id: string; label: string; w: number; d: number }[];
-    if (items.length === 0) return null;
-    return packPlate(items, effW, effD, Math.max(0, gap), 2);
+  const [result, setResult] = useState<PackResult | null>(null);
+  const [packing, setPacking] = useState(false);
+
+  // Encaixe com debounce (raster pode levar 1-3s em mesas grandes)
+  const packSignature = JSON.stringify([
+    models.map((m) => [m.id, m.size, m.manualW, m.manualD, m.error]),
+    effW,
+    effD,
+    gap,
+  ]);
+  useEffect(() => {
+    setPacking(true);
+    const t = setTimeout(() => {
+      try {
+        if (!(effW > 0 && effD > 0)) {
+          setResult(null);
+          return;
+        }
+        const items = models
+          .map((m) => {
+            const s = sized(m);
+            if (!s) return null;
+            return {
+              id: m.id,
+              label: m.patient,
+              w: s.w,
+              d: s.d,
+              grid: gridsById.current.get(m.id) || null,
+            };
+          })
+          .filter(Boolean) as {
+          id: string;
+          label: string;
+          w: number;
+          d: number;
+          grid: ModelGrid | null;
+        }[];
+        if (items.length === 0) {
+          setResult(null);
+          return;
+        }
+        setResult(packRaster(items, effW, effD, Math.max(0, gap), 2));
+      } finally {
+        setPacking(false);
+      }
+    }, 350);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [models, effW, effD, gap]);
+  }, [packSignature]);
+
+  // Mapa exato em canvas (desenha as células reais de cada modelo)
+  const MAP_COLORS = [
+    "#22d3ee",
+    "#a78bfa",
+    "#34d399",
+    "#fbbf24",
+    "#f472b6",
+    "#60a5fa",
+    "#fb7185",
+    "#4ade80",
+    "#facc15",
+    "#38bdf8",
+    "#c084fc",
+    "#2dd4bf",
+  ];
+  useEffect(() => {
+    const canvas = mapRef.current;
+    if (!canvas || !result || !(effW > 0 && effD > 0)) return;
+    const S = 3; // px por mm
+    canvas.width = Math.max(1, Math.round(effW * S));
+    canvas.height = Math.max(1, Math.round(effD * S));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(2 * S, 2 * S, (effW - 4) * S, (effD - 4) * S);
+    result.placed.forEach((p, i) => {
+      const color = MAP_COLORS[i % MAP_COLORS.length];
+      const pix = (p as any).pix as
+        | { w: number; h: number; cells: number[]; cell: number }
+        | undefined;
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.75;
+      let sx = 0;
+      let sy = 0;
+      let n = 0;
+      if (pix && pix.cells.length > 0) {
+        for (let j = 0; j < pix.h; j++) {
+          for (let k = 0; k < pix.w; k++) {
+            if (!pix.cells[j * pix.w + k]) continue;
+            const px = (p.x + k * pix.cell) * S;
+            const py = (p.y + j * pix.cell) * S;
+            ctx.fillRect(px, py, pix.cell * S, pix.cell * S);
+            sx += px + (pix.cell * S) / 2;
+            sy += py + (pix.cell * S) / 2;
+            n++;
+          }
+        }
+      } else {
+        ctx.fillRect(p.x * S, p.y * S, p.placedW * S, p.placedD * S);
+        sx = (p.x + p.placedW / 2) * S;
+        sy = (p.y + p.placedD / 2) * S;
+        n = 1;
+      }
+      ctx.globalAlpha = 1;
+      if (n > 0) {
+        ctx.fillStyle = "#0f172a";
+        ctx.beginPath();
+        ctx.arc(sx / n, sy / n, 9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 11px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(String(i + 1), sx / n, sy / n + 0.5);
+      }
+    });
+  }, [result, effW, effD]);
 
   const labelById = useMemo(() => {
     const map = new Map<string, string>();
@@ -295,6 +413,7 @@ export default function MontagemPage() {
 
   const removeModel = (id: string) => {
     trianglesById.current.delete(id);
+    gridsById.current.delete(id);
     setModels((prev) => prev.filter((m) => m.id !== id));
   };
 
@@ -553,43 +672,23 @@ export default function MontagemPage() {
                   Modelo com {fmtMm(maxZ)} passa da altura ({fmtMm(effH)}). Deite ou divida.
                 </p>
               )}
-              <svg
-                viewBox={`-8 -12 ${effW + 16} ${effD + 24}`}
+              {packing && (
+                <p className="text-[11px] text-cyan-300 animate-pulse">Calculando melhor encaixe...</p>
+              )}
+              <canvas
+                ref={mapRef}
                 className="w-full h-auto max-h-[420px] rounded-xl bg-slate-950 border border-slate-800"
                 role="img"
-                aria-label="Mapa da chapa com os modelos encaixados"
-              >
-                <rect x={0} y={0} width={effW} height={effD} rx={2} fill="none" stroke="#334155" strokeWidth={0.8} />
-                {result.placed.map((p, i) => (
-                  <g key={p.id}>
-                    <rect
-                      x={p.x}
-                      y={p.y}
-                      width={p.placedW}
-                      height={p.placedD}
-                      rx={1.2}
-                      fill={p.angle !== 0 ? "rgba(34,211,238,0.22)" : "rgba(34,211,238,0.12)"}
-                      stroke="#22d3ee"
-                      strokeWidth={0.7}
-                    />
-                    <text
-                      x={p.x + p.placedW / 2}
-                      y={p.y + p.placedD / 2}
-                      textAnchor="middle"
-                      dominantBaseline="central"
-                      fill="#e2e8f0"
-                      fontSize={Math.max(3.2, Math.min(6, p.placedW / 4))}
-                      fontWeight="bold"
-                    >
-                      {i + 1}
-                    </text>
-                  </g>
-                ))}
-              </svg>
+                aria-label="Mapa exato da chapa com os modelos encaixados"
+              />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <ol className="space-y-1 text-[11px] text-slate-300">
                   {result.placed.map((p, i) => (
                     <li key={p.id} className="flex items-center gap-2 flex-wrap">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ background: MAP_COLORS[i % MAP_COLORS.length] }}
+                      />
                       <span className="font-mono font-bold text-cyan-300 w-5">{i + 1}.</span>
                       <span className="font-semibold text-white truncate">{labelById.get(p.id)}</span>
                       <span>
