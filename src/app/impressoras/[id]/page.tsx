@@ -38,11 +38,16 @@ export default function ImpressoraDetalhesPage() {
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
-      await OdontoPrintService.deletePrinter(printerId);
+      const res = await OdontoPrintService.deletePrinter(printerId);
+      if (!res.success) {
+        toast.error(res.error || "Erro ao apagar impressora.");
+        setIsDeleting(false);
+        return;
+      }
       toast.success("Impressora apagada com sucesso!");
       router.push("/impressoras");
-    } catch {
-      toast.error("Erro ao apagar impressora.");
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao apagar impressora.");
       setIsDeleting(false);
     }
   };

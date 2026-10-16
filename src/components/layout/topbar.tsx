@@ -54,7 +54,7 @@ export function Topbar({ onOpenMobileMenu }: TopbarProps) {
         <button
           type="button"
           onClick={onOpenMobileMenu}
-          className="lg:hidden p-2 -ml-1 rounded-full text-slate-300 hover:bg-slate-800 hover:text-white transition focus:outline-hidden shrink-0"
+          className="lg:hidden p-2 -ml-1 rounded-full text-slate-300 hover:bg-slate-800 hover:text-white transition focus:outline-none shrink-0"
           aria-label="Abrir menu de navegação"
         >
           <Menu className="w-5 h-5" />

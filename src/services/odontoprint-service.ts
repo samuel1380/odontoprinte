@@ -42,7 +42,7 @@ import {
   MaintenanceChecklistInput,
   ResinCalibrationInput,
 } from "@/lib/business-rules";
-import { DEFAULT_SYSTEM_SETTINGS, FILE_TYPE_LABELS } from "@/lib/constants";
+import { FILE_TYPE_LABELS } from "@/lib/constants";
 import { validateAccessRequest, translateSupabaseAuthError } from "@/lib/auth-errors";
 
 // ====================================================================
@@ -317,6 +317,7 @@ export class OdontoPrintService {
         "cases",
         "print_runs",
         "resin_batches",
+        "resin_calibrations",
         "printers",
       ];
       const channel = client.channel(`odontoprint-lab-${Math.random().toString(36).slice(2, 8)}`);
@@ -3060,10 +3061,11 @@ export class OdontoPrintService {
     };
 
     mockMaintenances = loadLocal("odontoprint_maintenances", mockMaintenances);
-    mockMaintenances.unshift(newMaint);
-    saveLocal("odontoprint_maintenances", mockMaintenances);
 
     const snapMaint = this.snapLocals();
+
+    mockMaintenances.unshift(newMaint);
+    saveLocal("odontoprint_maintenances", mockMaintenances);
 
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
@@ -3421,20 +3423,22 @@ export class OdontoPrintService {
       created_at: now,
     };
 
+    mockCalibrations = loadLocal("odontoprint_calibrations", mockCalibrations);
+    mockResinBatches = loadLocal("odontoprint_resin_batches", mockResinBatches);
+
+    const snapCal = this.snapLocals();
+
     mockCalibrations.unshift(newCal);
     saveLocal("odontoprint_calibrations", mockCalibrations);
 
     // Se aprovada, marca o lote como CALIBRADA
     if (validation.approved) {
-      mockResinBatches = loadLocal("odontoprint_resin_batches", mockResinBatches);
       const batch = mockResinBatches.find((b) => b.id === params.resin_batch_id);
       if (batch) {
         batch.status = "CALIBRADA";
         saveLocal("odontoprint_resin_batches", mockResinBatches);
       }
     }
-
-    const snapCal = this.snapLocals();
 
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {

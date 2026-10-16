@@ -182,6 +182,10 @@ function NovaCalibracaoContent() {
           description: "A resina e a impressora agora estão liberadas para impressão.",
         });
         router.push("/calibracoes");
+      } else {
+        toast.warning("Calibração registrada como reprovada.", {
+          description: res.errorReason || "Ajuste os parâmetros e tente novamente.",
+        });
       }
     } catch {
       toast.error("Erro ao salvar calibração.");

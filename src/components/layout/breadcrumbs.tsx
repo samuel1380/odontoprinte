@@ -61,7 +61,7 @@ export function Breadcrumbs() {
             ) : (
               <Link
                 href={path}
-                className="text-slate-400 hover:text-white transition capitalize truncate max-w-[80px] sm:max-w-none hidden xs:inline"
+                className="text-slate-400 hover:text-white transition capitalize truncate max-w-[80px] sm:max-w-none hidden sm:inline"
               >
                 {label}
               </Link>

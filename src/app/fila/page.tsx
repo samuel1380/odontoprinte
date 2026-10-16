@@ -1200,9 +1200,13 @@ export default function FilaPage() {
         setCardToFail(null);
         setCardFailReason("");
         loadData();
+      } else {
+        toast.error(res.error || "Erro ao registrar falha.");
+        loadData();
       }
     } catch {
       toast.error("Erro ao registrar falha.");
+      loadData();
     }
   };
 

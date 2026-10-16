@@ -243,7 +243,7 @@ export function AICopilotDrawer() {
             dragStart.current = null;
             setDragPos(null);
           }}
-          className={`relative flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-white text-slate-950 border border-white/30 focus:outline-hidden select-none ${
+          className={`relative flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-white text-slate-950 border border-white/30 focus:outline-none select-none ${
             dragPos
               ? "shadow-2xl shadow-cyan-950/50 cursor-grabbing"
               : "shadow-xl shadow-slate-950/40 hover:bg-slate-200 hover:scale-105 active:scale-90 cursor-grab transition-all duration-200"
@@ -466,7 +466,7 @@ export function AICopilotDrawer() {
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 placeholder="Digite sua dúvida..."
-                className="flex-1 px-4 py-2 text-xs rounded-full border border-slate-700/80 focus:outline-hidden focus:ring-2 focus:ring-cyan-400 bg-slate-900 text-white placeholder:text-slate-500"
+                className="flex-1 px-4 py-2 text-xs rounded-full border border-slate-700/80 focus:outline-none focus:ring-2 focus:ring-cyan-400 bg-slate-900 text-white placeholder:text-slate-500"
               />
               <Button
                 type="submit"

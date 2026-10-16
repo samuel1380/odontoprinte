@@ -39,11 +39,16 @@ export default function ResinaDetalhesPage() {
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
-      await OdontoPrintService.deleteResinBatch(batchId);
+      const res = await OdontoPrintService.deleteResinBatch(batchId);
+      if (!res.success) {
+        toast.error(res.error || "Erro ao apagar lote de resina.");
+        setIsDeleting(false);
+        return;
+      }
       toast.success("Lote de resina apagado com sucesso!");
       router.push("/resinas");
-    } catch {
-      toast.error("Erro ao apagar lote de resina.");
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao apagar lote de resina.");
       setIsDeleting(false);
     }
   };
