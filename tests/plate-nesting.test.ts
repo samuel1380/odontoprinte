@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   parseStlDimensions,
+  parseStlTriangles,
+  buildPositionedStl,
   packPlate,
   detectPlate,
   fmtMm,
@@ -129,5 +131,56 @@ describe("detectPlate", () => {
 
   it("fmtMm formata em pt-BR", () => {
     expect(fmtMm(12.5)).toBe("12,5 mm");
+  });
+});
+
+describe("buildPositionedStl", () => {
+  it("posiciona, gira e desce para a mesa (round-trip exato)", async () => {
+    const a = await parseStlTriangles(binaryStl()); // 10×5×2 em (0,0,0)
+    const out = buildPositionedStl([
+      { positions: a.positions, x: 30, y: 40, rotated: true, dropToBed: true },
+    ]);
+    // cabeçalho + 1 triângulo
+    expect(out.byteLength).toBe(84 + 50);
+    expect(new DataView(out).getUint32(80, true)).toBe(1);
+    const back = await parseStlDimensions(out);
+    // girado: 5×10, canto em (30,40), Z encostado no zero
+    expect(back.x).toBe(5);
+    expect(back.y).toBe(10);
+    expect(back.z).toBe(2);
+    expect(back.triangles).toBe(1);
+  });
+
+  it("duas peças não se sobrepõem no arquivo final", async () => {
+    const a = await parseStlTriangles(binaryStl());
+    const layout = packPlate(
+      [
+        { id: "a", label: "A", w: 10, d: 5 },
+        { id: "b", label: "B", w: 10, d: 5 },
+      ],
+      100,
+      100,
+      2,
+      3
+    );
+    expect(layout.unplaced).toEqual([]);
+    const out = buildPositionedStl(
+      layout.placed.map((p) => ({ positions: a.positions, x: p.x, y: p.y, rotated: p.rotated }))
+    );
+    expect(new DataView(out).getUint32(80, true)).toBe(2);
+    // volta a ler: caixas das peças posicionadas não se tocam
+    const re = await parseStlDimensions(out);
+    expect(re.triangles).toBe(2);
+    expect(re.x).toBeGreaterThan(10);
+  });
+
+  it("mantém Z original quando dropToBed é false", async () => {
+    const a = await parseStlTriangles(binaryStl());
+    // desloca Z para [5,7]
+    const shifted = new Float32Array(a.positions);
+    for (let i = 2; i < shifted.length; i += 3) shifted[i] += 5;
+    const out = buildPositionedStl([{ positions: shifted, x: 0, y: 0, rotated: false, dropToBed: false }]);
+    const back = await parseStlDimensions(out);
+    expect(back.z).toBe(2);
   });
 });

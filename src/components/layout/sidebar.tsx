@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   FileCheck2,
   ListOrdered,
+  LayoutGrid,
   FlaskConical,
   Compass,
   History,
@@ -49,6 +50,11 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           title: "Fila de Impressão 3D",
           href: "/fila",
           icon: ListOrdered,
+        },
+        {
+          title: "Montagem de Mesa",
+          href: "/montagem",
+          icon: LayoutGrid,
         },
         {
           title: "Novo Caso (Cadista)",

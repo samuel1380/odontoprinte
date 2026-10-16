@@ -77,30 +77,14 @@ export function detectPlate(brand: string, model: string): PlateDef {
   return { ...DEFAULT_PLATE };
 }
 
-/** Lê dimensões (bounding box em mm) de um STL binário ou ASCII. */
-export async function parseStlDimensions(input: File | Blob | ArrayBuffer): Promise<ModelSize> {
-  const buffer =
-    input instanceof ArrayBuffer ? input : await (input as Blob).arrayBuffer();
+/** Triângulos brutos (9 floats por triângulo: x,y,z × 3 vértices). */
+export interface RawTriangles {
+  positions: Float32Array;
+  count: number;
+}
+
+function extractTriangles(buffer: ArrayBuffer): RawTriangles {
   const bytes = new Uint8Array(buffer);
-
-  let minX = Infinity,
-    minY = Infinity,
-    minZ = Infinity;
-  let maxX = -Infinity,
-    maxY = -Infinity,
-    maxZ = -Infinity;
-  let triangles = 0;
-
-  const touch = (x: number, y: number, z: number) => {
-    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return;
-    if (x < minX) minX = x;
-    if (y < minY) minY = y;
-    if (z < minZ) minZ = z;
-    if (x > maxX) maxX = x;
-    if (y > maxY) maxY = y;
-    if (z > maxZ) maxZ = z;
-  };
-
   const looksBinary = (): boolean => {
     if (bytes.length < 84) return false;
     const view = new DataView(buffer);
@@ -115,40 +99,183 @@ export async function parseStlDimensions(input: File | Blob | ArrayBuffer): Prom
 
   if (looksBinary()) {
     const view = new DataView(buffer);
-    triangles = view.getUint32(80, true);
+    const count = view.getUint32(80, true);
+    const positions = new Float32Array(count * 9);
     let offset = 84;
-    for (let t = 0; t < triangles; t++) {
+    let w = 0;
+    for (let t = 0; t < count; t++) {
       if (offset + 50 > bytes.length) break;
-      // normal (12 bytes) pulado; 3 vértices × 12 bytes
+      // normal (12 bytes) pulada; 3 vértices × 12 bytes
       for (let v = 0; v < 3; v++) {
-        const x = view.getFloat32(offset + 12 + v * 12, true);
-        const y = view.getFloat32(offset + 16 + v * 12, true);
-        const z = view.getFloat32(offset + 20 + v * 12, true);
-        touch(x, y, z);
+        positions[w++] = view.getFloat32(offset + 12 + v * 12, true);
+        positions[w++] = view.getFloat32(offset + 16 + v * 12, true);
+        positions[w++] = view.getFloat32(offset + 20 + v * 12, true);
       }
       offset += 50;
     }
-  } else {
-    // ASCII: lê linhas "vertex x y z"
-    const text = new TextDecoder().decode(bytes);
-    const re = /vertex\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(text)) !== null) {
-      touch(parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3]));
-    }
-    const facets = (text.match(/^\s*facet\s+normal/gm) || []).length;
-    triangles = facets;
+    return { positions: positions.slice(0, w), count: Math.floor(w / 9) };
   }
 
-  if (!Number.isFinite(minX) || triangles === 0) {
+  // ASCII: lê linhas "vertex x y z"
+  const text = new TextDecoder().decode(bytes);
+  const re = /vertex\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)/g;
+  const coords: number[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    coords.push(parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3]));
+  }
+  return { positions: new Float32Array(coords), count: Math.floor(coords.length / 9) };
+}
+
+/** Lê dimensões (bounding box em mm) de um STL binário ou ASCII. */
+export async function parseStlDimensions(input: File | Blob | ArrayBuffer): Promise<ModelSize> {
+  const buffer =
+    input instanceof ArrayBuffer ? input : await (input as Blob).arrayBuffer();
+  const { positions, count } = extractTriangles(buffer);
+  if (count === 0 || positions.length < 9) {
+    throw new Error("Não foi possível ler a geometria do STL (arquivo vazio ou inválido).");
+  }
+
+  let minX = Infinity,
+    minY = Infinity,
+    minZ = Infinity;
+  let maxX = -Infinity,
+    maxY = -Infinity,
+    maxZ = -Infinity;
+  for (let i = 0; i < positions.length; i += 3) {
+    const x = positions[i];
+    const y = positions[i + 1];
+    const z = positions[i + 2];
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) continue;
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (z < minZ) minZ = z;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+    if (z > maxZ) maxZ = z;
+  }
+
+  if (!Number.isFinite(minX)) {
     throw new Error("Não foi possível ler a geometria do STL (arquivo vazio ou inválido).");
   }
   return {
     x: round1(maxX - minX),
     y: round1(maxY - minY),
     z: round1(maxZ - minZ),
-    triangles,
+    triangles: count,
   };
+}
+
+/** Extrai os triângulos (para montar o STL posicionado). */
+export async function parseStlTriangles(input: File | Blob | ArrayBuffer): Promise<RawTriangles> {
+  const buffer = input instanceof ArrayBuffer ? input : await (input as Blob).arrayBuffer();
+  const { positions, count } = extractTriangles(buffer);
+  if (count === 0) {
+    throw new Error("Não foi possível ler a geometria do STL (arquivo vazio ou inválido).");
+  }
+  return { positions, count };
+}
+
+export interface PlacementSpec {
+  positions: Float32Array;
+  /** canto inferior-esquerdo alvo na chapa (mm) */
+  x: number;
+  y: number;
+  /** gira 90° (troca L×P, igual ao mapa) */
+  rotated: boolean;
+  /** desce o modelo até Z=0 (padrão: sim) */
+  dropToBed?: boolean;
+}
+
+/** Gira -90° em Z quando rotated (L×P vira P×L). */
+function rotXY(x: number, y: number, rotated: boolean): { x: number; y: number } {
+  if (!rotated) return { x, y };
+  return { x: y, y: -x };
+}
+
+function triNormal(
+  ax: number,
+  ay: number,
+  az: number,
+  bx: number,
+  by: number,
+  bz: number,
+  cx: number,
+  cy: number,
+  cz: number
+): { x: number; y: number; z: number } {
+  const ux = bx - ax;
+  const uy = by - ay;
+  const uz = bz - az;
+  const vx = cx - ax;
+  const vy = cy - ay;
+  const vz = cz - az;
+  const nx = uy * vz - uz * vy;
+  const ny = uz * vx - ux * vz;
+  const nz = ux * vy - uy * vx;
+  const len = Math.hypot(nx, ny, nz) || 1;
+  return { x: nx / len, y: ny / len, z: nz / len };
+}
+
+/**
+ * Gera um STL binário único com as peças posicionadas na chapa,
+ * pronto para abrir no Chitubox/Halot Box (só faltam suportes).
+ * Rotação de -90° em Z + translação; normais recalculadas.
+ */
+export function buildPositionedStl(parts: PlacementSpec[]): ArrayBuffer {
+  let total = 0;
+  const prepared = parts.map((p) => {
+    const n = Math.floor(p.positions.length / 9);
+    total += n;
+    let minX = Infinity,
+      minY = Infinity,
+      minZ = Infinity;
+    for (let i = 0; i < p.positions.length; i += 3) {
+      const g = rotXY(p.positions[i], p.positions[i + 1], p.rotated);
+      if (g.x < minX) minX = g.x;
+      if (g.y < minY) minY = g.y;
+      if (p.positions[i + 2] < minZ) minZ = p.positions[i + 2];
+    }
+    return { n, minX, minY, drop: p.dropToBed === false ? 0 : minZ };
+  });
+
+  const buffer = new ArrayBuffer(84 + total * 50);
+  const view = new DataView(buffer);
+  const head = `OdontoPrint mesa posicionada (${parts.length} pecas)`;
+  for (let i = 0; i < Math.min(80, head.length); i++) view.setUint8(i, head.charCodeAt(i));
+  view.setUint32(80, total, true);
+
+  let offset = 84;
+  let pi = 0;
+  for (const p of parts) {
+    const prep = prepared[pi++];
+    const tx = p.x - prep.minX;
+    const ty = p.y - prep.minY;
+    for (let i = 0; i < p.positions.length; i += 9) {
+      const a = rotXY(p.positions[i], p.positions[i + 1], p.rotated);
+      const b = rotXY(p.positions[i + 3], p.positions[i + 4], p.rotated);
+      const c = rotXY(p.positions[i + 6], p.positions[i + 7], p.rotated);
+      const az = p.positions[i + 2] - prep.drop;
+      const bz = p.positions[i + 5] - prep.drop;
+      const cz = p.positions[i + 8] - prep.drop;
+      const n = triNormal(a.x + tx, a.y + ty, az, b.x + tx, b.y + ty, bz, c.x + tx, c.y + ty, cz);
+      view.setFloat32(offset, n.x, true);
+      view.setFloat32(offset + 4, n.y, true);
+      view.setFloat32(offset + 8, n.z, true);
+      view.setFloat32(offset + 12, a.x + tx, true);
+      view.setFloat32(offset + 16, a.y + ty, true);
+      view.setFloat32(offset + 20, az, true);
+      view.setFloat32(offset + 24, b.x + tx, true);
+      view.setFloat32(offset + 28, b.y + ty, true);
+      view.setFloat32(offset + 32, bz, true);
+      view.setFloat32(offset + 36, c.x + tx, true);
+      view.setFloat32(offset + 40, c.y + ty, true);
+      view.setFloat32(offset + 44, cz, true);
+      view.setUint16(offset + 48, 0, true);
+      offset += 50;
+    }
+  }
+  return buffer;
 }
 
 function round1(n: number): number {
