@@ -60,6 +60,36 @@ describe("parseStlDimensions", () => {
 });
 
 describe("packPlate", () => {
+  // Expande cada peça pela folga e garante que ninguém se toca
+  const assertNoOverlap = (r: { placed: { x: number; y: number; placedW: number; placedD: number }[] }, gap: number) => {
+    const g = Math.max(1, gap);
+    for (let i = 0; i < r.placed.length; i++) {
+      for (let j = i + 1; j < r.placed.length; j++) {
+        const a = r.placed[i];
+        const b = r.placed[j];
+        const overlap =
+          a.x < b.x + b.placedW + g - 0.2 &&
+          b.x < a.x + a.placedW + g - 0.2 &&
+          a.y < b.y + b.placedD + g - 0.2 &&
+          b.y < a.y + a.placedD + g - 0.2;
+        expect(overlap, `peças ${i} e ${j} se tocam`).toBe(false);
+      }
+    }
+  };
+
+  const assertInside = (
+    r: { placed: { x: number; y: number; placedW: number; placedD: number }[] },
+    w: number,
+    d: number,
+    margin: number
+  ) => {
+    for (const p of r.placed) {
+      expect(p.x).toBeGreaterThanOrEqual(margin - 0.2);
+      expect(p.y).toBeGreaterThanOrEqual(margin - 0.2);
+      expect(p.x + p.placedW).toBeLessThanOrEqual(w - margin + 0.2);
+      expect(p.y + p.placedD).toBeLessThanOrEqual(d - margin + 0.2);
+    }
+  };
   it("encaixa tudo quando cabe e calcula ocupação", () => {
     const r = packPlate(
       [
@@ -120,6 +150,57 @@ describe("packPlate", () => {
     const r1 = packPlate(models, 100, 80);
     const r2 = packPlate(models, 100, 80);
     expect(r1).toEqual(r2);
+    assertNoOverlap(r1, 2);
+    assertInside(r1, 100, 80, 3);
+  });
+
+  it("cabe 12 modelos pequenos na Photon Mono 4 (153,4×87)", () => {
+    const models = Array.from({ length: 12 }, (_, i) => ({
+      id: `m${i}`,
+      label: `M${i}`,
+      w: 25,
+      d: 18,
+    }));
+    const r = packPlate(models, 153.4, 87, 2, 3);
+    expect(r.unplaced).toEqual([]);
+    expect(r.placed).toHaveLength(12);
+    assertNoOverlap(r, 2);
+    assertInside(r, 153.4, 87, 3);
+  });
+
+  it("mistura realista de modelos cabe sem encostar", () => {
+    const models = [
+      { id: "a", label: "A", w: 32, d: 24 },
+      { id: "b", label: "B", w: 28, d: 20 },
+      { id: "c", label: "C", w: 25, d: 18 },
+      { id: "d", label: "D", w: 25, d: 18 },
+      { id: "e", label: "E", w: 22, d: 16 },
+      { id: "f", label: "F", w: 22, d: 16 },
+      { id: "g", label: "G", w: 20, d: 15 },
+      { id: "h", label: "H", w: 20, d: 15 },
+      { id: "i", label: "I", w: 18, d: 14 },
+      { id: "j", label: "J", w: 18, d: 14 },
+    ];
+    const r = packPlate(models, 153.4, 87, 2, 3);
+    expect(r.unplaced).toEqual([]);
+    assertNoOverlap(r, 2);
+    assertInside(r, 153.4, 87, 3);
+    expect(r.utilization).toBeGreaterThan(0.3);
+  });
+
+  it("folga zero ainda separa 1mm (anti-fusão)", () => {
+    const r = packPlate(
+      [
+        { id: "a", label: "A", w: 30, d: 30 },
+        { id: "b", label: "B", w: 30, d: 30 },
+      ],
+      100,
+      100,
+      0,
+      0
+    );
+    expect(r.placed).toHaveLength(2);
+    assertNoOverlap(r, 1);
   });
 });
 

@@ -283,10 +283,10 @@ function round1(n: number): number {
 }
 
 /**
- * Encaixa retângulos na chapa (algoritmo de prateleiras: ordena por altura,
- * abre fileiras, gira 90° quando couber melhor). Determinístico.
+ * Encaixa retângulos na chapa (MaxRects + melhor encaixe: tenta várias ordens
+ * e orientações, fica com a que couber mais modelos). Determinístico.
  *
- * @param gap espaço livre entre modelos (p/ conector e destaque), em mm
+ * @param gap espaço livre entre modelos (mínimo 1mm anti-fusão), em mm
  * @param margin borda de segurança da chapa, em mm
  */
 export function packPlate(
@@ -296,78 +296,128 @@ export function packPlate(
   gap = 2,
   margin = 3
 ): PackResult {
+  // Anti-fusão: nunca menos de 1mm entre modelos
+  const g = Math.max(1, gap || 0);
   const usableW = plateW - margin * 2;
   const usableD = plateD - margin * 2;
-  const placed: PlacedItem[] = [];
-  const unplaced: PackItem[] = [];
-
-  // Maiores primeiro = menos buraco
-  const queue = [...models]
-    .filter((m) => m.w > 0 && m.d > 0)
-    .sort((a, b) => b.d * b.w - a.d * a.w || b.d - a.d);
-
-  let cursorY = margin;
-  let rowH = 0;
-  let cursorX = margin;
-
-  const fits = (w: number, d: number, x: number, y: number) =>
-    x + w <= margin + usableW + 1e-9 && y + d <= margin + usableD + 1e-9;
-
-  for (const m of queue) {
-    // orientações possíveis (normal e girada), maior lado junto à fileira
-    const orientations = [
-      { w: m.w + gap, d: m.d + gap, rotated: false },
-      { w: m.d + gap, d: m.w + gap, rotated: true },
-    ].sort((a, b) => b.d - a.d);
-
-    let done = false;
-    for (const o of orientations) {
-      if (fits(o.w, o.d, cursorX, cursorY)) {
-        placed.push({
-          ...m,
-          x: round1(cursorX),
-          y: round1(cursorY),
-          rotated: o.rotated,
-          placedW: round1(o.w - gap),
-          placedD: round1(o.d - gap),
-        });
-        cursorX += o.w;
-        rowH = Math.max(rowH, o.d);
-        done = true;
-        break;
-      }
-    }
-    if (done) continue;
-
-    // Nova fileira
-    const newY = cursorY + rowH;
-    for (const o of orientations) {
-      if (fits(o.w, o.d, margin, newY)) {
-        cursorY = newY;
-        cursorX = margin + o.w;
-        rowH = o.d;
-        placed.push({
-          ...m,
-          x: round1(margin),
-          y: round1(cursorY),
-          rotated: o.rotated,
-          placedW: round1(o.w - gap),
-          placedD: round1(o.d - gap),
-        });
-        done = true;
-        break;
-      }
-    }
-    if (!done) unplaced.push(m);
+  const valid = models.filter((m) => m.w > 0 && m.d > 0);
+  if (usableW <= 0 || usableD <= 0 || valid.length === 0) {
+    return { placed: [], unplaced: [...models], utilization: plateW > 0 && plateD > 0 ? 0 : 0 };
   }
 
-  const usedArea = placed.reduce((s, p) => s + p.placedW * p.placedD, 0);
-  const plateArea = plateW * plateD;
-  return {
-    placed,
-    unplaced,
-    utilization: plateArea > 0 ? Math.min(1, usedArea / plateArea) : 0,
-  };
+  interface FreeRect {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  }
+
+  const orderings: Array<(a: PackItem, b: PackItem) => number> = [
+    (a, b) => b.w * b.d - a.w * a.d || Math.max(b.w, b.d) - Math.max(a.w, a.d) || (a.id < b.id ? -1 : 1),
+    (a, b) => Math.max(b.w, b.d) - Math.max(a.w, a.d) || b.w * b.d - a.w * a.d || (a.id < b.id ? -1 : 1),
+    (a, b) => b.w - a.w || b.d - a.d || (a.id < b.id ? -1 : 1),
+    (a, b) => b.d - a.d || b.w - a.w || (a.id < b.id ? -1 : 1),
+    (a, b) => 2 * (b.w + b.d) - 2 * (a.w + a.d) || (a.id < b.id ? -1 : 1),
+  ];
+
+  let best: PackResult | null = null;
+
+  for (const order of orderings) {
+    const queue = [...valid].sort(order);
+    let free: FreeRect[] = [{ x: margin, y: margin, w: usableW, h: usableD }];
+    const placed: PlacedItem[] = [];
+    const unplaced: PackItem[] = [];
+    const EPS = 1e-9;
+
+    const prune = () => {
+      free = free.filter((f) => f.w > EPS && f.h > EPS);
+      for (let i = free.length - 1; i >= 0; i--) {
+        for (let j = 0; j < free.length; j++) {
+          if (i === j) continue;
+          const a = free[i];
+          const b = free[j];
+          if (a.x >= b.x - EPS && a.y >= b.y - EPS && a.x + a.w <= b.x + b.w + EPS && a.y + a.h <= b.y + b.h + EPS) {
+            free.splice(i, 1);
+            break;
+          }
+        }
+      }
+    };
+
+    for (const m of queue) {
+      const options = [
+        { w: m.w + g, d: m.d + g, rotated: false },
+        { w: m.d + g, d: m.w + g, rotated: true },
+      ];
+      let bestScore: [number, number, number, number] | null = null;
+      let bestPick: { fx: number; fy: number; fi: number; o: (typeof options)[0] } | null = null;
+
+      for (let fi = 0; fi < free.length; fi++) {
+        const f = free[fi];
+        for (const o of options) {
+          if (o.w > f.w + EPS || o.d > f.h + EPS) continue;
+          const leftoverH = Math.abs(f.w - o.w);
+          const leftoverV = Math.abs(f.h - o.d);
+          const shortSide = Math.min(leftoverH, leftoverV);
+          const longSide = Math.max(leftoverH, leftoverV);
+          const score: [number, number, number, number] = [shortSide, longSide, f.y, f.x];
+          if (
+            !bestScore ||
+            score[0] < bestScore[0] - EPS ||
+            (Math.abs(score[0] - bestScore[0]) <= EPS && score[1] < bestScore[1] - EPS) ||
+            (Math.abs(score[0] - bestScore[0]) <= EPS &&
+              Math.abs(score[1] - bestScore[1]) <= EPS &&
+              (score[2] < bestScore[2] - EPS ||
+                (Math.abs(score[2] - bestScore[2]) <= EPS && score[3] < bestScore[3] - EPS)))
+          ) {
+            bestScore = score;
+            bestPick = { fx: f.x, fy: f.y, fi, o };
+          }
+        }
+      }
+
+      if (!bestPick) {
+        unplaced.push(m);
+        continue;
+      }
+
+      const { fx, fy, fi, o } = bestPick;
+      const f = free[fi];
+      placed.push({
+        ...m,
+        x: round1(fx),
+        y: round1(fy),
+        rotated: o.rotated,
+        placedW: round1(o.w - g),
+        placedD: round1(o.d - g),
+      });
+      free.splice(fi, 1);
+      // Guilhotina: sobra da direita + sobra de baixo
+      const right: FreeRect = { x: fx + o.w, y: fy, w: f.w - o.w, h: o.d };
+      const bottom: FreeRect = { x: fx, y: fy + o.d, w: f.w, h: f.h - o.d };
+      if (right.w > EPS && right.h > EPS) free.push(right);
+      if (bottom.w > EPS && bottom.h > EPS) free.push(bottom);
+      prune();
+    }
+
+    const usedArea = placed.reduce((s, p) => s + p.placedW * p.placedD, 0);
+    const plateArea = plateW * plateD;
+    const candidate: PackResult = {
+      placed,
+      unplaced,
+      utilization: plateArea > 0 ? Math.min(1, usedArea / plateArea) : 0,
+    };
+    if (
+      !best ||
+      candidate.placed.length > best.placed.length ||
+      (candidate.placed.length === best.placed.length && candidate.utilization > best.utilization)
+    ) {
+      best = candidate;
+    }
+    if (best.placed.length === valid.length) break; // perfeito: coube tudo
+  }
+
+  return best || { placed: [], unplaced: [...models], utilization: 0 };
 }
 
 /** mm → texto "12,5 mm" */

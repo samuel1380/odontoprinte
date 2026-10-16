@@ -373,10 +373,10 @@ export default function MontagemPage() {
                 Espaço p/ conector (mm)
                 <input
                   type="number"
-                  min={0}
+                  min={1}
                   max={10}
                   value={gap}
-                  onChange={(e) => setGap(Number(e.target.value))}
+                  onChange={(e) => setGap(Math.max(1, Number(e.target.value) || 1))}
                   className="w-14 bg-slate-950 border border-slate-700 text-white rounded-lg px-1.5 py-1 text-[11px]"
                 />
               </label>
