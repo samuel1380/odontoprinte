@@ -314,7 +314,20 @@ export class OdontoPrintService {
       }
       knownRemoteIds[knownKey] = known;
     }
-    const kept = local.filter((i) => remoteIds.has(i.id) || !known.has(i.id));
+    // Banco central é a fonte da verdade:
+    // 1. Se está no banco atual (remoteIds), mantém e registra como conhecido.
+    // 2. Se já foi visto no banco antes (known) mas sumiu do banco atual, FOI EXCLUÍDO -> poda na hora.
+    // 3. Se nunca foi visto no banco: só é mantido se foi criado a menos de 30 segundos (janela imediata
+    //    de inserção local enquanto o banco processa). Qualquer fantasma com mais de 30s é podado imediatamente.
+    const RECENT_LOCAL_GRACE_MS = 30 * 1000;
+    const nowMs = Date.now();
+    const kept = local.filter((i) => {
+      if (remoteIds.has(i.id)) return true;
+      if (known.has(i.id)) return false; // sumiu do banco = fantasma apagado em outro aparelho
+      const created = new Date((i as any).created_at || 0).getTime();
+      if (!Number.isFinite(created) || created === 0) return false;
+      return nowMs - created < RECENT_LOCAL_GRACE_MS;
+    });
     const next = new Set(remoteIds);
     knownRemoteIds[knownKey] = next;
     try {
@@ -331,6 +344,45 @@ export class OdontoPrintService {
    * onStatus avisa se o canal está vivo (para o selo de conexão honesto).
    * Retorna função para cancelar, ou null se sem Supabase.
    */
+  /**
+   * Limpeza total do cache local (mata fantasmas de uma vez).
+   * Apaga todos os dados operacionais do navegador e mantém só login,
+   * tema, conexão e preferências. Após chamar, recarregue a página:
+   * tudo vem 100% do banco. Retorna quantas chaves foram limpas.
+   */
+  static purgeLocalCache(): number {
+    const KEEP = new Set([
+      "odontoprint_user",
+      "odontoprint_active_role",
+      "odontoprint_theme",
+      "odontoprint_supabase_url",
+      "odontoprint_supabase_anon_key",
+      "odontoprint_ai_config",
+      "odontoprint_copilot_dock",
+      "odontoprint_last_clinic",
+      "odontoprint_last_cadista",
+    ]);
+    if (typeof window === "undefined" || !window.localStorage) return 0;
+    let cleared = 0;
+    const doomed: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i);
+      if (k && k.startsWith("odontoprint_") && !KEEP.has(k)) doomed.push(k);
+    }
+    for (const k of doomed) {
+      try {
+        window.localStorage.removeItem(k);
+        cleared++;
+      } catch {
+        // ignora
+      }
+    }
+    for (const k of Object.keys(knownRemoteIds)) delete knownRemoteIds[k];
+    tombstoneBatches.clear();
+    tombstoneCards.clear();
+    return cleared;
+  }
+
   static subscribeSync(onEvent: () => void, onStatus?: (live: boolean) => void): (() => void) | null {
     const { client, isConfigured } = this.getSupabase();
     if (!isConfigured || !client) return null;
@@ -2436,6 +2488,16 @@ export class OdontoPrintService {
         if (!printerSelEarlyErr && !dbPrinterEarly) {
           return { success: false, error: "Impressora não encontrada no banco central. Recarregue a página e selecione novamente." };
         }
+        if (params.resin_batch_id) {
+          const { data: dbResinEarly, error: resinEarlyErr } = await preClient
+            .from("resin_batches")
+            .select("id")
+            .eq("id", params.resin_batch_id)
+            .maybeSingle();
+          if (!resinEarlyErr && !dbResinEarly) {
+            return { success: false, error: "Resina não encontrada no banco central (foi apagada?). Escolha outra resina." };
+          }
+        }
       } catch {
         // Erro de rede na conferência: deixa o insert decidir (erro estrito).
       }
@@ -2891,8 +2953,10 @@ export class OdontoPrintService {
       }
     }
 
-    mockPrinters = loadLocal<Printer[]>("odontoprint_printers", mockPrinters).filter((p) => !deletedPrinters.has(p.id));
-    mockMaintenances = loadLocal<PrinterMaintenance[]>("odontoprint_maintenances", mockMaintenances);
+    if (!isConfigured || !client) {
+      mockPrinters = loadLocal<Printer[]>("odontoprint_printers", mockPrinters).filter((p) => !deletedPrinters.has(p.id));
+      mockMaintenances = loadLocal<PrinterMaintenance[]>("odontoprint_maintenances", mockMaintenances);
+    }
 
     return mockPrinters.map((printer) => {
       const printerMaint = mockMaintenances
@@ -3373,7 +3437,11 @@ export class OdontoPrintService {
           .select("*")
           .order("created_at", { ascending: false });
         if (!error && data) {
-          mockCalibrations = mergeById(data, mockCalibrations);
+          mockCalibrations = this.pruneGoneRemote(
+            "odontoprint_known_calibrations",
+            mergeById(data, mockCalibrations),
+            new Set(data.map((c: any) => c.id))
+          );
           saveLocal("odontoprint_calibrations", mockCalibrations);
         }
       } catch (err) {

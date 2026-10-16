@@ -11,7 +11,8 @@ import {
   Settings,
   Users,
   Check,
-  Menu
+  Menu,
+  RefreshCw
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Breadcrumbs } from "./breadcrumbs";
@@ -205,6 +206,23 @@ export function Topbar({ onOpenMobileMenu }: TopbarProps) {
 
                 {/* Sair */}
                 <div className="p-1 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          "Recarregar tudo do banco? Apaga os dados salvos neste navegador (fantasmas somem) e busca tudo de novo. O login é mantido."
+                        )
+                      ) {
+                        OdontoPrintService.purgeLocalCache();
+                        window.location.reload();
+                      }
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Recarregar tudo do banco</span>
+                  </button>
                   <button
                     type="button"
                     onClick={logout}
