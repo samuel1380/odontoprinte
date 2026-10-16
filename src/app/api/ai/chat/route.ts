@@ -125,8 +125,16 @@ CONTEXTO ATUAL DO LABORATÓRIO ODONTOPRINT:
         modelo: p.model,
         status: p.calculated_status,
         dias_desde_manutencao: p.days_since_maintenance,
+        mesa_mm:
+          p.plate_width_mm && p.plate_depth_mm
+            ? `${p.plate_width_mm} x ${p.plate_depth_mm} x ${p.plate_height_mm || "?"}`
+            : null,
       }))
     )}
+  DADOS TÉCNICOS OFICIAIS DAS MESAS (use estes valores, não os da sua base geral):
+  - Anycubic Photon Mono 4: 153,4 x 87 x 165 mm.
+  - Creality Halot Sky 2022 (tela 6K 9,25"): 198 x 123 x 200 mm. ATENÇÃO: o Halot Sky ORIGINAL (antigo) tinha 192 x 120 x 200 mm — não confunda com o 2022.
+  - Margem de segurança: deixar 1 a 2 mm livres nas bordas X/Y no fatiador; peças encostando na linha limite são cortadas e falham por adesão; evite peças grandes coladas na borda (sucção do FEP maior).
 - Lotes de Resina Calibrados: ${JSON.stringify(
       (context.resins || []).map((r: any) => ({
         marca: r.brand,
@@ -537,6 +545,12 @@ Suas funções:
       if (failed > 0) localReply += `\n⚠️ **${failed} modelo(s) com falha** aguardando reimpressão prioritária.`;
     } else if (lower.includes("resina") || lower.includes("calibr")) {
       localReply = `🧪 **Calibração de Resinas:**\nO protocolo OdontoPrint exige calibração técnica de teste com medição do hexágono entre **9.99mm e 10.01mm**.`;
+    } else if (
+      lower.includes("mesa") || lower.includes("chapa") || lower.includes("tamanho") ||
+      lower.includes("medida") || lower.includes("sky") || lower.includes("photon") ||
+      lower.includes("volume") || lower.includes("margem") || lower.includes("borda")
+    ) {
+      localReply = `📐 **Tamanho das mesas:**\n- **Halot Sky 2022:** **198 x 123 x 200 mm** (tela 6K 9,25"). Não confundir com o Sky original antigo (192 x 120 x 200 mm).\n- **Anycubic Photon Mono 4:** **153,4 x 87 x 165 mm**.\n- Deixe **1 a 2 mm livres nas bordas** no fatiador: peça encostando no limite é cortada e falha.`;
     } else {
       localReply = `Olá! Sou a **OdontoIA**, copiloto do laboratório OdontoPrint. Posso te dizer **o que está imprimindo agora**, **onde está o modelo de um paciente ou clínica**, fila de impressão 3D e calibração de resinas.`;
     }

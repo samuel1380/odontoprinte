@@ -51,7 +51,12 @@ export const PLATE_PRESETS: Array<{ match: RegExp; plate: PlateDef }> = [
     plate: { w: 153.4, d: 87, h: 165, label: "Anycubic Photon Mono 4 (153,4 × 87 mm)" },
   },
   {
-    // Halot Sky / Sky 2022 — confira na sua máquina e ajuste se preciso
+    // Halot Sky 2022 (tela 6K 9,25"): área expandida 198 × 123 × 200 mm
+    match: /sky.*2022|2022.*sky/i,
+    plate: { w: 198, d: 123, h: 200, label: "Halot Sky 2022 (198 × 123 mm)" },
+  },
+  {
+    // Halot Sky original (antigo): 192 × 120 × 200 mm
     match: /sky/i,
     plate: { w: 192, d: 120, h: 200, label: "Halot Sky (192 × 120 mm)" },
   },

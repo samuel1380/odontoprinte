@@ -205,9 +205,13 @@ describe("packPlate", () => {
 });
 
 describe("detectPlate", () => {
-  it("reconhece Photon Mono 4 e Halot Sky", () => {
+  it("reconhece Photon Mono 4, Sky 2022 (198×123) e Sky original (192×120)", () => {
     expect(detectPlate("Anycubic", "Photon Mono 4").w).toBe(153.4);
-    expect(detectPlate("Halot", "Sky 2022").w).toBe(192);
+    const sky2022 = detectPlate("Halot", "Sky 2022");
+    expect(sky2022.w).toBe(198);
+    expect(sky2022.d).toBe(123);
+    expect(sky2022.h).toBe(200);
+    expect(detectPlate("Creality", "Halot Sky").w).toBe(192);
   });
 
   it("fmtMm formata em pt-BR", () => {
