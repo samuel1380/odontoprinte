@@ -227,6 +227,52 @@ describe("packPlate", () => {
     }
   });
 
+  it("raster pesado na Sky: 13/14 com ângulos finos e ruin-and-recreate", () => {
+    const rect = (w: number, d: number) => ({ w, d });
+    const defs = [
+      { id: "a1", ...rect(64, 55) },
+      { id: "a2", ...rect(60, 53) },
+      { id: "a3", ...rect(58, 52) },
+      { id: "an1", ...rect(62, 32) },
+      { id: "an2", ...rect(60, 30) },
+      { id: "t1", ...rect(26, 19) },
+      { id: "t2", ...rect(26, 19) },
+      { id: "t3", ...rect(25, 18) },
+      { id: "t4", ...rect(25, 18) },
+      { id: "g", ...rect(32, 22) },
+      { id: "p", ...rect(48, 26) },
+      { id: "c", ...rect(24, 17) },
+      { id: "x1", ...rect(30, 22) },
+      { id: "x2", ...rect(28, 20) },
+    ];
+    const models = defs.map((m) => ({ ...m, label: m.id, grid: filledGrid(m.w, m.d, 1) }));
+    const r = packRaster(models, 198, 123, 2, 2, 1);
+    expect(r.placed.length).toBeGreaterThanOrEqual(13);
+    // sem toque em nível de célula: nenhuma célula vizinha pertence a outro modelo
+    // (linear via mapa de ocupação, em vez de O(n²) por pares)
+    const owner = new Map<string, string>();
+    for (const p of r.placed) {
+      const pix = p.pix!;
+      for (let j = 0; j < pix.h; j++) {
+        for (let i = 0; i < pix.w; i++) {
+          if (!pix.cells[j * pix.w + i]) continue;
+          const key = `${Math.round(p.x + i)},${Math.round(p.y + j)}`;
+          if (!owner.has(key)) owner.set(key, p.id);
+        }
+      }
+    }
+    for (const [key, id] of owner) {
+      const [x, y] = key.split(",").map(Number);
+      for (let dj = -1; dj <= 1; dj++) {
+        for (let di = -1; di <= 1; di++) {
+          if (di === 0 && dj === 0) continue;
+          const o = owner.get(`${x + di},${y + dj}`);
+          expect(!o || o === id).toBe(true);
+        }
+      }
+    }
+  });
+
   it("set pesado na Mono 4: multi-tentativa supera passada única (>=9)", () => {
     const models = [
       { id: "a1", label: "A", w: 64, d: 56 },
@@ -387,18 +433,21 @@ describe("raster", () => {
     expect(at(28, 15)).toBe(0); // abertura direita
   });
 
-  it("dilata em anel de segurança (cortado na borda da grade)", () => {
+  it("dilata expandindo a grade (anel nunca é cortado)", () => {
     const cells = new Uint8Array(16);
     cells[1 * 4 + 1] = 1;
     cells[1 * 4 + 2] = 1;
     cells[2 * 4 + 1] = 1;
     cells[2 * 4 + 2] = 1;
     const d = dilateGrid({ w: 4, h: 4, cells, minX: 0, minY: 0, cell: 1 }, 1);
-    expect(d.length).toBe(16);
-    // 2×2 central dilatado em 1 preenche a grade 4×4 inteira
-    expect(d.reduce((s, v) => s + v, 0)).toBe(16);
+    // grade 4×4 + pad 1 vira 6×6, com o 4×4 central todo bloqueado
+    expect(d.w).toBe(6);
+    expect(d.h).toBe(6);
+    expect(d.pad).toBe(1);
+    expect(d.cells.reduce((s, v) => s + v, 0)).toBe(16);
     const d0 = dilateGrid({ w: 4, h: 4, cells, minX: 0, minY: 0, cell: 1 }, 0);
-    expect(d0.reduce((s, v) => s + v, 0)).toBe(4);
+    expect(d0.w).toBe(4);
+    expect(d0.cells.reduce((s, v) => s + v, 0)).toBe(4);
   });
 
   it("gira 90° trocando largura/altura", async () => {

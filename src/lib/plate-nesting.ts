@@ -42,7 +42,7 @@ export interface PlacedItem extends PackItem {
 }
 
 /** Ângulos tentados (0/90 exatos + diagonais como no fatiador). */
-export const PACK_ANGLES = [0, 90, 30, -30, 45, -45, 60, -60];
+export const PACK_ANGLES = [0, 90, 30, -30, 45, -45, 60, -60, 15, -15, 75, -75];
 
 /** Caixa alinhada aos eixos de um retângulo girado (horário). */
 export function rotatedBox(w: number, d: number, angleDeg: number): { w: number; d: number } {
@@ -755,28 +755,39 @@ export function filledGrid(wMm: number, dMm: number, cell = 1): ModelGrid {
   return { w, h, cells: new Uint8Array(w * h).fill(1), minX: 0, minY: 0, cell };
 }
 
-/** Dilata a máscara em `radius` células (Chebyshev). Inclui as originais. */
-export function dilateGrid(g: ModelGrid, radius: number): Uint8Array {
-  const out = new Uint8Array(g.w * g.h);
+/**
+ * Dilata a máscara em `radius` células (Chebyshev) EXPANDINDO a grade:
+ * retorna {cells, w, h, pad} onde (0,0) corresponde a (-pad,-pad) da
+ * grade original. Sem isso, o anel de segurança fora da caixa do modelo
+ * seria cortado e peças coladas passariam na checagem.
+ */
+export function dilateGrid(
+  g: ModelGrid,
+  radius: number
+): { cells: Uint8Array; w: number; h: number; pad: number } {
+  const pad = Math.max(0, radius);
+  const w = g.w + pad * 2;
+  const h = g.h + pad * 2;
+  const out = new Uint8Array(w * h);
   if (radius <= 0) {
-    out.set(g.cells);
-    return out;
+    for (let j = 0; j < g.h; j++) {
+      for (let i = 0; i < g.w; i++) {
+        if (g.cells[j * g.w + i]) out[(j + pad) * w + (i + pad)] = 1;
+      }
+    }
+    return { cells: out, w, h, pad };
   }
   for (let j = 0; j < g.h; j++) {
     for (let i = 0; i < g.w; i++) {
       if (!g.cells[j * g.w + i]) continue;
       for (let dj = -radius; dj <= radius; dj++) {
-        const jj = j + dj;
-        if (jj < 0 || jj >= g.h) continue;
         for (let di = -radius; di <= radius; di++) {
-          const ii = i + di;
-          if (ii < 0 || ii >= g.w) continue;
-          out[jj * g.w + ii] = 1;
+          out[(j + pad + dj) * w + (i + pad + di)] = 1;
         }
       }
     }
   }
-  return out;
+  return { cells: out, w, h, pad };
 }
 
 /**
@@ -843,6 +854,8 @@ interface PreparedAngle {
   gh: number;
   blocked: Uint8Array;
   setCells: number[];
+  /** deslocamento do canto do modelo dentro da grade com folga */
+  pad: number;
   boxW: number;
   boxH: number;
   draw: ModelGrid;
@@ -882,16 +895,17 @@ export function packRaster(
     for (let i = 0; i < base.cells.length; i++) if (base.cells[i]) area++;
     const angles: PreparedAngle[] = PACK_ANGLES.map((angle) => {
       const rot = rotateGrid(base, angle);
-      const blocked = dilateGrid(rot.grid, r + (rot.safe ? 0 : 1));
+      const dil = dilateGrid(rot.grid, r + (rot.safe ? 0 : 1));
       const setCells: number[] = [];
-      for (let i = 0; i < blocked.length; i++) if (blocked[i]) setCells.push(i);
+      for (let i = 0; i < dil.cells.length; i++) if (dil.cells[i]) setCells.push(i);
       const box = rotatedBox(m.w, m.d, angle);
       return {
         angle,
-        gw: rot.grid.w,
-        gh: rot.grid.h,
-        blocked,
+        gw: dil.w,
+        gh: dil.h,
+        blocked: dil.cells,
         setCells,
+        pad: dil.pad,
         boxW: box.w,
         boxH: box.d,
         draw: rot.grid,
@@ -909,6 +923,7 @@ export function packRaster(
     ...PACK_ORDERINGS.slice(0, 4).map((o) =>
       [...preps].sort((a, b) => o(a.item, b.item))
     ),
+    [...preps].sort((a, b) => b.areaCells - a.areaCells || (a.item.id < b.item.id ? -1 : 1)),
     ...[7, 42, 123, 999].map((s) => shufflePack(preps, s)),
   ];
 
@@ -1128,6 +1143,116 @@ export function packRaster(
         unplaced: stillOut,
         utilization: plateArea > 0 ? Math.min(1, (prevArea + extraArea * cell * cell) / plateArea) : 0,
       };
+    }
+
+    // Arruína e recria: remove 2 peças grandes e tenta recolocar tudo
+    // (sobras primeiro) — repete até não melhorar mais (máx 4 rodadas).
+    // É o "organizar até caber o máximo": só aceita se couber MAIS peças.
+    for (let round = 0; round < 4; round++) {
+      if (!best || best.unplaced.length === 0 || best.placed.length < 3) break;
+      const bySize = [...best.placed].sort(
+        (a, b) => b.placedW * b.placedD - a.placedW * a.placedD
+      );
+      const victims = [bySize[round % bySize.length], bySize[(round + 1) % bySize.length]];
+      const victimIds = new Set(victims.map((v) => v.id));
+      plate.fill(0);
+      rebuildSat();
+      for (const p of best.placed) {
+        if (victimIds.has(p.id)) continue;
+        const prep = prepById.get(p.id);
+        const entry = prep?.angles.find((a) => a.angle === (p as PlacedItem).angle);
+        if (!prep || !entry) continue;
+        const pad0 = entry.pad;
+        const cx = Math.round(((p as PlacedItem).x - margin) / cell) - pad0;
+        const cy = Math.round(((p as PlacedItem).y - margin) / cell) - pad0;
+        markPlaced(cx, cy, entry);
+      }
+      const retryQueue: { item: PackItem; prep: Prep }[] = [];
+      for (const u of best.unplaced) {
+        const prep = prepById.get(u.id);
+        if (prep) retryQueue.push({ item: u, prep });
+      }
+      for (const v of victims) {
+        const prep = prepById.get(v.id);
+        if (prep) retryQueue.push({ item: prep.item, prep });
+      }
+      const rePlaced: PlacedItem[] = [];
+      const reLeft: PackItem[] = [];
+      let reArea = 0;
+      for (const { item, prep } of retryQueue) {
+        let pick: { cx: number; cy: number; a: PreparedAngle; ai: number } | null = null;
+        for (let ai = 0; ai < prep.angles.length; ai++) {
+          const a = prep.angles[ai];
+          for (let cy = 0; cy + a.gh <= ph; cy += 1) {
+            for (let cx = 0; cx + a.gw <= pw; cx += 1) {
+              if (rectFree(cx, cy, a.gw, a.gh)) {
+                if (!pick || cy < pick.cy || (cy === pick.cy && (cx < pick.cx || (cx === pick.cx && ai < pick.ai)))) {
+                  pick = { cx, cy, a, ai };
+                }
+                break;
+              }
+              let ok = true;
+              for (let k = 0; k < a.setCells.length; k++) {
+                const c = a.setCells[k];
+                if (plate[(cy + Math.floor(c / a.gw)) * pw + (cx + (c % a.gw))]) {
+                  ok = false;
+                  break;
+                }
+              }
+              if (!ok) continue;
+              if (!pick || cy < pick.cy || (cy === pick.cy && (cx < pick.cx || (cx === pick.cx && ai < pick.ai)))) {
+                pick = { cx, cy, a, ai };
+              }
+              break;
+            }
+          }
+        }
+        if (!pick) {
+          reLeft.push(item);
+          continue;
+        }
+        markPlaced(pick.cx, pick.cy, pick.a);
+        rePlaced.push({
+          ...item,
+          x: round1(margin + pick.cx * cell),
+          y: round1(margin + pick.cy * cell),
+          angle: pick.a.angle,
+          rotated: pick.a.angle !== 0,
+          placedW: round1(pick.a.boxW),
+          placedD: round1(pick.a.boxH),
+          pix: {
+            w: pick.a.draw.w,
+            h: pick.a.draw.h,
+            cells: Array.from(pick.a.draw.cells),
+            cell: pick.a.draw.cell,
+            angle: pick.a.angle,
+          },
+        } as PlacedItem);
+        reArea += prep.areaCells;
+      }
+      const keptIds = new Set(best.placed.map((p) => p.id).filter((id) => !victimIds.has(id)));
+      const kept: PlacedItem[] = best.placed.filter((p) => keptIds.has(p.id));
+      const totalPlaced = kept.length + rePlaced.length;
+      if (totalPlaced > best.placed.length) {
+        const plateArea = plateW * plateD;
+        best = {
+          placed: [...kept, ...rePlaced],
+          unplaced: reLeft,
+          utilization:
+            plateArea > 0
+              ? Math.min(
+                  1,
+                  (kept.reduce((s, p) => {
+                    const pr = prepById.get(p.id);
+                    return s + (pr ? pr.areaCells : 0);
+                  }, 0) +
+                    reArea) *
+                    cell *
+                    cell / plateArea
+                )
+              : 0,
+        };
+      }
     }
   }
 
