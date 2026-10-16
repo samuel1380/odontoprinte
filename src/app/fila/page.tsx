@@ -329,6 +329,12 @@ export default function FilaPage() {
         loadData();
       } else {
         toast.error(res.error || "Erro ao iniciar impressão.");
+        // Atualiza a lista de resinas elegíveis do modal para purgar qualquer fantasma da tela imediatamente
+        OdontoPrintService.getEligibleOptions().then((opts) => {
+          const list = (opts.resins || []).filter((r) => r.printer_id === selectedPrinterForBatch);
+          setEligibleResins(list);
+          setSelectedResinBatchId(list[0]?.calibration_id || "");
+        });
         loadData();
       }
     } catch {

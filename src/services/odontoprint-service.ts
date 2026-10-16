@@ -2486,7 +2486,11 @@ export class OdontoPrintService {
           .eq("id", params.printer_id)
           .maybeSingle();
         if (!printerSelEarlyErr && !dbPrinterEarly) {
-          return { success: false, error: "Impressora não encontrada no banco central. Recarregue a página e selecione novamente." };
+          mockPrinters = loadLocal<Printer[]>("odontoprint_printers", mockPrinters).filter(
+            (p) => p.id !== params.printer_id
+          );
+          saveLocal("odontoprint_printers", mockPrinters);
+          return { success: false, error: "Impressora não encontrada no banco central. A impressora fantasma foi removida da sua lista." };
         }
         if (params.resin_batch_id) {
           const { data: dbResinEarly, error: resinEarlyErr } = await preClient
@@ -2495,7 +2499,15 @@ export class OdontoPrintService {
             .eq("id", params.resin_batch_id)
             .maybeSingle();
           if (!resinEarlyErr && !dbResinEarly) {
-            return { success: false, error: "Resina não encontrada no banco central (foi apagada?). Escolha outra resina." };
+            mockResinBatches = loadLocal<ResinBatch[]>("odontoprint_resin_batches", mockResinBatches).filter(
+              (b) => b.id !== params.resin_batch_id
+            );
+            saveLocal("odontoprint_resin_batches", mockResinBatches);
+            mockCalibrations = loadLocal<ResinCalibration[]>("odontoprint_calibrations", mockCalibrations).filter(
+              (c) => c.resin_batch_id !== params.resin_batch_id
+            );
+            saveLocal("odontoprint_calibrations", mockCalibrations);
+            return { success: false, error: "Resina não encontrada no banco central (foi apagada?). A resina fantasma foi removida da sua lista." };
           }
         }
       } catch {
@@ -2543,7 +2555,16 @@ export class OdontoPrintService {
           .eq("id", resin.resin_batch_id)
           .maybeSingle();
         if (!resinSelErr && !dbResin) {
-          return { success: false, error: "Resina não encontrada no banco central (foi apagada?). Escolha outra resina." };
+          // Purgar resina fantasma imediatamente do estado local
+          mockResinBatches = loadLocal<ResinBatch[]>("odontoprint_resin_batches", mockResinBatches).filter(
+            (b) => b.id !== resin.resin_batch_id
+          );
+          saveLocal("odontoprint_resin_batches", mockResinBatches);
+          mockCalibrations = loadLocal<ResinCalibration[]>("odontoprint_calibrations", mockCalibrations).filter(
+            (c) => c.resin_batch_id !== resin.resin_batch_id
+          );
+          saveLocal("odontoprint_calibrations", mockCalibrations);
+          return { success: false, error: "Resina não encontrada no banco central (foi apagada?). A resina fantasma foi removida da sua lista." };
         }
         const { data: dbCal, error: calSelErr } = await preClient
           .from("resin_calibrations")
@@ -2551,7 +2572,12 @@ export class OdontoPrintService {
           .eq("id", resin.calibration_id)
           .maybeSingle();
         if (!calSelErr && !dbCal) {
-          return { success: false, error: "Calibração não encontrada no banco central. Escolha outra resina." };
+          // Purgar calibração fantasma imediatamente do estado local
+          mockCalibrations = loadLocal<ResinCalibration[]>("odontoprint_calibrations", mockCalibrations).filter(
+            (c) => c.id !== resin.calibration_id
+          );
+          saveLocal("odontoprint_calibrations", mockCalibrations);
+          return { success: false, error: "Calibração não encontrada no banco central. A calibração fantasma foi removida da sua lista." };
         }
       } catch {
         // Erro de rede na conferência: deixa o insert decidir (erro estrito).
@@ -3211,12 +3237,23 @@ export class OdontoPrintService {
           .order("received_at", { ascending: false });
         if (!error && data) {
           const activeResins = data.filter((b: ResinBatch) => !deletedResins.has(b.id));
+          const remoteIds = new Set(activeResins.map((b: ResinBatch) => b.id));
+
           mockResinBatches = this.pruneGoneRemote(
             "odontoprint_known_resins",
             mergeById(activeResins, mockResinBatches),
-            new Set(activeResins.map((b: ResinBatch) => b.id))
+            remoteIds
           );
           saveLocal("odontoprint_resin_batches", mockResinBatches);
+
+          // Poda calibrações locais vinculadas a resinas que já não existem no banco
+          const validBatchIds = new Set(mockResinBatches.map((b) => b.id));
+          mockCalibrations = loadLocal("odontoprint_calibrations", mockCalibrations);
+          const validCalibrations = mockCalibrations.filter((c) => validBatchIds.has(c.resin_batch_id));
+          if (validCalibrations.length !== mockCalibrations.length) {
+            mockCalibrations = validCalibrations;
+            saveLocal("odontoprint_calibrations", mockCalibrations);
+          }
         }
       } catch (err) {
         console.warn("Supabase getResinBatches error:", err);
@@ -3437,12 +3474,11 @@ export class OdontoPrintService {
           .select("*")
           .order("created_at", { ascending: false });
         if (!error && data) {
-          mockCalibrations = this.pruneGoneRemote(
-            "odontoprint_known_calibrations",
-            mergeById(data, mockCalibrations),
-            new Set(data.map((c: any) => c.id))
-          );
+          const remoteCalIds = new Set(data.map((c: any) => c.id));
+          mockCalibrations = data;
           saveLocal("odontoprint_calibrations", mockCalibrations);
+          saveLocal("odontoprint_known_calibrations", Array.from(remoteCalIds));
+          knownRemoteIds["odontoprint_known_calibrations"] = remoteCalIds;
         }
       } catch (err) {
         console.warn("Supabase getCalibrations error:", err);
@@ -3454,16 +3490,19 @@ export class OdontoPrintService {
     mockResinBatches = loadLocal("odontoprint_resin_batches", mockResinBatches);
     mockPrinters = loadLocal("odontoprint_printers", mockPrinters);
 
-    return mockCalibrations.map((cal) => {
-      const batch = mockResinBatches.find((b) => b.id === cal.resin_batch_id);
-      const printer = mockPrinters.find((p) => p.id === cal.printer_id);
-      return {
-        ...cal,
-        resin_brand: batch ? `${batch.brand} (${batch.resin_type})` : "Desconhecida",
-        resin_lot: batch ? batch.lot : "—",
-        printer_name: printer ? printer.name : "Desconhecida",
-      };
-    });
+    const validBatchIds = new Set(mockResinBatches.map((b) => b.id));
+    return mockCalibrations
+      .filter((cal) => validBatchIds.has(cal.resin_batch_id))
+      .map((cal) => {
+        const batch = mockResinBatches.find((b) => b.id === cal.resin_batch_id);
+        const printer = mockPrinters.find((p) => p.id === cal.printer_id);
+        return {
+          ...cal,
+          resin_brand: batch ? `${batch.brand} (${batch.resin_type})` : "Desconhecida",
+          resin_lot: batch ? batch.lot : "—",
+          printer_name: printer ? printer.name : "Desconhecida",
+        };
+      });
   }
 
   static async registerCalibrationAttempt(params: {

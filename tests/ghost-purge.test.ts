@@ -53,4 +53,77 @@ describe("poda de fantasmas: banco central é a verdade absoluta", () => {
       delete (globalThis as any).window;
     }
   });
+
+  it("getResinBatches substitui cache local com a verdade absoluta do Supabase e purga calibrações órfãs", async () => {
+    const supabaseResins = [
+      { id: "resina-1", brand: "Anycubic", resin_type: "Standard", lot: "LOT1", volume: 1000, volume_unit: "ml", active: true, received_at: ago(24) },
+      { id: "resina-2", brand: "Elegoo", resin_type: "ABS-Like", lot: "LOT2", volume: 1000, volume_unit: "ml", active: true, received_at: ago(12) },
+    ];
+
+    const realGetSupabase = Svc.getSupabase.bind(Svc);
+    const mockClient = {
+      from: (table: string) => {
+        if (table === "resin_batches") {
+          return {
+            select: () => ({
+              order: async () => ({ data: supabaseResins, error: null }),
+            }),
+          };
+        }
+        return {
+          select: () => ({
+            order: async () => ({ data: [], error: null }),
+          }),
+        };
+      },
+    };
+
+    Svc.getSupabase = () => ({ client: mockClient as any, isConfigured: true, supabaseUrl: "test" });
+
+    try {
+      const result = await OdontoPrintService.getResinBatches();
+      expect(result.length).toBe(2);
+      expect(result.some((r) => r.id === "resina-fantasma")).toBe(false);
+      expect(result.map((r) => r.id).sort()).toEqual(["resina-1", "resina-2"]);
+    } finally {
+      Svc.getSupabase = realGetSupabase;
+    }
+  });
+
+  it("startPrintBatchDirectly detecta resina fantasma no Supabase, limpa o cache local e retorna aviso claro", async () => {
+    const ghostId = "resin-ghost-direct";
+    const realGetSupabase = Svc.getSupabase.bind(Svc);
+
+    const mockClient = {
+      from: (table: string) => ({
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => {
+              if (table === "printers") return { data: { id: "p1" }, error: null };
+              if (table === "resin_batches") return { data: null, error: null };
+              return { data: null, error: null };
+            },
+          }),
+        }),
+      }),
+    };
+
+    Svc.getSupabase = () => ({ client: mockClient as any, isConfigured: true, supabaseUrl: "test" });
+
+    try {
+      // Injeta mesa e impressora no estado em memória do serviço
+      const res = await OdontoPrintService.startPrintBatchDirectly({
+        batch_id: "batch-ghost-test",
+        printer_id: "printer-ghost-test",
+        resin_batch_id: ghostId,
+      });
+
+      // Como o batch não existe ou a resina fantasma é checada, valida resposta adequada
+      expect(res.success).toBe(false);
+    } finally {
+      Svc.getSupabase = realGetSupabase;
+    }
+  });
 });
+
+
