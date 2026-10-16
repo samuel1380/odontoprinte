@@ -95,6 +95,7 @@ describe("blindagem FK ao iniciar impressão (printer/resina/calibração fantas
       lot: "FK-LOTE",
       volume: 1000,
     });
+    db.resin_batches = [{ id: resin.id }]; // existia no cadastro...
     const cal = await OdontoPrintService.registerCalibrationAttempt({
       resin_batch_id: resin.id,
       printer_id: printer.id,

@@ -3439,6 +3439,25 @@ export class OdontoPrintService {
     const { client, isConfigured } = this.getSupabase();
     if (isConfigured && client) {
       try {
+        // Blindagem FK: lote e impressora podem ser fantasmas locais
+        // (apagados em outro aparelho ou banco zerado). Confere antes.
+        const { data: dbBatch, error: batchSelErr } = await client
+          .from("resin_batches")
+          .select("id")
+          .eq("id", params.resin_batch_id)
+          .maybeSingle();
+        if (!batchSelErr && !dbBatch) {
+          throw new Error("Lote de resina não encontrado no banco central. Recarregue e selecione novamente.");
+        }
+        const { data: dbPrinter, error: printerSelErr } = await client
+          .from("printers")
+          .select("id")
+          .eq("id", params.printer_id)
+          .maybeSingle();
+        if (!printerSelErr && !dbPrinter) {
+          throw new Error("Impressora não encontrada no banco central. Recarregue e selecione novamente.");
+        }
+
         let { error: calErr } = await client.from("resin_calibrations").insert(newCal);
         if (calErr && (calErr.message?.includes("foreign key") || (calErr as any).code === "23503")) {
           const retry = await client.from("resin_calibrations").insert({ ...newCal, created_by: null });
