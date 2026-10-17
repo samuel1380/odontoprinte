@@ -117,51 +117,51 @@ export default function DashboardPage() {
     <AppShell>
       <div className="space-y-6">
         {/* Header with Title */}
-        <div className="pb-2">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800 pb-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
               Painel Principal
             </h1>
-            <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
-              Visão geral da produção e do parque odontológico 3D.
+            <p className="text-xs text-slate-400 mt-0.5">
+              Acompanhamento em tempo real da esteira 3D e dos equipamentos.
             </p>
           </div>
-        </div>
 
-        {/* Ações Diretas em Pílulas */}
-        <div className="flex flex-wrap items-center gap-2 overflow-x-auto pb-1">
-          <Link href="/fila">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white text-slate-950 text-xs font-semibold hover:bg-slate-200 transition shadow-sm">
-              <ListOrdered className="w-3.5 h-3.5 text-slate-950" />
-              <span>Fila de Impressão</span>
-              {metrics && metrics.items_in_queue > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full bg-cyan-500 text-slate-950 text-[10px] font-bold">
-                  {metrics.items_in_queue}
-                </span>
-              )}
-            </div>
-          </Link>
+          {/* Ações Rápidas */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/fila">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white text-slate-950 text-xs font-semibold hover:bg-slate-200 transition shadow-sm">
+                <ListOrdered className="w-3.5 h-3.5 text-slate-950" />
+                <span>Fila de Impressão</span>
+                {metrics && metrics.items_in_queue > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-cyan-500 text-slate-950 text-[10px] font-bold">
+                    {metrics.items_in_queue}
+                  </span>
+                )}
+              </div>
+            </Link>
 
-          <Link href="/montagem">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#0F172A] border border-slate-800 text-slate-300 text-xs font-medium hover:bg-slate-800 hover:text-white transition">
-              <Layers className="w-3.5 h-3.5 text-slate-400" />
-              <span>Montagem de Mesa</span>
-            </div>
-          </Link>
+            <Link href="/montagem">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#0F172A] border border-slate-800 text-slate-300 text-xs font-medium hover:bg-slate-800 hover:text-white transition">
+                <Layers className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Montagem de Mesa</span>
+              </div>
+            </Link>
 
-          <Link href="/impressoras">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#0F172A] border border-slate-800 text-slate-300 text-xs font-medium hover:bg-slate-800 hover:text-white transition">
-              <Layers className="w-3.5 h-3.5 text-slate-400" />
-              <span>Impressoras</span>
-            </div>
-          </Link>
+            <Link href="/impressoras">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#0F172A] border border-slate-800 text-slate-300 text-xs font-medium hover:bg-slate-800 hover:text-white transition">
+                <Printer className="w-3.5 h-3.5 text-slate-400" />
+                <span>Impressoras</span>
+              </div>
+            </Link>
 
-          <Link href="/resinas">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#0F172A] border border-slate-800 text-slate-300 text-xs font-medium hover:bg-slate-800 hover:text-white transition">
-              <FlaskConical className="w-3.5 h-3.5 text-slate-400" />
-              <span>Resinas</span>
-            </div>
-          </Link>
+            <Link href="/resinas">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#0F172A] border border-slate-800 text-slate-300 text-xs font-medium hover:bg-slate-800 hover:text-white transition">
+                <FlaskConical className="w-3.5 h-3.5 text-slate-400" />
+                <span>Resinas</span>
+              </div>
+            </Link>
+          </div>
         </div>
 
         {/* Metric Cards - 4 KPIs Essenciais */}
@@ -227,17 +227,14 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* O que está imprimindo — explicado */}
+        {/* O que está imprimindo */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-3">
             <div>
               <CardTitle className="text-base flex items-center gap-2">
                 <Printer className="w-4 h-4 text-cyan-400" />
-                O que está imprimindo
+                Em Impressão Agora
               </CardTitle>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Cada mesa da máquina, de qual pedido ela é e há quanto tempo roda.
-              </p>
             </div>
             <Link href="/fila">
               <Button variant="ghost" size="sm" className="text-xs gap-1 text-slate-300 hover:text-white rounded-full">

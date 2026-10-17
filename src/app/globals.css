@@ -337,3 +337,48 @@ html.light .border-cyan-500\/60 { border-color: #22d3ee; }
 
 /* anel de foco visível no claro */
 html.light .focus\:border-cyan-400:focus { border-color: #0891b2; }
+
+/* Modificadores estritos para IA Copilot Drawer e Balões no Modo Claro */
+html.light .odontoia-drawer {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light .odontoia-drawer-header {
+  background-color: #f8fafc !important;
+  border-bottom-color: #e2e8f0 !important;
+}
+
+html.light .odontoia-bubble-assistant {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light .odontoia-bubble-user {
+  background-color: #0f172a !important;
+  color: #ffffff !important;
+}
+
+html.light .odontoia-input-container {
+  background-color: #f8fafc !important;
+  border-top-color: #e2e8f0 !important;
+}
+
+html.light .odontoia-input {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light .odontoia-chip {
+  background-color: #ffffff !important;
+  color: #334155 !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light .odontoia-chip:hover {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}

@@ -96,8 +96,35 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Resolução resiliente da Chave de API (prioriza GEMINI e depois GROQ)
-    const { apiKey, activeProvider, source } = resolveAIKey(provider, body.apiKey);
+    // Roteamento inteligente: detecta perguntas simples vs complexas
+    // - Perguntas simples/rápidas (status, contagem, cumprimentos, consultas diretas) -> GROQ (ultra-rápido)
+    // - Perguntas complexas/técnicas (calibração, falhas, diagnósticos, química, mesa 3D, cálculos) -> GEMINI (Gemini 3.8 Flash Raciocínio)
+    let targetProvider = provider;
+    const lowerMsg = cleanMessage.toLowerCase();
+    const isComplex =
+      lowerMsg.includes("calibr") ||
+      lowerMsg.includes("falh") ||
+      lowerMsg.includes("defeit") ||
+      lowerMsg.includes("camada") ||
+      lowerMsg.includes("exposi") ||
+      lowerMsg.includes("cur") ||
+      lowerMsg.includes("resina") ||
+      lowerMsg.includes("polimeriz") ||
+      lowerMsg.includes("ajust") ||
+      lowerMsg.includes("como resolver") ||
+      lowerMsg.includes("por que") ||
+      lowerMsg.includes("porque") ||
+      cleanMessage.length > 90;
+
+    const hasGroqKey = Boolean(getEnvKey("GROQ"));
+    const hasGeminiKey = Boolean(getEnvKey("GEMINI"));
+
+    if (hasGroqKey && hasGeminiKey && !body.apiKey) {
+      targetProvider = isComplex ? "GEMINI" : "GROQ";
+    }
+
+    // Resolução resiliente da Chave de API
+    const { apiKey, activeProvider, source } = resolveAIKey(targetProvider, body.apiKey);
 
     // Contexto condensado do laboratório para alimentar o System Prompt
     const labContextSummary = `
