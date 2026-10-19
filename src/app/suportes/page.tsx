@@ -104,18 +104,13 @@ export default function SuportesPage() {
 
     try {
       const parsed = await parseStlTriangles(file);
-      const oriented = levelAndOrientDentalModel(parsed.positions);
       setLoadedModel({
         name: file.name,
         sizeBytes: file.size,
-        positions: oriented.positions,
+        positions: parsed.positions,
         triangleCount: parsed.count,
       });
-      if (oriented.wasFlipped) {
-        toast.success(`Modelo "${file.name}" carregado e virado para cima automaticamente!`);
-      } else {
-        toast.success(`Modelo "${file.name}" carregado (${parsed.count.toLocaleString()} triângulos).`);
-      }
+      toast.success(`Modelo "${file.name}" carregado no tamanho 100% original (${parsed.count.toLocaleString()} triângulos).`);
     } catch (err: any) {
       toast.error(err?.message || "Falha ao processar a geometria do arquivo STL.");
       setLoadedModel(null);

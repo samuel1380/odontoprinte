@@ -143,39 +143,16 @@ export default function MontagemPage() {
               : Promise.resolve(null),
           ]);
           if (cancelled) return;
-          let finalSize = size;
+          if (cancelled) return;
           if (tris) {
-            // Nivelamento e orientação automática:
-            // Detecta modelos de cabeça para baixo (maxila/antagonistas) e orienta a base reta na mesa Z=0
-            const oriented = levelAndOrientDentalModel(tris.positions);
-            const effPositions = oriented.positions;
-            trianglesById.current.set(m.id, effPositions);
-
-            let lMinX = Infinity, lMaxX = -Infinity;
-            let lMinY = Infinity, lMaxY = -Infinity;
-            let lMinZ = Infinity, lMaxZ = -Infinity;
-            for (let i = 0; i < effPositions.length; i += 3) {
-              if (effPositions[i] < lMinX) lMinX = effPositions[i];
-              if (effPositions[i] > lMaxX) lMaxX = effPositions[i];
-              if (effPositions[i + 1] < lMinY) lMinY = effPositions[i + 1];
-              if (effPositions[i + 1] > lMaxY) lMaxY = effPositions[i + 1];
-              if (effPositions[i + 2] < lMinZ) lMinZ = effPositions[i + 2];
-              if (effPositions[i + 2] > lMaxZ) lMaxZ = effPositions[i + 2];
-            }
-            finalSize = {
-              x: Math.round((lMaxX - lMinX) * 10) / 10,
-              y: Math.round((lMaxY - lMinY) * 10) / 10,
-              z: Math.round((lMaxZ - lMinZ) * 10) / 10,
-              triangles: tris.count,
-            };
-
+            trianglesById.current.set(m.id, tris.positions);
             try {
-              gridsById.current.set(m.id, rasterizeTriangles(effPositions, 1));
+              gridsById.current.set(m.id, rasterizeTriangles(tris.positions, 1));
             } catch {
               // sem grade: cai para retângulo cheio no encaixe
             }
           }
-          setModels((prev) => prev.map((p) => (p.id === m.id ? { ...p, size: finalSize, parsing: false } : p)));
+          setModels((prev) => prev.map((p) => (p.id === m.id ? { ...p, size, parsing: false } : p)));
         } catch (err: any) {
           if (cancelled) return;
           setModels((prev) =>
@@ -519,54 +496,28 @@ export default function MontagemPage() {
     toast.success("Modelo virado 180° com sucesso!");
   };
 
-  const levelModel = (id: string) => {
+  const downloadSingleModel = (id: string, name: string) => {
     const geo = trianglesById.current.get(id);
     if (!geo) return;
-    const oriented = levelAndOrientDentalModel(geo);
-    trianglesById.current.set(id, oriented.positions);
-
-    let lMinX = Infinity, lMaxX = -Infinity;
-    let lMinY = Infinity, lMaxY = -Infinity;
-    let lMinZ = Infinity, lMaxZ = -Infinity;
-    for (let i = 0; i < oriented.positions.length; i += 3) {
-      if (oriented.positions[i] < lMinX) lMinX = oriented.positions[i];
-      if (oriented.positions[i] > lMaxX) lMaxX = oriented.positions[i];
-      if (oriented.positions[i + 1] < lMinY) lMinY = oriented.positions[i + 1];
-      if (oriented.positions[i + 1] > lMaxY) lMaxY = oriented.positions[i + 1];
-      if (oriented.positions[i + 2] < lMinZ) lMinZ = oriented.positions[i + 2];
-      if (oriented.positions[i + 2] > lMaxZ) lMaxZ = oriented.positions[i + 2];
-    }
-    const newSize: ModelSize = {
-      x: Math.round((lMaxX - lMinX) * 10) / 10,
-      y: Math.round((lMaxY - lMinY) * 10) / 10,
-      z: Math.round((lMaxZ - lMinZ) * 10) / 10,
-      triangles: Math.floor(oriented.positions.length / 9),
-    };
-    try {
-      gridsById.current.set(id, rasterizeTriangles(oriented.positions, 1));
-    } catch {
-      //
-    }
-    setModels((prev) => prev.map((m) => (m.id === id ? { ...m, size: newSize } : m)));
-    toast.success("Modelo nivelado reto na mesa!");
-  };
-
-  const levelAllModels = () => {
-    let count = 0;
-    for (const m of models) {
-      const geo = trianglesById.current.get(m.id);
-      if (!geo) continue;
-      const oriented = levelAndOrientDentalModel(geo);
-      trianglesById.current.set(m.id, oriented.positions);
-      try {
-        gridsById.current.set(m.id, rasterizeTriangles(oriented.positions, 1));
-      } catch {
-        //
-      }
-      count++;
-    }
-    setModels((prev) => [...prev]);
-    toast.success(`${count} modelo(s) nivelados e retos na mesa.`);
+    const buffer = buildPositionedStl([
+      {
+        positions: geo,
+        x: 0,
+        y: 0,
+        angle: 0,
+        dropToBed: true,
+      },
+    ]);
+    const blob = new Blob([buffer], { type: "model/stl" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name.endsWith(".stl") ? name : `${name}.stl`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast.success(`Modelo "${name}" baixado no tamanho 100% original.`);
   };
 
   return (
@@ -703,16 +654,6 @@ export default function MontagemPage() {
               <p className="text-xs font-bold text-white flex items-center gap-1.5">
                 <Upload className="w-4 h-4 text-cyan-400" /> 2. Modelos ({models.length})
               </p>
-              {models.some((m) => trianglesById.current.has(m.id)) && (
-                <button
-                  type="button"
-                  onClick={levelAllModels}
-                  className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-semibold transition"
-                  title="Garante que todos os modelos estejam nivelados e com a base reta na mesa"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Nivelar todos retos
-                </button>
-              )}
             </div>
             <button
               type="button"
@@ -830,11 +771,11 @@ export default function MontagemPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => levelModel(m.id)}
-                          className="text-slate-400 hover:text-emerald-400 p-1 rounded hover:bg-slate-800 transition"
-                          title="Nivelar base reta na mesa"
+                          onClick={() => downloadSingleModel(m.id, m.name)}
+                          className="text-slate-400 hover:text-cyan-400 p-1 rounded hover:bg-slate-800 transition"
+                          title="Baixar este modelo individual (.stl) no tamanho original"
                         >
-                          <ArrowUpDown className="w-3.5 h-3.5" />
+                          <Download className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     )}
