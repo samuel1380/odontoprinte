@@ -216,6 +216,240 @@ export async function parseStlTriangles(input: File | Blob | ArrayBuffer): Promi
   return { positions, count };
 }
 
+export interface OrientResult {
+  positions: Float32Array;
+  changed: boolean;
+  wasFlipped: boolean;
+  wasLeveled: boolean;
+  angleDeg: number;
+}
+
+/**
+ * Inverte o modelo 180° no eixo X (preserva anatomia e mão dextrogira sem espelhar).
+ * Garante que a base do modelo fique no Z=0 e cantos XY na origem.
+ */
+export function flipModel180(inputPositions: Float32Array): Float32Array {
+  const out = new Float32Array(inputPositions.length);
+  let minX = Infinity, minY = Infinity, minZ = Infinity;
+
+  for (let i = 0; i < inputPositions.length; i += 3) {
+    out[i] = inputPositions[i];
+    out[i + 1] = -inputPositions[i + 1];
+    out[i + 2] = -inputPositions[i + 2];
+    if (out[i] < minX) minX = out[i];
+    if (out[i + 1] < minY) minY = out[i + 1];
+    if (out[i + 2] < minZ) minZ = out[i + 2];
+  }
+
+  if (Number.isFinite(minX)) {
+    for (let i = 0; i < out.length; i += 3) {
+      out[i] -= minX;
+      out[i + 1] -= minY;
+      out[i + 2] -= minZ;
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Analisa a geometria de modelos odontológicos (arcadas superiores/inferiores):
+ * 1. Detecta o plano de corte principal da base do modelo.
+ * 2. Se a base estiver apontando para CIMA (+Z) (comum em maxilas/antagonistas exportados do CAD em oclusão),
+ *    inverte o modelo 180° para que a base fique na mesa e os dentes apontem para CIMA (+Z).
+ * 3. Se a base estiver inclinada, rotaciona a geometria em 3D para nivelar perfeitamente a base plana na chapa (Z=0).
+ */
+export function levelAndOrientDentalModel(inputPositions: Float32Array): OrientResult {
+  const count = Math.floor(inputPositions.length / 9);
+  if (count === 0) {
+    return { positions: inputPositions, changed: false, wasFlipped: false, wasLeveled: false, angleDeg: 0 };
+  }
+
+  let totalArea = 0;
+  let topFlatArea = 0;
+  let bottomFlatArea = 0;
+
+  let minX = Infinity, maxX = -Infinity;
+  let minY = Infinity, maxY = -Infinity;
+  let minZ = Infinity, maxZ = -Infinity;
+
+  for (let i = 0; i < inputPositions.length; i += 3) {
+    const x = inputPositions[i];
+    const y = inputPositions[i + 1];
+    const z = inputPositions[i + 2];
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+    if (z < minZ) minZ = z;
+    if (z > maxZ) maxZ = z;
+  }
+
+  const heightZ = maxZ - minZ;
+  const topThresholdZ = maxZ - heightZ * 0.25;
+  const bottomThresholdZ = minZ + heightZ * 0.25;
+
+  const planeMap = new Map<string, { nx: number; ny: number; nz: number; area: number; avgZ: number }>();
+
+  for (let t = 0; t < count; t++) {
+    const off = t * 9;
+    const ax = inputPositions[off], ay = inputPositions[off + 1], az = inputPositions[off + 2];
+    const bx = inputPositions[off + 3], by = inputPositions[off + 4], bz = inputPositions[off + 5];
+    const cx = inputPositions[off + 6], cy = inputPositions[off + 7], cz = inputPositions[off + 8];
+
+    const ux = bx - ax, uy = by - ay, uz = bz - az;
+    const vx = cx - ax, vy = cy - ay, vz = cz - az;
+    const crossX = uy * vz - uz * vy;
+    const crossY = uz * vx - ux * vz;
+    const crossZ = ux * vy - uy * vx;
+    const len = Math.hypot(crossX, crossY, crossZ);
+    if (len < 1e-12) continue;
+
+    const area = 0.5 * len;
+    totalArea += area;
+    const nx = crossX / len;
+    const ny = crossY / len;
+    const nz = crossZ / len;
+    const avgTriZ = (az + bz + cz) / 3;
+
+    if (nz > 0.85 && avgTriZ >= topThresholdZ) {
+      topFlatArea += area;
+    } else if (nz < -0.85 && avgTriZ <= bottomThresholdZ) {
+      bottomFlatArea += area;
+    }
+
+    const key = `${Math.round(nx * 15)},${Math.round(ny * 15)},${Math.round(nz * 15)}`;
+    const curr = planeMap.get(key);
+    if (curr) {
+      curr.nx += nx * area;
+      curr.ny += ny * area;
+      curr.nz += nz * area;
+      curr.area += area;
+      curr.avgZ = (curr.avgZ * (curr.area - area) + avgTriZ * area) / curr.area;
+    } else {
+      planeMap.set(key, { nx: nx * area, ny: ny * area, nz: nz * area, area, avgZ: avgTriZ });
+    }
+  }
+
+  let bestPlane: { nx: number; ny: number; nz: number; area: number; avgZ: number } | null = null;
+  const planes = Array.from(planeMap.values());
+  for (let i = 0; i < planes.length; i++) {
+    const p = planes[i];
+    if (!bestPlane || p.area > bestPlane.area) {
+      bestPlane = p;
+    }
+  }
+
+  let needsFlip = false;
+  let alignVector: { x: number; y: number; z: number } | null = null;
+
+  if (bestPlane && bestPlane.area > Math.max(30, totalArea * 0.04)) {
+    const len = Math.hypot(bestPlane.nx, bestPlane.ny, bestPlane.nz) || 1;
+    const pNx = bestPlane.nx / len;
+    const pNy = bestPlane.ny / len;
+    const pNz = bestPlane.nz / len;
+
+    if (pNz > 0.55) {
+      needsFlip = true;
+      alignVector = { x: pNx, y: pNy, z: pNz };
+    } else if (pNz < -0.55) {
+      if (Math.abs(pNz) < 0.99) {
+        alignVector = { x: pNx, y: pNy, z: pNz };
+      }
+    } else {
+      alignVector = { x: pNx, y: pNy, z: pNz };
+    }
+  } else {
+    if (topFlatArea > 80 && topFlatArea > bottomFlatArea * 1.4) {
+      needsFlip = true;
+    }
+  }
+
+  if (!needsFlip && !alignVector) {
+    return { positions: inputPositions, changed: false, wasFlipped: false, wasLeveled: false, angleDeg: 0 };
+  }
+
+  const out = new Float32Array(inputPositions.length);
+
+  if (needsFlip && (!alignVector || Math.abs(alignVector.z) > 0.92)) {
+    for (let i = 0; i < inputPositions.length; i += 3) {
+      out[i] = inputPositions[i];
+      out[i + 1] = -inputPositions[i + 1];
+      out[i + 2] = -inputPositions[i + 2];
+    }
+  } else if (alignVector) {
+    const target = { x: 0, y: 0, z: -1 };
+    const srcLen = Math.hypot(alignVector.x, alignVector.y, alignVector.z) || 1;
+    const vFrom = { x: alignVector.x / srcLen, y: alignVector.y / srcLen, z: alignVector.z / srcLen };
+
+    let axisX = vFrom.y * target.z - vFrom.z * target.y;
+    let axisY = vFrom.z * target.x - vFrom.x * target.z;
+    let axisZ = vFrom.x * target.y - vFrom.y * target.x;
+    let axisLen = Math.hypot(axisX, axisY, axisZ);
+    let cosTheta = vFrom.x * target.x + vFrom.y * target.y + vFrom.z * target.z;
+
+    let r00 = 1, r01 = 0, r02 = 0;
+    let r10 = 0, r11 = 1, r12 = 0;
+    let r20 = 0, r21 = 0, r22 = 1;
+
+    if (axisLen < 1e-6) {
+      if (cosTheta < 0) {
+        r00 = 1; r11 = -1; r22 = -1;
+      }
+    } else {
+      axisX /= axisLen;
+      axisY /= axisLen;
+      axisZ /= axisLen;
+      const sinTheta = axisLen;
+      const oneMinusCos = 1 - cosTheta;
+
+      r00 = cosTheta + axisX * axisX * oneMinusCos;
+      r01 = axisX * axisY * oneMinusCos - axisZ * sinTheta;
+      r02 = axisX * axisZ * oneMinusCos + axisY * sinTheta;
+
+      r10 = axisY * axisX * oneMinusCos + axisZ * sinTheta;
+      r11 = cosTheta + axisY * axisY * oneMinusCos;
+      r12 = axisY * axisZ * oneMinusCos - axisX * sinTheta;
+
+      r20 = axisZ * axisX * oneMinusCos - axisY * sinTheta;
+      r21 = axisZ * axisY * oneMinusCos + axisX * sinTheta;
+      r22 = cosTheta + axisZ * axisZ * oneMinusCos;
+    }
+
+    for (let i = 0; i < inputPositions.length; i += 3) {
+      const px = inputPositions[i];
+      const py = inputPositions[i + 1];
+      const pz = inputPositions[i + 2];
+      out[i] = r00 * px + r01 * py + r02 * pz;
+      out[i + 1] = r10 * px + r11 * py + r12 * pz;
+      out[i + 2] = r20 * px + r21 * py + r22 * pz;
+    }
+  }
+
+  let newMinX = Infinity, newMinY = Infinity, newMinZ = Infinity;
+  for (let i = 0; i < out.length; i += 3) {
+    if (out[i] < newMinX) newMinX = out[i];
+    if (out[i + 1] < newMinY) newMinY = out[i + 1];
+    if (out[i + 2] < newMinZ) newMinZ = out[i + 2];
+  }
+
+  if (Number.isFinite(newMinX)) {
+    for (let i = 0; i < out.length; i += 3) {
+      out[i] -= newMinX;
+      out[i + 1] -= newMinY;
+      out[i + 2] -= newMinZ;
+    }
+  }
+
+  return {
+    positions: out,
+    changed: true,
+    wasFlipped: needsFlip,
+    wasLeveled: true,
+    angleDeg: needsFlip ? 180 : 0,
+  };
+}
+
 export interface PlacementSpec {
   positions: Float32Array;
   /** canto inferior-esquerdo alvo na chapa (mm) */

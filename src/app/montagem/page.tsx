@@ -10,6 +10,8 @@ import {
   parseStlTriangles,
   rasterizeTriangles,
   buildPositionedStl,
+  levelAndOrientDentalModel,
+  flipModel180,
   packRaster,
   detectPlate,
   unplacedReason,
@@ -33,6 +35,9 @@ import {
   Download,
   Trash2,
   Anchor,
+  RotateCw,
+  ArrowUpDown,
+  CheckCircle2,
 } from "lucide-react";
 
 interface UploadModel {
@@ -138,15 +143,39 @@ export default function MontagemPage() {
               : Promise.resolve(null),
           ]);
           if (cancelled) return;
+          let finalSize = size;
           if (tris) {
-            trianglesById.current.set(m.id, tris.positions);
+            // Nivelamento e orientação automática:
+            // Detecta modelos de cabeça para baixo (maxila/antagonistas) e orienta a base reta na mesa Z=0
+            const oriented = levelAndOrientDentalModel(tris.positions);
+            const effPositions = oriented.positions;
+            trianglesById.current.set(m.id, effPositions);
+
+            let lMinX = Infinity, lMaxX = -Infinity;
+            let lMinY = Infinity, lMaxY = -Infinity;
+            let lMinZ = Infinity, lMaxZ = -Infinity;
+            for (let i = 0; i < effPositions.length; i += 3) {
+              if (effPositions[i] < lMinX) lMinX = effPositions[i];
+              if (effPositions[i] > lMaxX) lMaxX = effPositions[i];
+              if (effPositions[i + 1] < lMinY) lMinY = effPositions[i + 1];
+              if (effPositions[i + 1] > lMaxY) lMaxY = effPositions[i + 1];
+              if (effPositions[i + 2] < lMinZ) lMinZ = effPositions[i + 2];
+              if (effPositions[i + 2] > lMaxZ) lMaxZ = effPositions[i + 2];
+            }
+            finalSize = {
+              x: Math.round((lMaxX - lMinX) * 10) / 10,
+              y: Math.round((lMaxY - lMinY) * 10) / 10,
+              z: Math.round((lMaxZ - lMinZ) * 10) / 10,
+              triangles: tris.count,
+            };
+
             try {
-              gridsById.current.set(m.id, rasterizeTriangles(tris.positions, 1));
+              gridsById.current.set(m.id, rasterizeTriangles(effPositions, 1));
             } catch {
               // sem grade: cai para retângulo cheio no encaixe
             }
           }
-          setModels((prev) => prev.map((p) => (p.id === m.id ? { ...p, size, parsing: false } : p)));
+          setModels((prev) => prev.map((p) => (p.id === m.id ? { ...p, size: finalSize, parsing: false } : p)));
         } catch (err: any) {
           if (cancelled) return;
           setModels((prev) =>
@@ -458,6 +487,88 @@ export default function MontagemPage() {
     setModels((prev) => prev.filter((m) => m.id !== id));
   };
 
+  const flipModel = (id: string) => {
+    const geo = trianglesById.current.get(id);
+    if (!geo) return;
+    const flipped = flipModel180(geo);
+    trianglesById.current.set(id, flipped);
+
+    let lMinX = Infinity, lMaxX = -Infinity;
+    let lMinY = Infinity, lMaxY = -Infinity;
+    let lMinZ = Infinity, lMaxZ = -Infinity;
+    for (let i = 0; i < flipped.length; i += 3) {
+      if (flipped[i] < lMinX) lMinX = flipped[i];
+      if (flipped[i] > lMaxX) lMaxX = flipped[i];
+      if (flipped[i + 1] < lMinY) lMinY = flipped[i + 1];
+      if (flipped[i + 1] > lMaxY) lMaxY = flipped[i + 1];
+      if (flipped[i + 2] < lMinZ) lMinZ = flipped[i + 2];
+      if (flipped[i + 2] > lMaxZ) lMaxZ = flipped[i + 2];
+    }
+    const newSize: ModelSize = {
+      x: Math.round((lMaxX - lMinX) * 10) / 10,
+      y: Math.round((lMaxY - lMinY) * 10) / 10,
+      z: Math.round((lMaxZ - lMinZ) * 10) / 10,
+      triangles: Math.floor(flipped.length / 9),
+    };
+    try {
+      gridsById.current.set(id, rasterizeTriangles(flipped, 1));
+    } catch {
+      //
+    }
+    setModels((prev) => prev.map((m) => (m.id === id ? { ...m, size: newSize } : m)));
+    toast.success("Modelo virado 180° com sucesso!");
+  };
+
+  const levelModel = (id: string) => {
+    const geo = trianglesById.current.get(id);
+    if (!geo) return;
+    const oriented = levelAndOrientDentalModel(geo);
+    trianglesById.current.set(id, oriented.positions);
+
+    let lMinX = Infinity, lMaxX = -Infinity;
+    let lMinY = Infinity, lMaxY = -Infinity;
+    let lMinZ = Infinity, lMaxZ = -Infinity;
+    for (let i = 0; i < oriented.positions.length; i += 3) {
+      if (oriented.positions[i] < lMinX) lMinX = oriented.positions[i];
+      if (oriented.positions[i] > lMaxX) lMaxX = oriented.positions[i];
+      if (oriented.positions[i + 1] < lMinY) lMinY = oriented.positions[i + 1];
+      if (oriented.positions[i + 1] > lMaxY) lMaxY = oriented.positions[i + 1];
+      if (oriented.positions[i + 2] < lMinZ) lMinZ = oriented.positions[i + 2];
+      if (oriented.positions[i + 2] > lMaxZ) lMaxZ = oriented.positions[i + 2];
+    }
+    const newSize: ModelSize = {
+      x: Math.round((lMaxX - lMinX) * 10) / 10,
+      y: Math.round((lMaxY - lMinY) * 10) / 10,
+      z: Math.round((lMaxZ - lMinZ) * 10) / 10,
+      triangles: Math.floor(oriented.positions.length / 9),
+    };
+    try {
+      gridsById.current.set(id, rasterizeTriangles(oriented.positions, 1));
+    } catch {
+      //
+    }
+    setModels((prev) => prev.map((m) => (m.id === id ? { ...m, size: newSize } : m)));
+    toast.success("Modelo nivelado reto na mesa!");
+  };
+
+  const levelAllModels = () => {
+    let count = 0;
+    for (const m of models) {
+      const geo = trianglesById.current.get(m.id);
+      if (!geo) continue;
+      const oriented = levelAndOrientDentalModel(geo);
+      trianglesById.current.set(m.id, oriented.positions);
+      try {
+        gridsById.current.set(m.id, rasterizeTriangles(oriented.positions, 1));
+      } catch {
+        //
+      }
+      count++;
+    }
+    setModels((prev) => [...prev]);
+    toast.success(`${count} modelo(s) nivelados e retos na mesa.`);
+  };
+
   return (
     <AppShell>
       <div className="space-y-4 max-w-6xl mx-auto">
@@ -588,9 +699,21 @@ export default function MontagemPage() {
 
           {/* 2. Arquivos */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3.5 space-y-2.5 h-fit">
-            <p className="text-xs font-bold text-white flex items-center gap-1.5">
-              <Upload className="w-4 h-4 text-cyan-400" /> 2. Modelos ({models.length})
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold text-white flex items-center gap-1.5">
+                <Upload className="w-4 h-4 text-cyan-400" /> 2. Modelos ({models.length})
+              </p>
+              {models.some((m) => trianglesById.current.has(m.id)) && (
+                <button
+                  type="button"
+                  onClick={levelAllModels}
+                  className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-semibold transition"
+                  title="Garante que todos os modelos estejam nivelados e com a base reta na mesa"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Nivelar todos retos
+                </button>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
@@ -693,6 +816,29 @@ export default function MontagemPage() {
                         />
                       </span>
                     )}
+
+                    {/* Controles de Nivelamento e Orientação 3D */}
+                    {trianglesById.current.has(m.id) && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => flipModel(m.id)}
+                          className="text-slate-400 hover:text-amber-400 p-1 rounded hover:bg-slate-800 transition"
+                          title="Virar 180° (Inverter cima/baixo se estiver de cabeça para baixo)"
+                        >
+                          <RotateCw className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => levelModel(m.id)}
+                          className="text-slate-400 hover:text-emerald-400 p-1 rounded hover:bg-slate-800 transition"
+                          title="Nivelar base reta na mesa"
+                        >
+                          <ArrowUpDown className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+
                     <button
                       type="button"
                       onClick={() => removeModel(m.id)}

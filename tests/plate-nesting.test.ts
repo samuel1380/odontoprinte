@@ -12,6 +12,8 @@ import {
   detectPlate,
   unplacedReason,
   fmtMm,
+  levelAndOrientDentalModel,
+  flipModel180,
 } from "../src/lib/plate-nesting";
 
 // STL binário mínimo: 1 triângulo (0,0,0)-(10,0,0)-(0,5,2)
@@ -625,5 +627,60 @@ describe("raster", () => {
     expect(total).toBeGreaterThan(0);
     // >=95% das células gravadas conferem com o planejado
     expect(worst / total).toBeLessThan(0.05);
+  });
+
+  describe("levelAndOrientDentalModel e flipModel180", () => {
+    it("detecta modelo de cabeça para baixo com base plana no topo e inverte para Z=0", () => {
+      // Simula um modelo odontológico maxilar (superior) com base plana cortada no topo (Z=20)
+      // Base: retângulo de 40x30mm no topo com normais apontando para CIMA (nz = 1)
+      const baseTri1 = [0, 0, 20, 40, 0, 20, 40, 30, 20];
+      const baseTri2 = [0, 0, 20, 40, 30, 20, 0, 30, 20];
+
+      // Dentes: superfícies inclinadas que descem até Z=0
+      const toothTri1 = [10, 10, 0, 20, 10, 10, 15, 20, 10];
+      const toothTri2 = [20, 10, 0, 30, 10, 10, 25, 20, 10];
+
+      const model = new Float32Array([...baseTri1, ...baseTri2, ...toothTri1, ...toothTri2]);
+
+      const res = levelAndOrientDentalModel(model);
+      expect(res.changed).toBe(true);
+      expect(res.wasFlipped).toBe(true);
+
+      // Na geometria invertida, a base deve estar em Z=0 e os dentes apontando para cima
+      let minZ = Infinity;
+      let maxZ = -Infinity;
+      for (let i = 2; i < res.positions.length; i += 3) {
+        if (res.positions[i] < minZ) minZ = res.positions[i];
+        if (res.positions[i] > maxZ) maxZ = res.positions[i];
+      }
+      expect(minZ).toBe(0);
+      expect(maxZ).toBeCloseTo(20, 0);
+    });
+
+    it("não altera modelo que já está correto com a base no Z=0", () => {
+      // Base plana cortada na mesa (Z=0 com normal apontando para baixo nz = -1)
+      const baseTri1 = [0, 0, 0, 40, 30, 0, 40, 0, 0];
+      const baseTri2 = [0, 0, 0, 0, 30, 0, 40, 30, 0];
+      const toothTri = [15, 15, 20, 25, 15, 20, 20, 25, 20];
+
+      const model = new Float32Array([...baseTri1, ...baseTri2, ...toothTri]);
+
+      const res = levelAndOrientDentalModel(model);
+      expect(res.wasFlipped).toBe(false);
+    });
+
+    it("permite inverter manualmente 180 graus com flipModel180", () => {
+      const tri = [0, 0, 0, 10, 0, 5, 0, 10, 10];
+      const model = new Float32Array(tri);
+
+      const flipped = flipModel180(model);
+      expect(flipped.length).toBe(model.length);
+
+      let minZ = Infinity;
+      for (let i = 2; i < flipped.length; i += 3) {
+        if (flipped[i] < minZ) minZ = flipped[i];
+      }
+      expect(minZ).toBe(0);
+    });
   });
 });

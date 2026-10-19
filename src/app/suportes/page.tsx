@@ -18,6 +18,7 @@ import {
   Layers,
   ArrowRight,
   Info,
+  RotateCw,
 } from "lucide-react";
 import {
   generateDentalSupports,
@@ -25,7 +26,11 @@ import {
   type DentalSupportConfig,
   type SupportGenerationResult,
 } from "@/lib/support-generator";
-import { parseStlTriangles } from "@/lib/plate-nesting";
+import {
+  parseStlTriangles,
+  levelAndOrientDentalModel,
+  flipModel180,
+} from "@/lib/plate-nesting";
 import Link from "next/link";
 
 interface LoadedModel {
@@ -97,19 +102,35 @@ export default function SuportesPage() {
 
     try {
       const parsed = await parseStlTriangles(file);
+      const oriented = levelAndOrientDentalModel(parsed.positions);
       setLoadedModel({
         name: file.name,
         sizeBytes: file.size,
-        positions: parsed.positions,
+        positions: oriented.positions,
         triangleCount: parsed.count,
       });
-      toast.success(`Modelo "${file.name}" carregado (${parsed.count.toLocaleString()} triângulos).`);
+      if (oriented.wasFlipped) {
+        toast.success(`Modelo "${file.name}" carregado e virado para cima automaticamente!`);
+      } else {
+        toast.success(`Modelo "${file.name}" carregado (${parsed.count.toLocaleString()} triângulos).`);
+      }
     } catch (err: any) {
       toast.error(err?.message || "Falha ao processar a geometria do arquivo STL.");
       setLoadedModel(null);
     } finally {
       setLoadingFile(false);
     }
+  };
+
+  const handleFlipModel = () => {
+    if (!loadedModel) return;
+    const flipped = flipModel180(loadedModel.positions);
+    setLoadedModel({
+      ...loadedModel,
+      positions: flipped,
+    });
+    setResult(null);
+    toast.success("Modelo invertido 180°!");
   };
 
   // Executa o motor de suportes médios odontológicos
@@ -401,15 +422,26 @@ export default function SuportesPage() {
                   <Upload className="w-4 h-4 text-cyan-400" /> 1. Mesa ou Modelo STL
                 </span>
                 {loadedModel && (
-                  <button
-                    onClick={() => {
-                      setLoadedModel(null);
-                      setResult(null);
-                    }}
-                    className="text-slate-500 hover:text-rose-400 text-xs flex items-center gap-1 transition"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" /> Limpar
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleFlipModel}
+                      className="text-amber-400 hover:text-amber-300 text-xs flex items-center gap-1 transition"
+                      title="Inverter 180° se o modelo estiver de cabeça para baixo"
+                    >
+                      <RotateCw className="w-3.5 h-3.5" /> Virar 180°
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLoadedModel(null);
+                        setResult(null);
+                      }}
+                      className="text-slate-500 hover:text-rose-400 text-xs flex items-center gap-1 transition"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Limpar
+                    </button>
+                  </div>
                 )}
               </div>
 
