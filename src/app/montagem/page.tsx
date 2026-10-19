@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/layout/shell";
 import { OdontoPrintService } from "@/services/odontoprint-service";
 import type { PrinterWithStatus } from "@/types/domain";
@@ -31,6 +32,7 @@ import {
   Printer,
   Download,
   Trash2,
+  Anchor,
 } from "lucide-react";
 
 interface UploadModel {
@@ -51,6 +53,7 @@ interface UploadModel {
  * abrir no Chitubox/Halot Box (só faltam suportes). 100% local.
  */
 export default function MontagemPage() {
+  const router = useRouter();
   const [printers, setPrinters] = useState<PrinterWithStatus[]>([]);
   const [loadingPrinters, setLoadingPrinters] = useState(true);
   const [printerId, setPrinterId] = useState("");
@@ -383,6 +386,42 @@ export default function MontagemPage() {
     }
   };
 
+  const sendToSupports = () => {
+    if (!result || result.placed.length === 0) {
+      router.push("/suportes");
+      return;
+    }
+    const withGeo = result.placed.filter((p) => trianglesById.current.get(p.id));
+    if (withGeo.length === 0) {
+      router.push("/suportes");
+      return;
+    }
+    try {
+      const buffer = buildPositionedStl(
+        withGeo.map((p) => ({
+          positions: trianglesById.current.get(p.id)!,
+          x: p.x,
+          y: p.y,
+          angle: p.angle,
+        }))
+      );
+      const bytes = new Uint8Array(buffer);
+      let binary = "";
+      const chunk = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunk) {
+        binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
+      }
+      sessionStorage.setItem("odontoprint_pending_supports_mesh", btoa(binary));
+      sessionStorage.setItem(
+        "odontoprint_pending_supports_name",
+        `mesa-${(printer?.name || "chapa").replace(/\s+/g, "-").toLowerCase()}.stl`
+      );
+      router.push("/suportes");
+    } catch {
+      router.push("/suportes");
+    }
+  };
+
   const savePlate = async () => {
     if (!printer) {
       toast.error("Selecione uma impressora primeiro (cadastre em Impressoras se a lista estiver vazia).");
@@ -433,15 +472,26 @@ export default function MontagemPage() {
               Jogue os arquivos, o sistema organiza na chapa e gera o STL pronto para o fatiador.
             </p>
           </div>
-          <Button
-            size="sm"
-            onClick={downloadStl}
-            disabled={!result || result.placed.length === 0 || building}
-            className="gap-1.5 font-bold bg-white hover:bg-slate-200 text-slate-950 rounded-full text-xs h-9 px-5 disabled:opacity-40"
-          >
-            <Download className="w-4 h-4" />
-            {building ? "Gerando..." : "Baixar mesa (.stl)"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={sendToSupports}
+              disabled={!result || result.placed.length === 0}
+              className="gap-1.5 font-bold bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-full text-xs h-9 px-4 disabled:opacity-40"
+            >
+              <Anchor className="w-4 h-4" />
+              Adicionar Suportes
+            </Button>
+            <Button
+              size="sm"
+              onClick={downloadStl}
+              disabled={!result || result.placed.length === 0 || building}
+              className="gap-1.5 font-bold bg-white hover:bg-slate-200 text-slate-950 rounded-full text-xs h-9 px-5 disabled:opacity-40"
+            >
+              <Download className="w-4 h-4" />
+              {building ? "Gerando..." : "Baixar mesa (.stl)"}
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -724,15 +774,26 @@ export default function MontagemPage() {
                   ))}
                 </ol>
                 <div className="flex flex-col gap-2 justify-start">
-                  <Button
-                    size="sm"
-                    onClick={downloadStl}
-                    disabled={building || result.placed.length === 0}
-                    className="gap-1.5 font-bold bg-white hover:bg-slate-200 text-slate-950 rounded-full text-xs h-9 disabled:opacity-40"
-                  >
-                    <Download className="w-4 h-4" />
-                    {building ? "Gerando..." : "Baixar mesa (.stl)"}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={sendToSupports}
+                      disabled={building || result.placed.length === 0}
+                      className="gap-1.5 font-bold bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-full text-xs h-9 flex-1 disabled:opacity-40"
+                    >
+                      <Anchor className="w-4 h-4" />
+                      Adicionar Suportes 3D
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={downloadStl}
+                      disabled={building || result.placed.length === 0}
+                      className="gap-1.5 font-bold bg-white hover:bg-slate-200 text-slate-950 rounded-full text-xs h-9 flex-1 disabled:opacity-40"
+                    >
+                      <Download className="w-4 h-4" />
+                      {building ? "Gerando..." : "Baixar mesa"}
+                    </Button>
+                  </div>
                   <Button
                     size="sm"
                     variant="outline"
@@ -743,7 +804,7 @@ export default function MontagemPage() {
                     {copied ? "Copiado!" : "Copiar posições"}
                   </Button>
                   <p className="text-[10px] text-slate-500">
-                    O STL sai com as peças na posição e encostadas na mesa. No fatiador, só adicione suportes e conectores.
+                    O STL sai com as peças na posição e encostadas na mesa. Use "Adicionar Suportes 3D" para aplicar balsa e suportes médios automáticos.
                   </p>
                 </div>
               </div>

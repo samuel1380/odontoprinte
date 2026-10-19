@@ -83,12 +83,12 @@ export const ROLE_PERMISSIONS: Record<string, { label: string; description: stri
   ADMIN: {
     label: "Administrador / Gestor",
     description: "Acesso irrestrito a todos os setores do laboratório, configurações, histórico completo e gestão de usuários.",
-    paths: ["/dashboard", "/fila", "/montagem", "/resinas", "/calibracoes", "/impressoras", "/historico", "/admin/usuarios", "/admin/configuracoes"],
+    paths: ["/dashboard", "/fila", "/montagem", "/suportes", "/resinas", "/calibracoes", "/impressoras", "/historico", "/admin/usuarios", "/admin/configuracoes"],
   },
   OPERADOR_IMPRESSAO: {
     label: "Operador de Resina / Impressão 3D",
     description: "Gestão operacional da esteira 3D: fila de impressão, montagem de mesas, impressoras, resinas e calibrações.",
-    paths: ["/dashboard", "/fila", "/montagem", "/impressoras", "/resinas", "/calibracoes"],
+    paths: ["/dashboard", "/fila", "/montagem", "/suportes", "/impressoras", "/resinas", "/calibracoes"],
   },
 };
 
