@@ -526,7 +526,7 @@ export async function generateDentalSupports(
     isLateral?: boolean;
   }
 
-  const rawCandidates: CandidatePoint[] = [];
+  const bottomCandidates: CandidatePoint[] = [];
 
   // 4a. SUPORTES DE BAIXO (Face inferior, oca e reentrâncias da base)
   const spacing = Math.max(1.8, cfg.supportSpacing);
@@ -570,7 +570,7 @@ export async function generateDentalSupports(
         const norm = computeNormal(ax, ay, az, bx, by, bz, cx, cy, cz);
 
         // REGRA ANTI-FUSÃO NO MODELO E PROTEÇÃO TOTAL DE DENTES/GENGIVA:
-        // Apenas superfícies voltadas para baixo (nz < -0.10) ou corte inferior da base (az <= elevatedMinZ + 2.0).
+        // Apenas superfícies voltadas para baixo (nz < -0.10) ou corte inferior da base.
         // NUNCA atinge dentes ou superfícies superiores.
         if (norm.nz > 0.05 || Math.min(az, bz, cz) > maxSupportZ) {
           continue;
@@ -579,7 +579,6 @@ export async function generateDentalSupports(
         if (pointInTriangle2D(px, py, ax, ay, bx, by, cx, cy)) {
           const zHit = interpolateZOnTriangle(px, py, ax, ay, az, bx, by, bz, cx, cy, cz, norm.nx, norm.ny, norm.nz);
           if (zHit !== null && zHit >= elevatedMinZ - 0.2 && zHit <= maxSupportZ) {
-            // Guarda o ponto de menor Z na coluna (linha de visão livre a partir da mesa)
             if (bestHitZ === null || zHit < bestHitZ) {
               bestHitZ = zHit;
               bestNorm = norm;
@@ -589,7 +588,7 @@ export async function generateDentalSupports(
       }
 
       if (bestHitZ !== null && bestNorm !== null) {
-        rawCandidates.push({
+        bottomCandidates.push({
           x: px,
           y: py,
           zContact: bestHitZ,
@@ -613,11 +612,11 @@ export async function generateDentalSupports(
     const cz = modelPositions[off + 8] + zShift;
 
     const minTriZ = Math.min(az, bz, cz);
-    const maxTriZ = Math.max(az, bz, cz);
+    const centroidZ = (az + bz + cz) / 3;
 
     // RESTRIÇÃO CRÍTICA: Somente na base lateral inferior.
     // NUNCA no topo, NUNCA nos dentes, NUNCA na gengiva.
-    if (maxTriZ > maxSupportZ || minTriZ < elevatedMinZ - 0.5) continue;
+    if (centroidZ > maxSupportZ || minTriZ < elevatedMinZ - 0.5) continue;
 
     const ax = modelPositions[off];
     const ay = modelPositions[off + 1];
@@ -633,14 +632,13 @@ export async function generateDentalSupports(
 
     // Deve ser uma parede lateral apontando para fora do modelo
     const len2D = Math.hypot(norm.nx, norm.ny);
-    if (len2D < 0.40) continue;
+    if (len2D < 0.25) continue;
 
     const unx = norm.nx / len2D;
     const uny = norm.ny / len2D;
 
     const centroidX = (ax + bx + cx) / 3;
     const centroidY = (ay + by + cy) / 3;
-    const centroidZ = (az + bz + cz) / 3;
 
     // Haste do pilar fica posicionada FORA da parede lateral do modelo
     const px = centroidX + unx * lateralPillarOffset;
@@ -657,8 +655,8 @@ export async function generateDentalSupports(
     });
   }
 
-  // Filtra candidatos laterais por espaçamento perimetral uniforme
-  const latSpacing = Math.max(2.6, cfg.supportSpacing * 1.1);
+  // Filtra candidatos laterais com espaçamento perimetral denso (garante quantidade reforçada para sustentar)
+  const latSpacing = Math.max(1.8, cfg.supportSpacing * 0.65);
   const latSpacingSq = latSpacing * latSpacing;
   const filteredLateralCandidates: CandidatePoint[] = [];
 
@@ -678,44 +676,43 @@ export async function generateDentalSupports(
     }
   }
 
-  rawCandidates.push(...filteredLateralCandidates);
-
   // 5. Filtro de Segurança Anti-Fusão de Suportes (Pilar com Pilar e Pilar com Modelo)
   const pillars: SupportPillarInfo[] = [];
   const raftZ = cfg.raftThickness;
   const safePillarDistSq = Math.pow(cfg.minPillarDistance, 2);
+
+  // Se o usuário passou minPillarDistance explícito (como em testes), respeitamos; senão usamos folga calibrada entre suportes laterais
+  const effectiveLateralMinDist =
+    userConfig.minPillarDistance !== undefined
+      ? userConfig.minPillarDistance
+      : Math.max(1.8, cfg.pillarDiameter + 0.65);
+  const effectiveLateralMinDistSq = Math.pow(effectiveLateralMinDist, 2);
   const stemRadiusWithClearance = pRad + cfg.modelClearance;
 
-  // Ordena candidatos por altura de contato Z crescente
-  rawCandidates.sort((a, b) => a.zContact - b.zContact);
-
-  for (const cand of rawCandidates) {
+  // 5a. Insere PRIMEIRO os suportes LATERAIS para garantir barreira perimetral contínua
+  for (const cand of filteredLateralCandidates) {
     const px = cand.x;
     const py = cand.y;
     const zContact = cand.zContact;
 
-    // A. Não adiciona se a distância até a balsa for ínfima
     if (zContact <= raftZ + cfg.tipLength + 0.3) continue;
 
-    // B. CHECAGEM ANTI-FUSÃO ENTRE SUPORTES:
-    // Garante distância mínima estrita entre pilares vizinhos para que nunca se fundam em uma massa sólida
-    let tooCloseToOtherPillar = false;
+    // Checagem anti-fusão com outros suportes já posicionados
+    let tooClose = false;
     for (let pIdx = 0; pIdx < pillars.length; pIdx++) {
       const p = pillars[pIdx];
       const distSq = (px - p.x) * (px - p.x) + (py - p.y) * (py - p.y);
-      if (distSq < safePillarDistSq) {
-        tooCloseToOtherPillar = true;
+      if (distSq < effectiveLateralMinDistSq) {
+        tooClose = true;
         break;
       }
     }
-    if (tooCloseToOtherPillar) continue;
+    if (tooClose) continue;
 
-    // C. CHECAGEM ANTI-FUSÃO COM O MODELO (Shaft-to-Wall Collision Clearance):
-    // Verifica se a haste do pilar (de zBase até zContact - tipLength) colide ou passa muito perto
-    // de alguma parede inclinada do modelo dentário
+    // Checagem anti-fusão com a parede do modelo
     let shaftCollidesWithModel = false;
     const zStemMax = zContact - cfg.tipLength;
-    const clearance = cand.isLateral ? (pRad + 0.35) : stemRadiusWithClearance;
+    const clearance = pRad + 0.28;
 
     const gc0 = Math.max(0, Math.floor((px - clearance - startX) / spatialCellSize));
     const gc1 = Math.min(gridCols - 1, Math.floor((px + clearance - startX) / spatialCellSize));
@@ -734,10 +731,8 @@ export async function generateDentalSupports(
           const cz = modelPositions[off + 8] + zShift;
 
           const tMinZ = Math.min(az, bz, cz);
-          const tMaxZ = Math.max(az, bz, cz);
 
-          // Se o triângulo estiver no intervalo de altura da haste cilíndrica:
-          if (tMinZ < zStemMax && tMaxZ > raftZ) {
+          if (tMinZ < zStemMax && Math.max(az, bz, cz) > raftZ) {
             const ax = modelPositions[off];
             const ay = modelPositions[off + 1];
             const bx = modelPositions[off + 3];
@@ -757,7 +752,6 @@ export async function generateDentalSupports(
 
     if (shaftCollidesWithModel) continue;
 
-    // Pilar aprovado com 100% de segurança anti-fusão
     pillars.push({
       x: px,
       y: py,
@@ -766,7 +760,80 @@ export async function generateDentalSupports(
       height: zContact - raftZ,
       targetX: cand.targetX,
       targetY: cand.targetY,
-      isLateral: cand.isLateral,
+      isLateral: true,
+    });
+  }
+
+  // 5b. Insere os suportes DE BAIXO para preencher o interior da base
+  bottomCandidates.sort((a, b) => a.zContact - b.zContact);
+
+  for (const cand of bottomCandidates) {
+    const px = cand.x;
+    const py = cand.y;
+    const zContact = cand.zContact;
+
+    if (zContact <= raftZ + cfg.tipLength + 0.3) continue;
+
+    let tooClose = false;
+    for (let pIdx = 0; pIdx < pillars.length; pIdx++) {
+      const p = pillars[pIdx];
+      const distSq = (px - p.x) * (px - p.x) + (py - p.y) * (py - p.y);
+      const requiredDistSq = p.isLateral ? effectiveLateralMinDistSq : safePillarDistSq;
+      if (distSq < requiredDistSq) {
+        tooClose = true;
+        break;
+      }
+    }
+    if (tooClose) continue;
+
+    let shaftCollidesWithModel = false;
+    const zStemMax = zContact - cfg.tipLength;
+
+    const gc0 = Math.max(0, Math.floor((px - stemRadiusWithClearance - startX) / spatialCellSize));
+    const gc1 = Math.min(gridCols - 1, Math.floor((px + stemRadiusWithClearance - startX) / spatialCellSize));
+    const gr0 = Math.max(0, Math.floor((py - stemRadiusWithClearance - startY) / spatialCellSize));
+    const gr1 = Math.min(gridRows - 1, Math.floor((py + stemRadiusWithClearance - startY) / spatialCellSize));
+
+    for (let gr = gr0; gr <= gr1 && !shaftCollidesWithModel; gr++) {
+      for (let gc = gc0; gc <= gc1 && !shaftCollidesWithModel; gc++) {
+        const triList = spatialGrid[gr * gridCols + gc];
+        for (let k = 0; k < triList.length; k++) {
+          const t = triList[k];
+          const off = t * 9;
+
+          const az = modelPositions[off + 2] + zShift;
+          const bz = modelPositions[off + 5] + zShift;
+          const cz = modelPositions[off + 8] + zShift;
+
+          const tMinZ = Math.min(az, bz, cz);
+
+          if (tMinZ < zStemMax && Math.max(az, bz, cz) > raftZ) {
+            const ax = modelPositions[off];
+            const ay = modelPositions[off + 1];
+            const bx = modelPositions[off + 3];
+            const by = modelPositions[off + 4];
+            const cx = modelPositions[off + 6];
+            const cy = modelPositions[off + 7];
+
+            const d2D = distPointToTriangle2D(px, py, ax, ay, bx, by, cx, cy);
+            if (d2D < stemRadiusWithClearance) {
+              shaftCollidesWithModel = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    if (shaftCollidesWithModel) continue;
+
+    pillars.push({
+      x: px,
+      y: py,
+      zBase: raftZ,
+      zContact,
+      height: zContact - raftZ,
+      isLateral: false,
     });
   }
 
