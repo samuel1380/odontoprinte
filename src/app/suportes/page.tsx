@@ -49,11 +49,10 @@ export default function SuportesPage() {
   const [result, setResult] = useState<SupportGenerationResult | null>(null);
 
   // Configuração dos suportes e perfil ativo
-  const [activeProfile, setActiveProfile] = useState<SupportProfileId>("GOLD_MEDIUM");
+  const [activeProfile, setActiveProfile] = useState<"FINE" | "MEDIUM" | "HEAVY">("MEDIUM");
   const [config, setConfig] = useState<DentalSupportConfig>({
-    ...DEFAULT_DENTAL_SUPPORT_CONFIG,
+    ...DENTAL_SUPPORT_PROFILES.MEDIUM.config,
   });
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [viewMode, setViewMode] = useState<"top" | "iso">("top");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -269,6 +268,23 @@ export default function SuportesPage() {
           ctx.beginPath();
           ctx.arc(px, py, Math.max(2, (config.pillarDiameter / 2) * scale), 0, Math.PI * 2);
           ctx.fill();
+
+          // Se for suporte lateral, desenha linha de conexão com a parede
+          if (p.targetX !== undefined && p.targetY !== undefined) {
+            const tx = p.targetX * scale + offsetX;
+            const ty = p.targetY * scale + offsetY;
+            ctx.strokeStyle = "#fef08a";
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.moveTo(px, py);
+            ctx.lineTo(tx, ty);
+            ctx.stroke();
+
+            ctx.fillStyle = "#fef08a";
+            ctx.beginPath();
+            ctx.arc(tx, ty, 2, 0, Math.PI * 2);
+            ctx.fill();
+          }
         }
       }
 
@@ -334,17 +350,32 @@ export default function SuportesPage() {
         for (const p of result.pillars) {
           const px0 = isoX(p.x, p.y);
           const py0 = isoY(p.x, p.y, minZ + config.raftThickness);
-          const py1 = isoY(p.x, p.y, minZ + p.height);
+          const stemTopZ = p.targetX !== undefined ? minZ + p.height - 0.4 : minZ + p.height;
+          const pyStem = isoY(p.x, p.y, stemTopZ);
 
+          // Haste vertical
           ctx.beginPath();
           ctx.moveTo(px0, py0);
-          ctx.lineTo(px0, py1);
+          ctx.lineTo(px0, pyStem);
           ctx.stroke();
+
+          // Ponta conectando ao modelo
+          const targetX = p.targetX ?? p.x;
+          const targetY = p.targetY ?? p.y;
+          const px1 = isoX(targetX, targetY);
+          const py1 = isoY(targetX, targetY, minZ + p.height);
+
+          if (p.targetX !== undefined) {
+            ctx.beginPath();
+            ctx.moveTo(px0, pyStem);
+            ctx.lineTo(px1, py1);
+            ctx.stroke();
+          }
 
           // Ponto de contato na ponta
           ctx.fillStyle = "#fef08a";
           ctx.beginPath();
-          ctx.arc(px0, py1, 2.5, 0, Math.PI * 2);
+          ctx.arc(px1, py1, 2.5, 0, Math.PI * 2);
           ctx.fill();
         }
       }
@@ -497,25 +528,20 @@ export default function SuportesPage() {
               />
             </div>
 
-            {/* 2. Perfil de Suporte Médio Odontológico */}
+            {/* 2. Seleção de Suportes Odontológicos de Alta Precisão */}
             <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-amber-400" /> 2. Parâmetros do Suporte Médio
+                  <ShieldCheck className="w-4 h-4 text-amber-400" /> 2. Tipo de Suporte
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setShowAdvanced(!showAdvanced)}
-                  className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
-                >
-                  <Sliders className="w-3 h-3" />
-                  {showAdvanced ? "Ocultar ajustes" : "Ajustes finos"}
-                </button>
+                <span className="text-[10px] bg-emerald-500/15 text-emerald-300 px-2 py-0.5 rounded-full font-semibold border border-emerald-500/25 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" /> Alta Precisão Anti-Fusão
+                </span>
               </div>
 
-              {/* Seleção Rápida de Perfil Odontológico */}
-              <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
-                {(Object.keys(DENTAL_SUPPORT_PROFILES) as SupportProfileId[]).map((pKey) => {
+              {/* Botões Diretos: Suporte Fino, Médio e Grosso */}
+              <div className="grid grid-cols-3 gap-2 p-1.5 bg-slate-950 rounded-2xl border border-slate-800">
+                {(["FINE", "MEDIUM", "HEAVY"] as const).map((pKey) => {
                   const p = DENTAL_SUPPORT_PROFILES[pKey];
                   const isActive = activeProfile === pKey;
                   return (
@@ -527,20 +553,25 @@ export default function SuportesPage() {
                         setConfig({ ...p.config });
                         setResult(null);
                       }}
-                      className={`text-[10px] font-semibold py-1.5 px-2 rounded-lg transition text-center ${
+                      className={`flex flex-col items-center justify-center py-2.5 px-2 rounded-xl transition text-center ${
                         isActive
-                          ? "bg-amber-400 text-slate-950 shadow font-bold"
-                          : "text-slate-400 hover:text-slate-200"
+                          ? "bg-amber-400 text-slate-950 shadow-md font-bold"
+                          : "text-slate-400 hover:text-slate-100 hover:bg-slate-900"
                       }`}
                     >
-                      {pKey === "GOLD_MEDIUM" ? "Padrão Ouro" : pKey === "FINE_PRECISION" ? "Alta Precisão" : "Reforçado"}
+                      <span className="text-xs font-bold leading-tight">
+                        Suporte {p.name}
+                      </span>
+                      <span className={`text-[10px] mt-0.5 ${isActive ? "text-slate-900 font-semibold" : "text-slate-500"}`}>
+                        {p.badge}
+                      </span>
                     </button>
                   );
                 })}
               </div>
 
-              {/* Card Destaque: Padrão Ouro Anti-Falhas e Anti-Fusão */}
-              <div className="bg-amber-500/10 border border-amber-500/25 rounded-xl p-3 text-xs space-y-2">
+              {/* Card Destaque: Padrão Odontológico Calibrado */}
+              <div className="bg-amber-500/10 border border-amber-500/25 rounded-xl p-3.5 text-xs space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-amber-300 flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5" /> {DENTAL_SUPPORT_PROFILES[activeProfile].label}
@@ -552,108 +583,37 @@ export default function SuportesPage() {
                 <p className="text-[11px] text-slate-300 leading-relaxed">
                   {DENTAL_SUPPORT_PROFILES[activeProfile].description}
                 </p>
+
+                {/* Garantia Odontológica */}
+                <div className="bg-slate-950/70 border border-slate-800 rounded-lg p-2.5 space-y-1 text-[11px]">
+                  <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Ancoragem Lateral & Inferior</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 leading-normal">
+                    Suportes aplicados apenas na base e laterais do zócalo. Dentes, cúspides e gengiva 100% protegidos contra marcas.
+                  </p>
+                </div>
+
                 <div className="pt-1.5 border-t border-amber-500/20 flex items-center justify-between text-[10px] text-slate-400 flex-wrap gap-2">
-                  <span>Pilar: <strong className="text-white">{config.pillarDiameter} mm</strong></span>
+                  <span>Haste: <strong className="text-white">{config.pillarDiameter} mm</strong></span>
                   <span>Ponta: <strong className="text-white">{config.tipDiameter} mm</strong></span>
-                  <span>Folga Modelo: <strong className="text-emerald-300">{config.modelClearance} mm</strong></span>
-                  <span>Dist. Suportes: <strong className="text-amber-300">≥ {config.minPillarDistance} mm</strong></span>
+                  <span>Folga da Parede: <strong className="text-emerald-300">{config.modelClearance} mm</strong></span>
+                  <span>Dist. entre Suportes: <strong className="text-amber-300">≥ {config.minPillarDistance} mm</strong></span>
                 </div>
               </div>
-
-              {/* Ajustes avançados caso queira calibrar */}
-              {showAdvanced && (
-                <div className="grid grid-cols-2 gap-2.5 pt-2 border-t border-slate-800/80 text-xs">
-                  <div>
-                    <label className="text-[10px] text-slate-400 block mb-1">Elevação Z (mm)</label>
-                    <input
-                      type="number"
-                      step={0.5}
-                      min={2}
-                      max={12}
-                      value={config.elevationZ}
-                      onChange={(e) => setConfig({ ...config, elevationZ: Number(e.target.value) || 5 })}
-                      className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-2 py-1 text-xs"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] text-slate-400 block mb-1">Diâm. Pilar (mm)</label>
-                    <input
-                      type="number"
-                      step={0.1}
-                      min={0.8}
-                      max={2.5}
-                      value={config.pillarDiameter}
-                      onChange={(e) => setConfig({ ...config, pillarDiameter: Number(e.target.value) || 1.3 })}
-                      className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-2 py-1 text-xs"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] text-slate-400 block mb-1">Ponta Contato (mm)</label>
-                    <input
-                      type="number"
-                      step={0.05}
-                      min={0.3}
-                      max={1.2}
-                      value={config.tipDiameter}
-                      onChange={(e) => setConfig({ ...config, tipDiameter: Number(e.target.value) || 0.65 })}
-                      className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-2 py-1 text-xs"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] text-slate-400 block mb-1">Micro-Penetração (mm)</label>
-                    <input
-                      type="number"
-                      step={0.02}
-                      min={0.05}
-                      max={0.3}
-                      value={config.tipPenetration}
-                      onChange={(e) => setConfig({ ...config, tipPenetration: Number(e.target.value) || 0.12 })}
-                      className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-2 py-1 text-xs"
-                      title="Profundidade microscópica para solda química sólida sem marcar"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] text-slate-400 block mb-1">Espaçamento Malha (mm)</label>
-                    <input
-                      type="number"
-                      step={0.2}
-                      min={1.5}
-                      max={6}
-                      value={config.supportSpacing}
-                      onChange={(e) => setConfig({ ...config, supportSpacing: Number(e.target.value) || 3 })}
-                      className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-2 py-1 text-xs"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] text-slate-400 block mb-1">Folga da Parede (mm)</label>
-                    <input
-                      type="number"
-                      step={0.1}
-                      min={0.4}
-                      max={2.0}
-                      value={config.modelClearance}
-                      onChange={(e) => setConfig({ ...config, modelClearance: Number(e.target.value) || 0.75 })}
-                      className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-2 py-1 text-xs"
-                      title="Distância mínima de segurança entre a haste e as paredes do modelo"
-                    />
-                  </div>
-                </div>
-              )}
 
               {/* Botão de Ação: Gerar Suportes */}
               <Button
                 size="sm"
                 onClick={handleGenerate}
                 disabled={!loadedModel || generating}
-                className="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-xl text-xs h-10 mt-2 gap-2 shadow-lg shadow-cyan-500/20"
+                className="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-xl text-xs h-10 mt-1 gap-2 shadow-lg shadow-cyan-500/20"
               >
                 <Anchor className="w-4 h-4" />
-                {generating ? "Calculando geometria e suportes..." : "Gerar Suportes Médios"}
+                {generating
+                  ? "Calculando geometria e suportes..."
+                  : `Gerar Suportes ${DENTAL_SUPPORT_PROFILES[activeProfile].name}s`}
               </Button>
             </div>
 

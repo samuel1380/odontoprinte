@@ -22,7 +22,7 @@ function createSampleModelPositions(): Float32Array {
   return new Float32Array(tris);
 }
 
-describe("SupportGenerator (Motor de Suportes Médios Odontológicos de Alta Precisão)", () => {
+describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)", () => {
   it("tem as medidas padrão corretas de suporte médio anti-falhas e anti-fusão", () => {
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.elevationZ).toBe(5.0);
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.pillarDiameter).toBe(1.3);
@@ -32,13 +32,19 @@ describe("SupportGenerator (Motor de Suportes Médios Odontológicos de Alta Pre
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.modelClearance).toBeGreaterThanOrEqual(0.7);
   });
 
-  it("disponibiliza perfis predefinidos calibrados (Padrão Ouro, Fino e Reforçado)", () => {
+  it("disponibiliza perfis predefinidos calibrados (Fino, Médio e Grosso)", () => {
+    expect(DENTAL_SUPPORT_PROFILES.FINE).toBeDefined();
+    expect(DENTAL_SUPPORT_PROFILES.MEDIUM).toBeDefined();
+    expect(DENTAL_SUPPORT_PROFILES.HEAVY).toBeDefined();
+
+    expect(DENTAL_SUPPORT_PROFILES.FINE.config.pillarDiameter).toBe(1.0);
+    expect(DENTAL_SUPPORT_PROFILES.MEDIUM.config.pillarDiameter).toBe(1.3);
+    expect(DENTAL_SUPPORT_PROFILES.HEAVY.config.pillarDiameter).toBe(1.5);
+
+    // Retrocompatibilidade
     expect(DENTAL_SUPPORT_PROFILES.GOLD_MEDIUM).toBeDefined();
     expect(DENTAL_SUPPORT_PROFILES.FINE_PRECISION).toBeDefined();
     expect(DENTAL_SUPPORT_PROFILES.HEAVY_STRUCTURAL).toBeDefined();
-    expect(DENTAL_SUPPORT_PROFILES.GOLD_MEDIUM.config.pillarDiameter).toBe(1.3);
-    expect(DENTAL_SUPPORT_PROFILES.FINE_PRECISION.config.pillarDiameter).toBe(1.0);
-    expect(DENTAL_SUPPORT_PROFILES.HEAVY_STRUCTURAL.config.pillarDiameter).toBe(1.5);
   });
 
   it("gera suportes, balsa e buffer STL binário válido", async () => {
@@ -73,6 +79,22 @@ describe("SupportGenerator (Motor de Suportes Médios Odontológicos de Alta Pre
         expect(dist).toBeGreaterThanOrEqual(minDistance - 0.05);
       }
     }
+  });
+
+  it("gera suportes laterais e NUNCA coloca suportes no topo (dentes e gengiva protegidos)", async () => {
+    const positions = createSampleModelPositions();
+    // Modelo com altura Z de 0 a 12mm. Elevado em 5mm, topo fica em 17mm.
+    const result = await generateDentalSupports(positions, { elevationZ: 5.0 });
+
+    const maxAllowedZ = 5.0 + 12.0 * 0.40 + 0.1; // limite de 40% da altura do modelo
+
+    for (const p of result.pillars) {
+      // Nenhum suporte pode atingir a região dos dentes/topo
+      expect(p.zContact).toBeLessThanOrEqual(maxAllowedZ);
+    }
+
+    // Valida que existem suportes com target lateral ou na base inferior
+    expect(result.pillars.some((p) => p.isLateral || p.targetX !== undefined || p.zContact <= 5.0 + 3.0)).toBe(true);
   });
 
   it("eleva o modelo em Z conforme a elevação configurada", async () => {
