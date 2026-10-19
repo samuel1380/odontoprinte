@@ -318,112 +318,113 @@ export function levelAndOrientDentalModel(inputPositions: Float32Array): OrientR
       bottomFlatArea += area;
     }
 
-    const key = `${Math.round(nx * 15)},${Math.round(ny * 15)},${Math.round(nz * 15)}`;
-    const curr = planeMap.get(key);
-    if (curr) {
-      curr.nx += nx * area;
-      curr.ny += ny * area;
-      curr.nz += nz * area;
-      curr.area += area;
-      curr.avgZ = (curr.avgZ * (curr.area - area) + avgTriZ * area) / curr.area;
-    } else {
-      planeMap.set(key, { nx: nx * area, ny: ny * area, nz: nz * area, area, avgZ: avgTriZ });
+    // Apenas planos substancialmente horizontais (|nz| > 0.70) podem ser bases de assentamento.
+    // Faces laterais, linguais e cortes verticais (|nz| <= 0.70) NUNCA devem ser colocados na chapa.
+    if (Math.abs(nz) > 0.70) {
+      const key = `${Math.round(nx * 15)},${Math.round(ny * 15)},${Math.round(nz * 15)}`;
+      const curr = planeMap.get(key);
+      if (curr) {
+        curr.nx += nx * area;
+        curr.ny += ny * area;
+        curr.nz += nz * area;
+        curr.area += area;
+        curr.avgZ = (curr.avgZ * (curr.area - area) + avgTriZ * area) / curr.area;
+      } else {
+        planeMap.set(key, { nx: nx * area, ny: ny * area, nz: nz * area, area, avgZ: avgTriZ });
+      }
     }
   }
 
-  let bestPlane: { nx: number; ny: number; nz: number; area: number; avgZ: number } | null = null;
+  // 1. Detecta modelos de cabeça para baixo (base plana de corte no topo)
+  let needsFlip = false;
+  if (topFlatArea > 30 && (topFlatArea > bottomFlatArea * 1.3 || bottomFlatArea < 15)) {
+    needsFlip = true;
+  }
+
+  // Inverte 180° com precisão isométrica exata (preserva 100% das medidas mm em X, Y, Z)
+  if (needsFlip) {
+    const flipped = flipModel180(inputPositions);
+    return {
+      positions: flipped,
+      changed: true,
+      wasFlipped: true,
+      wasLeveled: true,
+      angleDeg: 180,
+    };
+  }
+
+  // 2. Se a base já está virada para baixo, verifica se precisa de leve assentamento plano (desvio < 25°)
+  let bestBottomPlane: { nx: number; ny: number; nz: number; area: number; avgZ: number } | null = null;
   const planes = Array.from(planeMap.values());
   for (let i = 0; i < planes.length; i++) {
     const p = planes[i];
-    if (!bestPlane || p.area > bestPlane.area) {
-      bestPlane = p;
-    }
-  }
-
-  let needsFlip = false;
-  let alignVector: { x: number; y: number; z: number } | null = null;
-
-  if (bestPlane && bestPlane.area > Math.max(30, totalArea * 0.04)) {
-    const len = Math.hypot(bestPlane.nx, bestPlane.ny, bestPlane.nz) || 1;
-    const pNx = bestPlane.nx / len;
-    const pNy = bestPlane.ny / len;
-    const pNz = bestPlane.nz / len;
-
-    if (pNz > 0.55) {
-      needsFlip = true;
-      alignVector = { x: pNx, y: pNy, z: pNz };
-    } else if (pNz < -0.55) {
-      if (Math.abs(pNz) < 0.99) {
-        alignVector = { x: pNx, y: pNy, z: pNz };
+    const pLen = Math.hypot(p.nx, p.ny, p.nz) || 1;
+    const pNz = p.nz / pLen;
+    if (pNz < -0.85 && p.avgZ <= bottomThresholdZ) {
+      if (!bestBottomPlane || p.area > bestBottomPlane.area) {
+        bestBottomPlane = p;
       }
-    } else {
-      alignVector = { x: pNx, y: pNy, z: pNz };
-    }
-  } else {
-    if (topFlatArea > 80 && topFlatArea > bottomFlatArea * 1.4) {
-      needsFlip = true;
     }
   }
 
-  if (!needsFlip && !alignVector) {
+  if (!bestBottomPlane || bestBottomPlane.area < Math.max(30, totalArea * 0.03)) {
     return { positions: inputPositions, changed: false, wasFlipped: false, wasLeveled: false, angleDeg: 0 };
   }
 
+  const len = Math.hypot(bestBottomPlane.nx, bestBottomPlane.ny, bestBottomPlane.nz) || 1;
+  const pNz = bestBottomPlane.nz / len;
+
+  if (pNz <= -0.995) {
+    // Já está perfeitamente nivelado no Z=0
+    return { positions: inputPositions, changed: false, wasFlipped: false, wasLeveled: false, angleDeg: 0 };
+  }
+
+  const alignVector = {
+    x: bestBottomPlane.nx / len,
+    y: bestBottomPlane.ny / len,
+    z: bestBottomPlane.nz / len,
+  };
+
+  const target = { x: 0, y: 0, z: -1 };
+  const vFrom = alignVector;
+
+  let axisX = vFrom.y * target.z - vFrom.z * target.y;
+  let axisY = vFrom.z * target.x - vFrom.x * target.z;
+  let axisZ = vFrom.x * target.y - vFrom.y * target.x;
+  let axisLen = Math.hypot(axisX, axisY, axisZ);
+  let cosTheta = vFrom.x * target.x + vFrom.y * target.y + vFrom.z * target.z;
+
+  // Se o desvio for superior a 25° (cosTheta < 0.90), preserva a orientação original para evitar distorções
+  if (cosTheta < 0.90 || axisLen < 1e-6) {
+    return { positions: inputPositions, changed: false, wasFlipped: false, wasLeveled: false, angleDeg: 0 };
+  }
+
+  axisX /= axisLen;
+  axisY /= axisLen;
+  axisZ /= axisLen;
+  const sinTheta = axisLen;
+  const oneMinusCos = 1 - cosTheta;
+
+  const r00 = cosTheta + axisX * axisX * oneMinusCos;
+  const r01 = axisX * axisY * oneMinusCos - axisZ * sinTheta;
+  const r02 = axisX * axisZ * oneMinusCos + axisY * sinTheta;
+
+  const r10 = axisY * axisX * oneMinusCos + axisZ * sinTheta;
+  const r11 = cosTheta + axisY * axisY * oneMinusCos;
+  const r12 = axisY * axisZ * oneMinusCos - axisX * sinTheta;
+
+  const r20 = axisZ * axisX * oneMinusCos - axisY * sinTheta;
+  const r21 = axisZ * axisY * oneMinusCos + axisX * sinTheta;
+  const r22 = cosTheta + axisZ * axisZ * oneMinusCos;
+
   const out = new Float32Array(inputPositions.length);
-
-  if (needsFlip && (!alignVector || Math.abs(alignVector.z) > 0.92)) {
-    for (let i = 0; i < inputPositions.length; i += 3) {
-      out[i] = inputPositions[i];
-      out[i + 1] = -inputPositions[i + 1];
-      out[i + 2] = -inputPositions[i + 2];
-    }
-  } else if (alignVector) {
-    const target = { x: 0, y: 0, z: -1 };
-    const srcLen = Math.hypot(alignVector.x, alignVector.y, alignVector.z) || 1;
-    const vFrom = { x: alignVector.x / srcLen, y: alignVector.y / srcLen, z: alignVector.z / srcLen };
-
-    let axisX = vFrom.y * target.z - vFrom.z * target.y;
-    let axisY = vFrom.z * target.x - vFrom.x * target.z;
-    let axisZ = vFrom.x * target.y - vFrom.y * target.x;
-    let axisLen = Math.hypot(axisX, axisY, axisZ);
-    let cosTheta = vFrom.x * target.x + vFrom.y * target.y + vFrom.z * target.z;
-
-    let r00 = 1, r01 = 0, r02 = 0;
-    let r10 = 0, r11 = 1, r12 = 0;
-    let r20 = 0, r21 = 0, r22 = 1;
-
-    if (axisLen < 1e-6) {
-      if (cosTheta < 0) {
-        r00 = 1; r11 = -1; r22 = -1;
-      }
-    } else {
-      axisX /= axisLen;
-      axisY /= axisLen;
-      axisZ /= axisLen;
-      const sinTheta = axisLen;
-      const oneMinusCos = 1 - cosTheta;
-
-      r00 = cosTheta + axisX * axisX * oneMinusCos;
-      r01 = axisX * axisY * oneMinusCos - axisZ * sinTheta;
-      r02 = axisX * axisZ * oneMinusCos + axisY * sinTheta;
-
-      r10 = axisY * axisX * oneMinusCos + axisZ * sinTheta;
-      r11 = cosTheta + axisY * axisY * oneMinusCos;
-      r12 = axisY * axisZ * oneMinusCos - axisX * sinTheta;
-
-      r20 = axisZ * axisX * oneMinusCos - axisY * sinTheta;
-      r21 = axisZ * axisY * oneMinusCos + axisX * sinTheta;
-      r22 = cosTheta + axisZ * axisZ * oneMinusCos;
-    }
-
-    for (let i = 0; i < inputPositions.length; i += 3) {
-      const px = inputPositions[i];
-      const py = inputPositions[i + 1];
-      const pz = inputPositions[i + 2];
-      out[i] = r00 * px + r01 * py + r02 * pz;
-      out[i + 1] = r10 * px + r11 * py + r12 * pz;
-      out[i + 2] = r20 * px + r21 * py + r22 * pz;
-    }
+  for (let i = 0; i < inputPositions.length; i += 3) {
+    const px = inputPositions[i];
+    const py = inputPositions[i + 1];
+    const pz = inputPositions[i + 2];
+    out[i] = r00 * px + r01 * py + r02 * pz;
+    out[i + 1] = r10 * px + r11 * py + r12 * pz;
+    out[i + 2] = r20 * px + r21 * py + r22 * pz;
   }
 
   let newMinX = Infinity, newMinY = Infinity, newMinZ = Infinity;
@@ -444,9 +445,9 @@ export function levelAndOrientDentalModel(inputPositions: Float32Array): OrientR
   return {
     positions: out,
     changed: true,
-    wasFlipped: needsFlip,
+    wasFlipped: false,
     wasLeveled: true,
-    angleDeg: needsFlip ? 180 : 0,
+    angleDeg: 0,
   };
 }
 

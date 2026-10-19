@@ -682,5 +682,99 @@ describe("raster", () => {
       }
       expect(minZ).toBe(0);
     });
+
+    it("PRESERVAÇÃO 1:1 DE TAMANHO: não tomba modelo que possui corte posterior vertical largo", () => {
+      // Simula uma arcada odontológica de 60mm de largura, 50mm de profundidade e 20mm de altura.
+      // Base inferior é vazada (ferradura) e tem corte posterior reto vertical em Y=50 (60x20mm).
+      // Antes do fix, o corte posterior era detectado como bestPlane e tombava o modelo 90°,
+      // reduzindo a profundidade Y de 50mm para 20mm (60% de encolhimento).
+      const tris: number[] = [];
+
+      // Pequenas áreas da base inferior (Z=0, nz=-1)
+      tris.push(0, 0, 0, 10, 0, 0, 10, 10, 0);
+      tris.push(50, 0, 0, 60, 0, 0, 60, 10, 0);
+
+      // Corte posterior plano grande (Y=50, nz=0, ny=1)
+      for (let x = 0; x < 60; x += 10) {
+        for (let z = 0; z < 20; z += 10) {
+          tris.push(x, 50, z, x + 10, 50, z, x + 10, 50, z + 10);
+          tris.push(x, 50, z, x + 10, 50, z + 10, x, 50, z + 10);
+        }
+      }
+
+      // Dentes e cúspides na frente e laterais
+      for (let i = 0; i < 40; i++) {
+        tris.push(i, i * 0.8, 15, i + 1, i * 0.8, 15, i, i * 0.8 + 1, 18);
+      }
+
+      const model = new Float32Array(tris);
+
+      // Medição prévia
+      let origMinX = Infinity, origMaxX = -Infinity;
+      let origMinY = Infinity, origMaxY = -Infinity;
+      let origMinZ = Infinity, origMaxZ = -Infinity;
+      for (let i = 0; i < model.length; i += 3) {
+        if (model[i] < origMinX) origMinX = model[i];
+        if (model[i] > origMaxX) origMaxX = model[i];
+        if (model[i + 1] < origMinY) origMinY = model[i + 1];
+        if (model[i + 1] > origMaxY) origMaxY = model[i + 1];
+        if (model[i + 2] < origMinZ) origMinZ = model[i + 2];
+        if (model[i + 2] > origMaxZ) origMaxZ = model[i + 2];
+      }
+
+      const origW = origMaxX - origMinX;
+      const origD = origMaxY - origMinY;
+      const origH = origMaxZ - origMinZ;
+
+      const res = levelAndOrientDentalModel(model);
+
+      // Modelo NÃO deve ser tombado nem modificado
+      expect(res.wasFlipped).toBe(false);
+      expect(res.changed).toBe(false);
+
+      // Medição posterior: 100% idêntica, sem encolhimento
+      let postMinX = Infinity, postMaxX = -Infinity;
+      let postMinY = Infinity, postMaxY = -Infinity;
+      let postMinZ = Infinity, postMaxZ = -Infinity;
+      for (let i = 0; i < res.positions.length; i += 3) {
+        if (res.positions[i] < postMinX) postMinX = res.positions[i];
+        if (res.positions[i] > postMaxX) postMaxX = res.positions[i];
+        if (res.positions[i + 1] < postMinY) postMinY = res.positions[i + 1];
+        if (res.positions[i + 1] > postMaxY) postMaxY = res.positions[i + 1];
+        if (res.positions[i + 2] < postMinZ) postMinZ = res.positions[i + 2];
+        if (res.positions[i + 2] > postMaxZ) postMaxZ = res.positions[i + 2];
+      }
+
+      expect(postMaxX - postMinX).toBeCloseTo(origW, 4);
+      expect(postMaxY - postMinY).toBeCloseTo(origD, 4);
+      expect(postMaxZ - postMinZ).toBeCloseTo(origH, 4);
+    });
+
+    it("CONSERVAÇÃO ISOMÉTRICA: flipModel180 preserva exatamente a largura X, profundidade Y e altura Z em mm", () => {
+      // Cria malha com medidas exatas 55.4 x 42.8 x 18.2 mm
+      const tri = [
+        0, 0, 0,
+        55.4, 0, 0,
+        0, 42.8, 18.2,
+      ];
+      const model = new Float32Array(tri);
+      const flipped = flipModel180(model);
+
+      let fMinX = Infinity, fMaxX = -Infinity;
+      let fMinY = Infinity, fMaxY = -Infinity;
+      let fMinZ = Infinity, fMaxZ = -Infinity;
+      for (let i = 0; i < flipped.length; i += 3) {
+        if (flipped[i] < fMinX) fMinX = flipped[i];
+        if (flipped[i] > fMaxX) fMaxX = flipped[i];
+        if (flipped[i + 1] < fMinY) fMinY = flipped[i + 1];
+        if (flipped[i + 1] > fMaxY) fMaxY = flipped[i + 1];
+        if (flipped[i + 2] < fMinZ) fMinZ = flipped[i + 2];
+        if (flipped[i + 2] > fMaxZ) fMaxZ = flipped[i + 2];
+      }
+
+      expect(fMaxX - fMinX).toBeCloseTo(55.4, 4);
+      expect(fMaxY - fMinY).toBeCloseTo(42.8, 4);
+      expect(fMaxZ - fMinZ).toBeCloseTo(18.2, 4);
+    });
   });
 });
