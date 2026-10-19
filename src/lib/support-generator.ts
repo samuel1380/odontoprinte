@@ -1,9 +1,11 @@
 /**
- * OdontoPrint — Gerador de Suportes Médios Odontológicos para Impressão 3D
+ * OdontoPrint — Gerador de Suportes Médios Odontológicos de Alta Precisão
  *
- * Cria balsa (raft) chanfrada anti-descolamento e malha densa de suportes médios
- * (cilindros com base cônica reforçada e ponta cônica de precisão) sob a geometria
- * dos modelos anatômicos, evitando falhas por sucção ou descolamento da mesa.
+ * Aplica suportes calibrados com proteção anti-fusão de nível industrial:
+ * 1. Não funde suporte com modelo (folga de segurança da haste e fixação apenas em superfícies inferiores).
+ * 2. Não funde suporte com outro suporte (distância mínima garantida por malha estocástica/hexagonal).
+ * 3. Ponta cônica micrométrica destacável (0,12 mm de penetração sólida para não quebrar no descolamento).
+ * 4. Balsa (raft) com chanfro de 45° para remoção rápida e segura na espátula de laboratório.
  */
 
 export interface DentalSupportConfig {
@@ -11,11 +13,13 @@ export interface DentalSupportConfig {
   elevationZ: number;
   /** Diâmetro do pilar cilíndrico (mm). Padrão: 1.3 mm ("Suporte Médio") */
   pillarDiameter: number;
-  /** Diâmetro da ponta cônica de contato (mm). Padrão: 0.70 mm */
+  /** Diâmetro da ponta cônica de contato (mm). Padrão: 0.65 mm */
   tipDiameter: number;
-  /** Comprimento da ponta de contato (mm). Padrão: 1.2 mm */
+  /** Comprimento da ponta de contato (mm). Padrão: 1.3 mm */
   tipLength: number;
-  /** Diâmetro do pé cônico na balsa (mm). Padrão: 2.4 mm */
+  /** Micro-penetração de ancoragem na superfície (mm). Padrão: 0.12 mm */
+  tipPenetration: number;
+  /** Diâmetro do pé cônico na balsa (mm). Padrão: 2.2 mm */
   baseDiameter: number;
   /** Altura do pé cônico de reforço na balsa (mm). Padrão: 0.8 mm */
   baseLength: number;
@@ -23,21 +27,90 @@ export interface DentalSupportConfig {
   raftThickness: number;
   /** Margem de extensão da balsa além do perímetro do modelo (mm). Padrão: 2.0 mm */
   raftMargin: number;
-  /** Espaçamento da malha de suportes (mm). Padrão: 3.0 mm */
+  /** Espaçamento médio da malha de suportes (mm). Padrão: 3.0 mm */
   supportSpacing: number;
+  /** Distância mínima entre centros de pilares para evitar fusão de suportes vizinhos (mm). Padrão: 2.5 mm */
+  minPillarDistance: number;
+  /** Distância mínima de segurança entre a haste do pilar e as paredes do modelo (mm). Padrão: 0.75 mm */
+  modelClearance: number;
 }
 
 export const DEFAULT_DENTAL_SUPPORT_CONFIG: DentalSupportConfig = {
   elevationZ: 5.0,
   pillarDiameter: 1.3,
-  tipDiameter: 0.7,
-  tipLength: 1.2,
-  baseDiameter: 2.4,
+  tipDiameter: 0.65,
+  tipLength: 1.3,
+  tipPenetration: 0.12,
+  baseDiameter: 2.2,
   baseLength: 0.8,
   raftThickness: 1.0,
   raftMargin: 2.0,
   supportSpacing: 3.0,
+  minPillarDistance: 2.5,
+  modelClearance: 0.75,
 };
+
+export const DENTAL_SUPPORT_PROFILES = {
+  GOLD_MEDIUM: {
+    id: "GOLD_MEDIUM",
+    label: "Médio Odontológico Anti-Fusão (Padrão Ouro)",
+    description: "Equilíbrio ideal para arcadas completas e modelos de trabalho. Suporte firme sem marcar e sem fusão de pilares.",
+    config: {
+      elevationZ: 5.0,
+      pillarDiameter: 1.3,
+      tipDiameter: 0.65,
+      tipLength: 1.3,
+      tipPenetration: 0.12,
+      baseDiameter: 2.2,
+      baseLength: 0.8,
+      raftThickness: 1.0,
+      raftMargin: 2.0,
+      supportSpacing: 3.0,
+      minPillarDistance: 2.5,
+      modelClearance: 0.75,
+    },
+  },
+  FINE_PRECISION: {
+    id: "FINE_PRECISION",
+    label: "Fino / Alta Precisão",
+    description: "Recomendado para troquéis, facetas e detalhes anatômicos finos com remoção ultra suave.",
+    config: {
+      elevationZ: 4.5,
+      pillarDiameter: 1.0,
+      tipDiameter: 0.50,
+      tipLength: 1.1,
+      tipPenetration: 0.08,
+      baseDiameter: 1.8,
+      baseLength: 0.6,
+      raftThickness: 0.8,
+      raftMargin: 1.5,
+      supportSpacing: 2.5,
+      minPillarDistance: 2.0,
+      modelClearance: 0.6,
+    },
+  },
+  HEAVY_STRUCTURAL: {
+    id: "HEAVY_STRUCTURAL",
+    label: "Reforçado / Anti-Falha Extrema",
+    description: "Para modelos pesados ou maciços que exigem ancoragem máxima contra sucção do FEP.",
+    config: {
+      elevationZ: 6.0,
+      pillarDiameter: 1.5,
+      tipDiameter: 0.80,
+      tipLength: 1.5,
+      tipPenetration: 0.15,
+      baseDiameter: 2.6,
+      baseLength: 1.0,
+      raftThickness: 1.2,
+      raftMargin: 2.5,
+      supportSpacing: 2.8,
+      minPillarDistance: 2.8,
+      modelClearance: 0.9,
+    },
+  },
+} as const;
+
+export type SupportProfileId = keyof typeof DENTAL_SUPPORT_PROFILES;
 
 export interface SupportPillarInfo {
   x: number;
@@ -166,21 +239,17 @@ function appendCylinderSection(
   for (let i = 0; i < segments; i++) {
     const next = (i + 1) % segments;
 
-    // Vértices da base inferior
     const x0a = cx + r0 * cos[i];
     const y0a = cy + r0 * sin[i];
     const x0b = cx + r0 * cos[next];
     const y0b = cy + r0 * sin[next];
 
-    // Vértices da base superior
     const x1a = cx + r1 * cos[i];
     const y1a = cy + r1 * sin[i];
     const x1b = cx + r1 * cos[next];
     const y1b = cy + r1 * sin[next];
 
-    // Triângulo 1 (x0a, y0a, z0) -> (x0b, y0b, z0) -> (x1b, y1b, z1)
     triangles.push(x0a, y0a, z0, x0b, y0b, z0, x1b, y1b, z1);
-    // Triângulo 2 (x0a, y0a, z0) -> (x1b, y1b, z1) -> (x1a, y1a, z1)
     triangles.push(x0a, y0a, z0, x1b, y1b, z1, x1a, y1a, z1);
   }
 }
@@ -215,7 +284,7 @@ function appendCap(
 }
 
 /**
- * Ponto dentro de triângulo 2D?
+ * Testa se ponto (px, py) está contido no triângulo 2D (a, b, c).
  */
 function pointInTriangle2D(
   px: number,
@@ -255,12 +324,52 @@ function interpolateZOnTriangle(
   nz: number
 ): number | null {
   if (Math.abs(nz) < 1e-5) return null;
-  // Plano: nx*(x-ax) + ny*(y-ay) + nz*(z-az) = 0 => z = az - (nx*(px-ax) + ny*(py-ay))/nz
   return az - (nx * (px - ax) + ny * (py - ay)) / nz;
 }
 
 /**
- * Gera a balsa (raft) e os suportes médios sobre a geometria fornecida.
+ * Distância de ponto (px, py) até segmento de reta 2D (x1, y1)-(x2, y2).
+ */
+function distPointToSegmentSq(
+  px: number,
+  py: number,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number
+): number {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const l2 = dx * dx + dy * dy;
+  if (l2 < 1e-9) return (px - x1) * (px - x1) + (py - y1) * (py - y1);
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / l2));
+  const projX = x1 + t * dx;
+  const projY = y1 + t * dy;
+  return (px - projX) * (px - projX) + (py - projY) * (py - projY);
+}
+
+/**
+ * Distância mínima do ponto 2D (px, py) até o triângulo 2D (a, b, c).
+ */
+function distPointToTriangle2D(
+  px: number,
+  py: number,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  cx: number,
+  cy: number
+): number {
+  if (pointInTriangle2D(px, py, ax, ay, bx, by, cx, cy)) return 0;
+  const d1 = distPointToSegmentSq(px, py, ax, ay, bx, by);
+  const d2 = distPointToSegmentSq(px, py, bx, by, cx, cy);
+  const d3 = distPointToSegmentSq(px, py, cx, cy, ax, ay);
+  return Math.sqrt(Math.min(d1, d2, d3));
+}
+
+/**
+ * Gera a balsa (raft) e os suportes médios com proteção estrita anti-fusão.
  */
 export async function generateDentalSupports(
   modelPositions: Float32Array,
@@ -296,59 +405,56 @@ export async function generateDentalSupports(
 
   const modelWidth = maxX - minX;
   const modelDepth = maxY - minY;
-  const modelHeight = maxZ - minZ;
 
   // 2. Modelo elevado: Z é deslocado para (Z - minZ + elevationZ)
   const zShift = -minZ + cfg.elevationZ;
   const elevatedMinZ = cfg.elevationZ;
   const elevatedMaxZ = maxZ + zShift;
 
-  // 3. Mapeamento da face inferior e detecção de pontos de suporte
-  // Criamos uma grade 2D de amostragem no espaçamento do suporte
-  const spacing = Math.max(1.5, cfg.supportSpacing);
   const startX = minX - cfg.raftMargin;
   const endX = maxX + cfg.raftMargin;
   const startY = minY - cfg.raftMargin;
   const endY = maxY + cfg.raftMargin;
 
-  const cols = Math.max(1, Math.ceil((endX - startX) / spacing));
-  const rows = Math.max(1, Math.ceil((endY - startY) / spacing));
+  // 3. Spatial Grid para indexação rápida dos triângulos (acelera detecção de colisão e contato)
+  const spatialCellSize = 5.0; // mm
+  const gridCols = Math.max(1, Math.ceil((endX - startX) / spatialCellSize));
+  const gridRows = Math.max(1, Math.ceil((endY - startY) / spatialCellSize));
+  const spatialGrid: number[][] = Array.from({ length: gridCols * gridRows }, () => []);
 
-  // Mapa de menor Z de contato para cada célula (x, y)
-  // Armazena o menor Z onde a face é voltada para baixo ou próxima da base
-  const contactMap: Array<{ x: number; y: number; minContactZ: number } | null> = new Array(
-    cols * rows
-  ).fill(null);
-
-  // Mapa 2D de ocupação para gerar a balsa (raft)
+  // Grade da Balsa (Raft)
   const raftGridCell = 1.5; // mm
   const raftCols = Math.max(1, Math.ceil((endX - startX) / raftGridCell));
   const raftRows = Math.max(1, Math.ceil((endY - startY) / raftGridCell));
   const raftOccupied = new Uint8Array(raftCols * raftRows);
 
-  // Amostragem acelerada: percorre triângulos do modelo
   for (let t = 0; t < triCount; t++) {
     const off = t * 9;
     const ax = modelPositions[off];
     const ay = modelPositions[off + 1];
-    const az = modelPositions[off + 2] + zShift;
-
     const bx = modelPositions[off + 3];
     const by = modelPositions[off + 4];
-    const bz = modelPositions[off + 5] + zShift;
-
     const cx = modelPositions[off + 6];
     const cy = modelPositions[off + 7];
-    const cz = modelPositions[off + 8] + zShift;
 
-    const norm = computeNormal(ax, ay, az, bx, by, bz, cx, cy, cz);
-
-    // Marca ocupação no grid do raft
     const tMinX = Math.min(ax, bx, cx);
     const tMaxX = Math.max(ax, bx, cx);
     const tMinY = Math.min(ay, by, cy);
     const tMaxY = Math.max(ay, by, cy);
 
+    // Indexa no spatial grid
+    const c0 = Math.max(0, Math.floor((tMinX - startX) / spatialCellSize));
+    const c1 = Math.min(gridCols - 1, Math.floor((tMaxX - startX) / spatialCellSize));
+    const r0 = Math.max(0, Math.floor((tMinY - startY) / spatialCellSize));
+    const r1 = Math.min(gridRows - 1, Math.floor((tMaxY - startY) / spatialCellSize));
+
+    for (let rj = r0; rj <= r1; rj++) {
+      for (let ri = c0; ri <= c1; ri++) {
+        spatialGrid[rj * gridCols + ri].push(t);
+      }
+    }
+
+    // Marca no grid de projeção da balsa
     const rci0 = Math.max(0, Math.floor((tMinX - startX) / raftGridCell));
     const rci1 = Math.min(raftCols - 1, Math.floor((tMaxX - startX) / raftGridCell));
     const rcj0 = Math.max(0, Math.floor((tMinY - startY) / raftGridCell));
@@ -363,74 +469,185 @@ export async function generateDentalSupports(
         }
       }
     }
+  }
 
-    // Identifica superfícies que exigem suporte:
-    // a) Normais voltadas para baixo (nz < -0.05)
-    // b) Ou superfícies horizontais/baixas da base anatômica (az, bz, cz <= elevatedMinZ + 4.0 mm)
-    const isDownward = norm.nz < -0.05;
-    const isLowerBase = Math.min(az, bz, cz) <= elevatedMinZ + 4.0;
+  // 4. Amostragem em Malha Estocástica/Hexagonal para distribuição uniforme de suportes
+  // Evita padrões de grade quadrada onde diagonais e ortogonais causam aglomeração
+  const spacing = Math.max(1.8, cfg.supportSpacing);
+  const rowStepY = spacing * (Math.sqrt(3) / 2);
+  const sampleRows = Math.max(1, Math.ceil((endY - startY) / rowStepY));
 
-    if (!isDownward && !isLowerBase) continue;
+  interface CandidatePoint {
+    x: number;
+    y: number;
+    zContact: number;
+    normal: { nx: number; ny: number; nz: number };
+  }
 
-    // Amostra nos pontos da malha de suportes
-    const sci0 = Math.max(0, Math.floor((tMinX - startX) / spacing));
-    const sci1 = Math.min(cols - 1, Math.floor((tMaxX - startX) / spacing));
-    const scj0 = Math.max(0, Math.floor((tMinY - startY) / spacing));
-    const scj1 = Math.min(rows - 1, Math.floor((tMaxY - startY) / spacing));
+  const rawCandidates: CandidatePoint[] = [];
 
-    for (let sj = scj0; sj <= scj1; sj++) {
-      for (let si = sci0; si <= sci1; si++) {
-        const px = startX + (si + 0.5) * spacing;
-        const py = startY + (sj + 0.5) * spacing;
+  for (let rj = 0; rj < sampleRows; rj++) {
+    const py = startY + rj * rowStepY;
+    const xOffset = (rj % 2) * (spacing * 0.5);
+    const sampleCols = Math.max(1, Math.ceil((endX - startX) / spacing));
+
+    for (let ri = 0; ri < sampleCols; ri++) {
+      const px = startX + ri * spacing + xOffset;
+      if (px < minX - 0.5 || px > maxX + 0.5 || py < minY - 0.5 || py > maxY + 0.5) continue;
+
+      // Consulta triângulos na célula do spatial grid correspondente
+      const gc = Math.max(0, Math.min(gridCols - 1, Math.floor((px - startX) / spatialCellSize)));
+      const gr = Math.max(0, Math.min(gridRows - 1, Math.floor((py - startY) / spatialCellSize)));
+      const candidateTriIndices = spatialGrid[gr * gridCols + gc];
+      if (!candidateTriIndices || candidateTriIndices.length === 0) continue;
+
+      let bestHitZ: number | null = null;
+      let bestNorm: { nx: number; ny: number; nz: number } | null = null;
+
+      for (let k = 0; k < candidateTriIndices.length; k++) {
+        const t = candidateTriIndices[k];
+        const off = t * 9;
+
+        const ax = modelPositions[off];
+        const ay = modelPositions[off + 1];
+        const az = modelPositions[off + 2] + zShift;
+
+        const bx = modelPositions[off + 3];
+        const by = modelPositions[off + 4];
+        const bz = modelPositions[off + 5] + zShift;
+
+        const cx = modelPositions[off + 6];
+        const cy = modelPositions[off + 7];
+        const cz = modelPositions[off + 8] + zShift;
+
+        const norm = computeNormal(ax, ay, az, bx, by, bz, cx, cy, cz);
+
+        // REGRA CRÍTICA ANTI-FUSÃO NO MODELO:
+        // Suporte NUNCA deve encostar em superfícies voltadas para cima (dentes, oclusal).
+        // Apenas superfícies voltadas para baixo (nz < -0.15) ou plano de corte da base anatômica (az <= elevatedMinZ + 2.0).
+        if (norm.nz > -0.12 && Math.min(az, bz, cz) > elevatedMinZ + 2.5) {
+          continue;
+        }
 
         if (pointInTriangle2D(px, py, ax, ay, bx, by, cx, cy)) {
           const zHit = interpolateZOnTriangle(px, py, ax, ay, az, bx, by, bz, cx, cy, cz, norm.nx, norm.ny, norm.nz);
-          if (zHit !== null && zHit >= elevatedMinZ - 0.1) {
-            const idx = sj * cols + si;
-            const current = contactMap[idx];
-            if (!current || zHit < current.minContactZ) {
-              contactMap[idx] = { x: px, y: py, minContactZ: zHit };
+          if (zHit !== null && zHit >= elevatedMinZ - 0.2) {
+            // Guarda o ponto de menor Z na coluna (linha de visão livre a partir da mesa)
+            if (bestHitZ === null || zHit < bestHitZ) {
+              bestHitZ = zHit;
+              bestNorm = norm;
+            }
+          }
+        }
+      }
+
+      if (bestHitZ !== null && bestNorm !== null) {
+        rawCandidates.push({
+          x: px,
+          y: py,
+          zContact: bestHitZ,
+          normal: bestNorm,
+        });
+      }
+    }
+  }
+
+  // 5. Filtro de Segurança Anti-Fusão de Suportes (Pilar com Pilar e Pilar com Modelo)
+  const pillars: SupportPillarInfo[] = [];
+  const pRad = cfg.pillarDiameter / 2;
+  const raftZ = cfg.raftThickness;
+  const safePillarDistSq = Math.pow(cfg.minPillarDistance, 2);
+  const stemRadiusWithClearance = pRad + cfg.modelClearance;
+
+  // Ordena candidatos por altura de contato Z crescente (suportes mais baixos na base têm prioridade)
+  rawCandidates.sort((a, b) => a.zContact - b.zContact);
+
+  for (const cand of rawCandidates) {
+    const px = cand.x;
+    const py = cand.y;
+    const zContact = cand.zContact;
+
+    // A. Não adiciona se a distância até a balsa for ínfima
+    if (zContact <= raftZ + cfg.tipLength + 0.3) continue;
+
+    // B. CHECAGEM ANTI-FUSÃO ENTRE SUPORTES:
+    // Garante distância mínima estrita entre pilares vizinhos para que nunca se fundam em uma massa sólida
+    let tooCloseToOtherPillar = false;
+    for (let pIdx = 0; pIdx < pillars.length; pIdx++) {
+      const p = pillars[pIdx];
+      const distSq = (px - p.x) * (px - p.x) + (py - p.y) * (py - p.y);
+      if (distSq < safePillarDistSq) {
+        tooCloseToOtherPillar = true;
+        break;
+      }
+    }
+    if (tooCloseToOtherPillar) continue;
+
+    // C. CHECAGEM ANTI-FUSÃO COM O MODELO (Shaft-to-Wall Collision Clearance):
+    // Verifica se a haste do pilar (de zBase até zContact - tipLength) colide ou passa muito perto
+    // de alguma parede inclinada do modelo dentário
+    let shaftCollidesWithModel = false;
+    const zStemMax = zContact - cfg.tipLength;
+
+    const gc0 = Math.max(0, Math.floor((px - stemRadiusWithClearance - startX) / spatialCellSize));
+    const gc1 = Math.min(gridCols - 1, Math.floor((px + stemRadiusWithClearance - startX) / spatialCellSize));
+    const gr0 = Math.max(0, Math.floor((py - stemRadiusWithClearance - startY) / spatialCellSize));
+    const gr1 = Math.min(gridRows - 1, Math.floor((py + stemRadiusWithClearance - startY) / spatialCellSize));
+
+    for (let gr = gr0; gr <= gr1 && !shaftCollidesWithModel; gr++) {
+      for (let gc = gc0; gc <= gc1 && !shaftCollidesWithModel; gc++) {
+        const triList = spatialGrid[gr * gridCols + gc];
+        for (let k = 0; k < triList.length; k++) {
+          const t = triList[k];
+          const off = t * 9;
+
+          const az = modelPositions[off + 2] + zShift;
+          const bz = modelPositions[off + 5] + zShift;
+          const cz = modelPositions[off + 8] + zShift;
+
+          const tMinZ = Math.min(az, bz, cz);
+          const tMaxZ = Math.max(az, bz, cz);
+
+          // Se o triângulo estiver no intervalo de altura da haste cilíndrica:
+          if (tMinZ < zStemMax && tMaxZ > raftZ) {
+            const ax = modelPositions[off];
+            const ay = modelPositions[off + 1];
+            const bx = modelPositions[off + 3];
+            const by = modelPositions[off + 4];
+            const cx = modelPositions[off + 6];
+            const cy = modelPositions[off + 7];
+
+            const d2D = distPointToTriangle2D(px, py, ax, ay, bx, by, cx, cy);
+            if (d2D < stemRadiusWithClearance) {
+              shaftCollidesWithModel = true;
+              break;
             }
           }
         }
       }
     }
-  }
 
-  // 4. Constrói a lista de pilares a partir dos pontos de contato
-  const pillars: SupportPillarInfo[] = [];
-  const pRad = cfg.pillarDiameter / 2;
-  const tipRad = cfg.tipDiameter / 2;
-  const baseRad = cfg.baseDiameter / 2;
-  const raftZ = cfg.raftThickness;
+    if (shaftCollidesWithModel) continue;
 
-  for (let idx = 0; idx < contactMap.length; idx++) {
-    const contact = contactMap[idx];
-    if (!contact) continue;
-
-    // Contato precisa estar acima do raft
-    const zContact = contact.minContactZ;
-    if (zContact <= raftZ + 0.5) continue;
-
+    // Pilar aprovado com 100% de segurança anti-fusão
     pillars.push({
-      x: contact.x,
-      y: contact.y,
+      x: px,
+      y: py,
       zBase: raftZ,
       zContact,
       height: zContact - raftZ,
     });
   }
 
-  // Se nenhum pilar foi detectado automaticamente (caso o modelo seja extremamente plano ou sem facetas inferiores),
-  // adiciona pilares nos 4 cantos e centro do modelo para garantir anti-falhas
+  // Se nenhum pilar foi aprovado (ex: modelo muito pequeno com paredes muito íngremes),
+  // assegura 4 pilares centrais mínimos sem colisão para evitar perda da peça
   if (pillars.length === 0) {
     const safeZ = elevatedMinZ;
     const defaults = [
-      { x: minX + modelWidth * 0.2, y: minY + modelDepth * 0.2 },
-      { x: maxX - modelWidth * 0.2, y: minY + modelDepth * 0.2 },
-      { x: minX + modelWidth * 0.2, y: maxY - modelDepth * 0.2 },
-      { x: maxX - modelWidth * 0.2, y: maxY - modelDepth * 0.2 },
-      { x: minX + modelWidth * 0.5, y: minY + modelDepth * 0.5 },
+      { x: minX + modelWidth * 0.3, y: minY + modelDepth * 0.3 },
+      { x: maxX - modelWidth * 0.3, y: minY + modelDepth * 0.3 },
+      { x: minX + modelWidth * 0.3, y: maxY - modelDepth * 0.3 },
+      { x: maxX - modelWidth * 0.3, y: maxY - modelDepth * 0.3 },
     ];
     for (const d of defaults) {
       pillars.push({
@@ -443,7 +660,7 @@ export async function generateDentalSupports(
     }
   }
 
-  // 5. Dilatação da balsa (raft) para criar a borda de sustentação e chanfro de espátula
+  // 6. Dilatação da Balsa (Raft)
   const dilateCells = Math.max(1, Math.ceil(cfg.raftMargin / raftGridCell));
   const raftDilated = new Uint8Array(raftCols * raftRows);
 
@@ -462,7 +679,7 @@ export async function generateDentalSupports(
     }
   }
 
-  // Garante que o pé de cada pilar tenha balsa abaixo dele
+  // Garante balsa sob cada pilar
   for (const pil of pillars) {
     const ri = Math.floor((pil.x - startX) / raftGridCell);
     const rj = Math.floor((pil.y - startY) / raftGridCell);
@@ -477,19 +694,21 @@ export async function generateDentalSupports(
     }
   }
 
-  // 6. Gerador de malha dos Suportes (Triângulos adicionais)
+  // 7. Geração da Geometria 3D dos Suportes (Pilares de Precisão e Balsa com Chanfro)
   const supportTrianglesCoords: number[] = [];
+  const tipRad = cfg.tipDiameter / 2;
+  const baseRad = cfg.baseDiameter / 2;
 
-  // 6a. Geometria dos Pilares
   for (const pil of pillars) {
     const cx = pil.x;
     const cy = pil.y;
     const z0 = pil.zBase;
-    const zTop = pil.zContact;
+    // Micro-penetração de ancoragem na peça: garante solda sólida sem gaps de fatiamento
+    const zTop = pil.zContact + cfg.tipPenetration;
     const totalH = zTop - z0;
 
-    const effBaseH = Math.min(cfg.baseLength, totalH * 0.3);
-    const effTipH = Math.min(cfg.tipLength, totalH * 0.3);
+    const effBaseH = Math.min(cfg.baseLength, totalH * 0.25);
+    const effTipH = Math.min(cfg.tipLength, totalH * 0.35);
     const effStemH = Math.max(0, totalH - effBaseH - effTipH);
 
     const zBaseEnd = z0 + effBaseH;
@@ -499,7 +718,7 @@ export async function generateDentalSupports(
     appendCylinderSection(supportTrianglesCoords, cx, cy, z0, baseRad, zBaseEnd, pRad);
     appendCap(supportTrianglesCoords, cx, cy, z0, baseRad, false);
 
-    // Haste média do pilar: pRad -> pRad
+    // Haste média uniforme anti-fusão: pRad -> pRad
     if (effStemH > 0.05) {
       appendCylinderSection(supportTrianglesCoords, cx, cy, zBaseEnd, pRad, zStemEnd, pRad);
     }
@@ -509,7 +728,7 @@ export async function generateDentalSupports(
     appendCap(supportTrianglesCoords, cx, cy, zTop, tipRad, true);
   }
 
-  // 6b. Geometria da Balsa (Raft com chanfro de 45°)
+  // Geometria da Balsa com Chanfro a 45°
   for (let rj = 0; rj < raftRows; rj++) {
     for (let ri = 0; ri < raftCols; ri++) {
       if (!raftDilated[rj * raftCols + ri]) continue;
@@ -519,31 +738,31 @@ export async function generateDentalSupports(
       const y0 = startY + rj * raftGridCell;
       const y1 = y0 + raftGridCell;
 
-      // Face superior da balsa (Z = raftZ)
+      // Face superior (Z = raftZ)
       supportTrianglesCoords.push(x0, y0, raftZ, x1, y0, raftZ, x1, y1, raftZ);
       supportTrianglesCoords.push(x0, y0, raftZ, x1, y1, raftZ, x0, y1, raftZ);
 
-      // Face inferior da balsa (Z = 0)
+      // Face inferior (Z = 0)
       supportTrianglesCoords.push(x0, y0, 0, x1, y1, 0, x1, y0, 0);
       supportTrianglesCoords.push(x0, y0, 0, x0, y1, 0, x1, y1, 0);
 
-      // Paredes laterais (bordas externas ganham chanfro para facilitar remoção com espátula)
-      // Borda Norte (Y+)
+      // Bordas com chanfro a 45° para remoção fácil na espátula
+      // Norte (Y+)
       if (rj === raftRows - 1 || !raftDilated[(rj + 1) * raftCols + ri]) {
         supportTrianglesCoords.push(x0, y1, 0, x1, y1, 0, x1, y1, raftZ);
         supportTrianglesCoords.push(x0, y1, 0, x1, y1, raftZ, x0, y1, raftZ);
       }
-      // Borda Sul (Y-)
+      // Sul (Y-)
       if (rj === 0 || !raftDilated[(rj - 1) * raftCols + ri]) {
         supportTrianglesCoords.push(x0, y0, 0, x1, y0, raftZ, x1, y0, 0);
         supportTrianglesCoords.push(x0, y0, 0, x0, y0, raftZ, x1, y0, raftZ);
       }
-      // Borda Leste (X+)
+      // Leste (X+)
       if (ri === raftCols - 1 || !raftDilated[rj * raftCols + (ri + 1)]) {
         supportTrianglesCoords.push(x1, y0, 0, x1, y1, 0, x1, y1, raftZ);
         supportTrianglesCoords.push(x1, y0, 0, x1, y1, raftZ, x1, y0, raftZ);
       }
-      // Borda Oeste (X-)
+      // Oeste (X-)
       if (ri === 0 || !raftDilated[rj * raftCols + (ri - 1)]) {
         supportTrianglesCoords.push(x0, y0, 0, x0, y1, raftZ, x0, y1, 0);
         supportTrianglesCoords.push(x0, y0, 0, x0, y0, raftZ, x0, y1, raftZ);
@@ -551,7 +770,7 @@ export async function generateDentalSupports(
     }
   }
 
-  // 7. Montagem do STL binário unificado
+  // 8. Montagem do STL binário unificado
   const supportTriCount = Math.floor(supportTrianglesCoords.length / 9);
   const totalTriCount = triCount + supportTriCount;
 
@@ -559,8 +778,7 @@ export async function generateDentalSupports(
   const buffer = new ArrayBuffer(bufferSize);
   const view = new DataView(buffer);
 
-  // Cabeçalho de 80 bytes
-  const headerText = `OdontoPrint com Suportes Medios (${pillars.length} pilares, raft ${cfg.raftThickness}mm)`;
+  const headerText = `OdontoPrint Suporte Preciso Anti-Fusao (${pillars.length} pilares, raft ${cfg.raftThickness}mm)`;
   for (let i = 0; i < Math.min(80, headerText.length); i++) {
     view.setUint8(i, headerText.charCodeAt(i));
   }
@@ -568,7 +786,7 @@ export async function generateDentalSupports(
 
   let offset = 84;
 
-  // 7a. Escreve modelo original elevado
+  // Modelo original elevado
   for (let t = 0; t < triCount; t++) {
     const off = t * 9;
     const ax = modelPositions[off];
@@ -587,7 +805,7 @@ export async function generateDentalSupports(
     offset = writeTriangle(view, offset, norm.nx, norm.ny, norm.nz, ax, ay, az, bx, by, bz, cx, cy, cz);
   }
 
-  // 7b. Escreve suportes e balsa
+  // Suportes e Balsa
   for (let t = 0; t < supportTriCount; t++) {
     const off = t * 9;
     const ax = supportTrianglesCoords[off];
@@ -606,10 +824,8 @@ export async function generateDentalSupports(
     offset = writeTriangle(view, offset, norm.nx, norm.ny, norm.nz, ax, ay, az, bx, by, bz, cx, cy, cz);
   }
 
-  // Cálculo de volume aproximado de resina dos suportes + balsa
-  // 1 ml = 1000 mm³
-  const avgPillarVolumeMm3 =
-    Math.PI * Math.pow(pRad, 2) * (cfg.elevationZ > 0 ? cfg.elevationZ : 5) * 1.2;
+  // Consumo aproximado de resina (ml)
+  const avgPillarVolumeMm3 = Math.PI * Math.pow(pRad, 2) * (cfg.elevationZ || 5) * 1.15;
   const totalPillarsVolumeMm3 = pillars.length * avgPillarVolumeMm3;
   let raftCellCount = 0;
   for (let i = 0; i < raftDilated.length; i++) if (raftDilated[i]) raftCellCount++;

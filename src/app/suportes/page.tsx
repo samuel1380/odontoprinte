@@ -23,8 +23,10 @@ import {
 import {
   generateDentalSupports,
   DEFAULT_DENTAL_SUPPORT_CONFIG,
+  DENTAL_SUPPORT_PROFILES,
   type DentalSupportConfig,
   type SupportGenerationResult,
+  type SupportProfileId,
 } from "@/lib/support-generator";
 import {
   parseStlTriangles,
@@ -46,7 +48,8 @@ export default function SuportesPage() {
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState<SupportGenerationResult | null>(null);
 
-  // Configuração dos suportes
+  // Configuração dos suportes e perfil ativo
+  const [activeProfile, setActiveProfile] = useState<SupportProfileId>("GOLD_MEDIUM");
   const [config, setConfig] = useState<DentalSupportConfig>({
     ...DEFAULT_DENTAL_SUPPORT_CONFIG,
   });
@@ -510,20 +513,51 @@ export default function SuportesPage() {
                 </button>
               </div>
 
-              {/* Card Destaque: Padrão Ouro Anti-Falhas */}
-              <div className="bg-amber-500/10 border border-amber-500/25 rounded-xl p-3 text-xs space-y-1.5">
+              {/* Seleção Rápida de Perfil Odontológico */}
+              <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
+                {(Object.keys(DENTAL_SUPPORT_PROFILES) as SupportProfileId[]).map((pKey) => {
+                  const p = DENTAL_SUPPORT_PROFILES[pKey];
+                  const isActive = activeProfile === pKey;
+                  return (
+                    <button
+                      key={pKey}
+                      type="button"
+                      onClick={() => {
+                        setActiveProfile(pKey);
+                        setConfig({ ...p.config });
+                        setResult(null);
+                      }}
+                      className={`text-[10px] font-semibold py-1.5 px-2 rounded-lg transition text-center ${
+                        isActive
+                          ? "bg-amber-400 text-slate-950 shadow font-bold"
+                          : "text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      {pKey === "GOLD_MEDIUM" ? "Padrão Ouro" : pKey === "FINE_PRECISION" ? "Alta Precisão" : "Reforçado"}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Card Destaque: Padrão Ouro Anti-Falhas e Anti-Fusão */}
+              <div className="bg-amber-500/10 border border-amber-500/25 rounded-xl p-3 text-xs space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-amber-300 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5" /> Padrão Ouro Odontológico
+                    <Sparkles className="w-3.5 h-3.5" /> {DENTAL_SUPPORT_PROFILES[activeProfile].label}
                   </span>
-                  <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full font-semibold">
-                    Anti-Falhas
+                  <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-semibold border border-emerald-500/30">
+                    Anti-Fusão Ativa
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-300 leading-relaxed">
-                  Pilar cilíndrico de <strong>1,3 mm</strong> com ponta de contato de <strong>0,7 mm</strong> e balsa
-                  reforçada de <strong>1,0 mm</strong> com chanfro de 45° para remoção fácil na espátula.
+                  {DENTAL_SUPPORT_PROFILES[activeProfile].description}
                 </p>
+                <div className="pt-1.5 border-t border-amber-500/20 flex items-center justify-between text-[10px] text-slate-400 flex-wrap gap-2">
+                  <span>Pilar: <strong className="text-white">{config.pillarDiameter} mm</strong></span>
+                  <span>Ponta: <strong className="text-white">{config.tipDiameter} mm</strong></span>
+                  <span>Folga Modelo: <strong className="text-emerald-300">{config.modelClearance} mm</strong></span>
+                  <span>Dist. Suportes: <strong className="text-amber-300">≥ {config.minPillarDistance} mm</strong></span>
+                </div>
               </div>
 
               {/* Ajustes avançados caso queira calibrar */}
@@ -560,11 +594,25 @@ export default function SuportesPage() {
                     <input
                       type="number"
                       step={0.05}
-                      min={0.4}
+                      min={0.3}
                       max={1.2}
                       value={config.tipDiameter}
-                      onChange={(e) => setConfig({ ...config, tipDiameter: Number(e.target.value) || 0.7 })}
+                      onChange={(e) => setConfig({ ...config, tipDiameter: Number(e.target.value) || 0.65 })}
                       className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-2 py-1 text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-slate-400 block mb-1">Micro-Penetração (mm)</label>
+                    <input
+                      type="number"
+                      step={0.02}
+                      min={0.05}
+                      max={0.3}
+                      value={config.tipPenetration}
+                      onChange={(e) => setConfig({ ...config, tipPenetration: Number(e.target.value) || 0.12 })}
+                      className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-2 py-1 text-xs"
+                      title="Profundidade microscópica para solda química sólida sem marcar"
                     />
                   </div>
 
@@ -572,12 +620,26 @@ export default function SuportesPage() {
                     <label className="text-[10px] text-slate-400 block mb-1">Espaçamento Malha (mm)</label>
                     <input
                       type="number"
-                      step={0.5}
+                      step={0.2}
                       min={1.5}
                       max={6}
                       value={config.supportSpacing}
                       onChange={(e) => setConfig({ ...config, supportSpacing: Number(e.target.value) || 3 })}
                       className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-2 py-1 text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-slate-400 block mb-1">Folga da Parede (mm)</label>
+                    <input
+                      type="number"
+                      step={0.1}
+                      min={0.4}
+                      max={2.0}
+                      value={config.modelClearance}
+                      onChange={(e) => setConfig({ ...config, modelClearance: Number(e.target.value) || 0.75 })}
+                      className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-2 py-1 text-xs"
+                      title="Distância mínima de segurança entre a haste e as paredes do modelo"
                     />
                   </div>
                 </div>
