@@ -4,7 +4,7 @@
  * Aplica suportes calibrados com proteção anti-fusão de nível industrial:
  * 1. Não funde suporte com modelo (folga de segurança da haste e fixação apenas em superfícies inferiores).
  * 2. Não funde suporte com outro suporte (distância mínima garantida por malha estocástica/hexagonal).
- * 3. Ponta cônica micrométrica destacável (0,12 mm de penetração sólida para não quebrar no descolamento).
+ * 3. Ponta esférica (bolinha) de contato com micro-penetração (0,12 mm), sem lâmina fina no modelo.
  * 4. Balsa (raft) com chanfro de 45° para remoção rápida e segura na espátula de laboratório.
  */
 
@@ -13,9 +13,9 @@ export interface DentalSupportConfig {
   elevationZ: number;
   /** Diâmetro do pilar cilíndrico (mm). Padrão: 1.3 mm ("Suporte Médio") */
   pillarDiameter: number;
-  /** Diâmetro da ponta cônica de contato (mm). Padrão: 0.65 mm */
+  /** Diâmetro da ponta esférica (bolinha) de contato (mm). Padrão: 0.65 mm */
   tipDiameter: number;
-  /** Comprimento da ponta de contato (mm). Padrão: 1.3 mm */
+  /** Comprimento do pescoço de contato até a bolinha (mm). Padrão: 1.3 mm */
   tipLength: number;
   /** Micro-penetração de ancoragem na superfície (mm). Padrão: 0.12 mm */
   tipPenetration: number;
@@ -33,7 +33,7 @@ export interface DentalSupportConfig {
   minPillarDistance: number;
   /** Distância mínima de segurança entre a haste do pilar e as paredes do modelo (mm). Padrão: 0.75 mm */
   modelClearance: number;
-  /** Espaçamento entre pilares perimetrais na lateral para formar paliçada densa contínua (mm). Padrão: 1.45 mm */
+  /** Espaçamento entre pilares na lateral, evitando excesso de suportes (mm). Padrão: 6.0 mm */
   lateralPillarSpacing?: number;
 }
 
@@ -50,7 +50,7 @@ export const DEFAULT_DENTAL_SUPPORT_CONFIG: DentalSupportConfig = {
   supportSpacing: 3.0,
   minPillarDistance: 2.5,
   modelClearance: 0.75,
-  lateralPillarSpacing: 1.45,
+  lateralPillarSpacing: 6.0,
 };
 
 export const DENTAL_SUPPORT_PROFILES = {
@@ -73,7 +73,7 @@ export const DENTAL_SUPPORT_PROFILES = {
       supportSpacing: 3.0,
       minPillarDistance: 2.5,
       modelClearance: 0.85,
-      lateralPillarSpacing: 1.45,
+      lateralPillarSpacing: 6.0,
     },
   },
   FINE: {
@@ -95,7 +95,7 @@ export const DENTAL_SUPPORT_PROFILES = {
       supportSpacing: 2.6,
       minPillarDistance: 2.0,
       modelClearance: 0.70,
-      lateralPillarSpacing: 1.25,
+      lateralPillarSpacing: 5.0,
     },
   },
   HEAVY: {
@@ -117,7 +117,7 @@ export const DENTAL_SUPPORT_PROFILES = {
       supportSpacing: 3.2,
       minPillarDistance: 2.8,
       modelClearance: 1.00,
-      lateralPillarSpacing: 1.65,
+      lateralPillarSpacing: 7.0,
     },
   },
   // Retrocompatibilidade transparente
@@ -369,6 +369,58 @@ function appendCap(
       triangles.push(cx, cy, z, x0, y0, z, x1, y1, z);
     } else {
       triangles.push(cx, cy, z, x1, y1, z, x0, y0, z);
+    }
+  }
+}
+
+/**
+ * Gera uma esfera fechada e suave para a ponta de contato (bolinha).
+ * A malha é orientada com as normais para fora, pronta para STL.
+ */
+function appendSphere(
+  triangles: number[],
+  cx: number,
+  cy: number,
+  cz: number,
+  radius: number,
+  segments: number = 12,
+  rings: number = 8
+) {
+  const southZ = cz - radius;
+  const northZ = cz + radius;
+
+  for (let i = 0; i < rings; i++) {
+    const theta0 = -Math.PI / 2 + (Math.PI * i) / rings;
+    const theta1 = -Math.PI / 2 + (Math.PI * (i + 1)) / rings;
+    const r0 = radius * Math.cos(theta0);
+    const z0 = cz + radius * Math.sin(theta0);
+    const r1 = radius * Math.cos(theta1);
+    const z1 = cz + radius * Math.sin(theta1);
+
+    for (let j = 0; j < segments; j++) {
+      const next = (j + 1) % segments;
+      const phi0 = (2 * Math.PI * j) / segments;
+      const phi1 = (2 * Math.PI * next) / segments;
+
+      const x00 = cx + r0 * Math.cos(phi0);
+      const y00 = cy + r0 * Math.sin(phi0);
+      const x01 = cx + r0 * Math.cos(phi1);
+      const y01 = cy + r0 * Math.sin(phi1);
+      const x10 = cx + r1 * Math.cos(phi0);
+      const y10 = cy + r1 * Math.sin(phi0);
+      const x11 = cx + r1 * Math.cos(phi1);
+      const y11 = cy + r1 * Math.sin(phi1);
+
+      if (i === 0) {
+        // Polo sul: leque fechado para baixo
+        triangles.push(cx, cy, southZ, x11, y11, z1, x10, y10, z1);
+      } else if (i === rings - 1) {
+        // Polo norte: leque fechado para cima
+        triangles.push(x00, y00, z0, x01, y01, z0, cx, cy, northZ);
+      } else {
+        triangles.push(x00, y00, z0, x01, y01, z0, x11, y11, z1);
+        triangles.push(x00, y00, z0, x11, y11, z1, x10, y10, z1);
+      }
     }
   }
 }
@@ -822,8 +874,9 @@ export async function generateDentalSupports(
   // em vez de colocar o suporte só embaixo na base.
   rawLateralCandidates.sort((a, b) => b.zContact - a.zContact);
 
-  // Filtra candidatos laterais garantindo espaçamento perimetral elegante sem amontoar (~2.2 mm)
-  const latSpacing = Math.max(2.1, userConfig.lateralPillarSpacing ?? 2.2);
+  // Filtra candidatos laterais em pontos estratégicos, sem amontoar dezenas de hastes na parede.
+  // O espaçamento padrão agora é bem mais aberto (6 mm) e pode ser ajustado pelo perfil.
+  const latSpacing = Math.max(4.0, cfg.lateralPillarSpacing ?? 6.0);
   const latSpacingSq = latSpacing * latSpacing;
   const filteredLateralCandidates: CandidatePoint[] = [];
 
@@ -1090,20 +1143,22 @@ export async function generateDentalSupports(
 
   // 7. Geração da Geometria 3D dos Suportes (Pilares de Precisão e Balsa com Chanfro)
   const supportTrianglesCoords: number[] = [];
-  const tipRad = cfg.tipDiameter / 2;
+  const tipRad = Math.max(0.25, cfg.tipDiameter / 2);
   const baseRad = cfg.baseDiameter / 2;
+  const tipPenetration = Math.max(0, Math.min(cfg.tipPenetration, tipRad * 0.9));
 
   for (const pil of pillars) {
     const cx = pil.x;
     const cy = pil.y;
     const z0 = pil.zBase;
-    // Micro-penetração de ancoragem na peça: garante solda sólida sem gaps de fatiamento
-    const zTop = pil.zContact + cfg.tipPenetration;
-    const totalH = zTop - z0;
+    const targetX = pil.targetX ?? cx;
+    const targetY = pil.targetY ?? cy;
+    const contactZ = pil.zContact;
+    const supportHeight = Math.max(0.6, contactZ - z0);
 
-    const effBaseH = Math.min(cfg.baseLength, totalH * 0.25);
-    const effTipH = Math.min(cfg.tipLength, totalH * 0.35);
-    const effStemH = Math.max(0, totalH - effBaseH - effTipH);
+    const effBaseH = Math.min(cfg.baseLength, supportHeight * 0.25);
+    const effTipH = Math.min(cfg.tipLength, supportHeight * 0.35);
+    const effStemH = Math.max(0, supportHeight - effBaseH - effTipH);
 
     const zBaseEnd = z0 + effBaseH;
     const zStemEnd = zBaseEnd + effStemH;
@@ -1117,9 +1172,28 @@ export async function generateDentalSupports(
       appendCylinderSection(supportTrianglesCoords, cx, cy, zBaseEnd, pRad, zStemEnd, pRad);
     }
 
-    // Ponta cônica de precisão no modelo (com ponta conectando ao alvo se for lateral)
-    const targetX = pil.targetX ?? cx;
-    const targetY = pil.targetY ?? cy;
+    // Eixo do pescoço de contato: da ponta no modelo até o topo da haste.
+    const toStemX = cx - targetX;
+    const toStemY = cy - targetY;
+    const toStemZ = zStemEnd - contactZ;
+    const axisLen = Math.hypot(toStemX, toStemY, toStemZ) || 1;
+    const ux = toStemX / axisLen;
+    const uy = toStemY / axisLen;
+    const uz = toStemZ / axisLen;
+
+    // A bolinha fica levemente embutida no modelo (micro-penetração de ancoragem),
+    // evitando a antiga ponta fina em forma de chapa/cone achatado.
+    const ballOffset = Math.max(0, tipRad - tipPenetration);
+    const ballX = targetX + ux * ballOffset;
+    const ballY = targetY + uy * ballOffset;
+    const ballZ = contactZ + uz * ballOffset;
+
+    // Pescoço cônico conectando a haste à esfera (a esfera cobre a junção).
+    const neckDistance = tipRad * 0.65;
+    const neckX = ballX + ux * neckDistance;
+    const neckY = ballY + uy * neckDistance;
+    const neckZ = ballZ + uz * neckDistance;
+    const neckRadius = tipRad * 0.70;
 
     appendConeFrustum3D(
       supportTrianglesCoords,
@@ -1127,12 +1201,14 @@ export async function generateDentalSupports(
       cy,
       zStemEnd,
       pRad,
-      targetX,
-      targetY,
-      zTop,
-      tipRad
+      neckX,
+      neckY,
+      neckZ,
+      neckRadius
     );
-    appendCap(supportTrianglesCoords, targetX, targetY, zTop, tipRad, true);
+
+    // Ponta esférica (bolinha) de contato com o modelo.
+    appendSphere(supportTrianglesCoords, ballX, ballY, ballZ, tipRad, 12, 8);
   }
 
   // Geometria da Balsa com Chanfro a 45°
@@ -1232,7 +1308,8 @@ export async function generateDentalSupports(
   }
 
   // Consumo aproximado de resina (ml)
-  const avgPillarVolumeMm3 = Math.PI * Math.pow(pRad, 2) * (cfg.elevationZ || 5) * 1.15;
+  const avgBallVolumeMm3 = (4 / 3) * Math.PI * Math.pow(tipRad, 3);
+  const avgPillarVolumeMm3 = Math.PI * Math.pow(pRad, 2) * (cfg.elevationZ || 5) * 1.15 + avgBallVolumeMm3;
   const totalPillarsVolumeMm3 = pillars.length * avgPillarVolumeMm3;
   let raftCellCount = 0;
   for (let i = 0; i < raftDilated.length; i++) if (raftDilated[i]) raftCellCount++;
