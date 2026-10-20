@@ -19,6 +19,12 @@ import {
   ArrowRight,
   Info,
   RotateCw,
+  Eye,
+  EyeOff,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  Compass,
 } from "lucide-react";
 import {
   generateDentalSupports,
@@ -55,11 +61,101 @@ export default function SuportesPage() {
   const [config, setConfig] = useState<DentalSupportConfig>({
     ...DENTAL_SUPPORT_PROFILES.MEDIUM.config,
   });
-  const [viewMode, setViewMode] = useState<"top" | "iso">("top");
+  const [viewPreset, setViewPreset] = useState<"iso" | "bottom" | "top" | "front">("iso");
+  const [yaw, setYaw] = useState<number>(-0.55);
+  const [pitch, setPitch] = useState<number>(0.42);
+  const [zoom, setZoom] = useState<number>(1.0);
+  const [xRay, setXRay] = useState<boolean>(false);
   const [islands, setIslands] = useState<DetectedIsland[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const isDraggingRef = useRef<boolean>(false);
+  const lastMousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Presets rápidos de câmera
+  const applyPreset = (preset: "iso" | "bottom" | "top" | "front") => {
+    setViewPreset(preset);
+    if (preset === "iso") {
+      setYaw(-0.55);
+      setPitch(0.42);
+      setZoom(1.0);
+    } else if (preset === "bottom") {
+      // Ângulo por baixo para visualização total e desobstruída dos suportes e pontos de contato
+      setYaw(-0.55);
+      setPitch(-0.52);
+      setZoom(1.1);
+    } else if (preset === "top") {
+      setYaw(0);
+      setPitch(Math.PI / 2 - 0.001);
+      setZoom(1.0);
+    } else if (preset === "front") {
+      setYaw(0);
+      setPitch(0.04);
+      setZoom(1.0);
+    }
+  };
+
+  const handleZoom = (delta: number) => {
+    setZoom((prev) => Math.max(0.4, Math.min(4.0, +(prev + delta).toFixed(2))));
+  };
+
+  const handleResetCamera = () => {
+    applyPreset("iso");
+  };
+
+  // Interatividade com Mouse e Touch no Canvas (Rotação 360° e Zoom)
+  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    isDraggingRef.current = true;
+    lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDraggingRef.current) return;
+    const dx = e.clientX - lastMousePosRef.current.x;
+    const dy = e.clientY - lastMousePosRef.current.y;
+    lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+
+    setYaw((prev) => prev + dx * 0.008);
+    setPitch((prev) => {
+      const next = prev + dy * 0.008;
+      return Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, next));
+    });
+  };
+
+  const handleMouseUp = () => {
+    isDraggingRef.current = false;
+  };
+
+  const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.1 : 0.9;
+    setZoom((prev) => Math.max(0.4, Math.min(4.0, +(prev * factor).toFixed(2))));
+  };
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length === 1) {
+      isDraggingRef.current = true;
+      lastMousePosRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isDraggingRef.current || e.touches.length !== 1) return;
+    const dx = e.touches[0].clientX - lastMousePosRef.current.x;
+    const dy = e.touches[0].clientY - lastMousePosRef.current.y;
+    lastMousePosRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+
+    setYaw((prev) => prev + dx * 0.008);
+    setPitch((prev) => {
+      const next = prev + dy * 0.008;
+      return Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, next));
+    });
+  };
+
+  const handleTouchEnd = () => {
+    isDraggingRef.current = false;
+  };
 
   // Escaneia ilhas suspensas automaticamente
   useEffect(() => {
@@ -186,7 +282,7 @@ export default function SuportesPage() {
     }
   };
 
-  // Renderização no Canvas (estilo do fatiador com modelos azuis e suportes amarelos)
+  // Renderização 3D no Canvas (Câmera Órbita, Shading Direcional e Destaque de Suportes)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !loadedModel) return;
@@ -197,35 +293,14 @@ export default function SuportesPage() {
     const W = canvas.width;
     const H = canvas.height;
 
-    // Fundo da bancada de impressão
-    ctx.fillStyle = "#090d16";
+    // Fundo escuro de alto contraste da bancada fatiadora
+    ctx.fillStyle = "#070b12";
     ctx.fillRect(0, 0, W, H);
 
-    // Grade milimétrica da mesa (estilo fatiador 3D)
-    ctx.strokeStyle = "#172339";
-    ctx.lineWidth = 1;
-    const gridStep = 25;
-    for (let x = 0; x < W; x += gridStep) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, H);
-      ctx.stroke();
-    }
-    for (let y = 0; y < H; y += gridStep) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(W, y);
-      ctx.stroke();
-    }
-
-    // Bounding Box e escala para enquadrar na tela
     const pos = loadedModel.positions;
-    let minX = Infinity;
-    let maxX = -Infinity;
-    let minY = Infinity;
-    let maxY = -Infinity;
-    let minZ = Infinity;
-    let maxZ = -Infinity;
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+    let minZ = Infinity, maxZ = -Infinity;
 
     for (let i = 0; i < pos.length; i += 3) {
       const x = pos[i];
@@ -239,185 +314,286 @@ export default function SuportesPage() {
       if (z > maxZ) maxZ = z;
     }
 
+    const zLift = result ? config.elevationZ : 0;
     const modelW = maxX - minX || 1;
     const modelD = maxY - minY || 1;
-    const modelH = maxZ - minZ || 1;
+    const modelH = (maxZ - minZ) + zLift || 1;
 
-    const pad = 40;
-    const scale = Math.min((W - pad * 2) / modelW, (H - pad * 2) / modelD);
-    const offsetX = (W - modelW * scale) / 2 - minX * scale;
-    const offsetY = (H - modelD * scale) / 2 - minY * scale;
+    // Centro do modelo e da cena para rotação orbital 360° perfeita
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    const cz = minZ + ((maxZ - minZ) + zLift) / 2;
 
-    if (viewMode === "top") {
-      // --- VISTA SUPERIOR (TOP-DOWN) ---
+    // Escala para enquadramento na tela
+    const maxDim = Math.max(modelW, modelD, modelH, Math.hypot(modelW, modelD) * 0.75);
+    const baseScale = Math.min((W - 80) / maxDim, (H - 80) / maxDim);
+    const S = baseScale * zoom;
 
-      // 1. Desenha Balsa (Raft) em Amarelo/Dourado se já calculada
-      if (result) {
-        ctx.fillStyle = "rgba(245, 158, 11, 0.4)";
-        ctx.strokeStyle = "#f59e0b";
-        ctx.lineWidth = 2;
+    const cosY = Math.cos(yaw);
+    const sinY = Math.sin(yaw);
+    const cosP = Math.cos(pitch);
+    const sinP = Math.sin(pitch);
 
-        const raftPad = config.raftMargin * scale;
-        const rx = minX * scale + offsetX - raftPad;
-        const ry = minY * scale + offsetY - raftPad;
-        const rw = modelW * scale + raftPad * 2;
-        const rh = modelD * scale + raftPad * 2;
+    // Projeção 3D de ponto cartesiano para tela
+    const project = (x: number, y: number, z: number) => {
+      const dx = x - cx;
+      const dy = y - cy;
+      const dz = z - cz;
 
-        ctx.beginPath();
-        ctx.roundRect(rx, ry, rw, rh, 8);
-        ctx.fill();
-        ctx.stroke();
+      // Rotação horizontal (Yaw)
+      const rx = dx * cosY - dy * sinY;
+      const ry = dx * sinY + dy * cosY;
+      const rz = dz;
 
-        // 2. Desenha Pilares de Suporte em Dourado Brilhante
-        ctx.fillStyle = "#fbbf24";
-        for (const p of result.pillars) {
-          const px = p.x * scale + offsetX;
-          const py = p.y * scale + offsetY;
-          ctx.beginPath();
-          ctx.arc(px, py, Math.max(2, (config.pillarDiameter / 2) * scale), 0, Math.PI * 2);
-          ctx.fill();
+      // Rotação de inclinação vertical (Pitch)
+      const px = rx;
+      const py = ry * sinP - rz * cosP;
+      const depth = ry * cosP + rz * sinP;
 
-          // Se for suporte lateral, desenha linha de conexão com a parede
-          if (p.targetX !== undefined && p.targetY !== undefined) {
-            const tx = p.targetX * scale + offsetX;
-            const ty = p.targetY * scale + offsetY;
-            ctx.strokeStyle = "#fef08a";
-            ctx.lineWidth = 1.2;
-            ctx.beginPath();
-            ctx.moveTo(px, py);
-            ctx.lineTo(tx, ty);
-            ctx.stroke();
-
-            ctx.fillStyle = "#fef08a";
-            ctx.beginPath();
-            ctx.arc(tx, ty, 2, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
-      }
-
-      // 3. Desenha Geometria do Modelo Dentário em Azul Elétrico
-      ctx.fillStyle = "rgba(14, 165, 233, 0.85)";
-      ctx.strokeStyle = "#38bdf8";
-      ctx.lineWidth = 0.5;
-
-      const triCount = Math.floor(pos.length / 9);
-      const step = Math.max(1, Math.floor(triCount / 12000)); // amostragem fluida para preview
-
-      for (let t = 0; t < triCount; t += step) {
-        const off = t * 9;
-        const ax = pos[off] * scale + offsetX;
-        const ay = pos[off + 1] * scale + offsetY;
-        const bx = pos[off + 3] * scale + offsetX;
-        const by = pos[off + 4] * scale + offsetY;
-        const cx = pos[off + 6] * scale + offsetX;
-        const cy = pos[off + 7] * scale + offsetY;
-
-        ctx.beginPath();
-        ctx.moveTo(ax, ay);
-        ctx.lineTo(bx, by);
-        ctx.lineTo(cx, cy);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-      }
-    } else {
-      // --- VISTA ISOMÉTRICA / PERSPECTIVA LATERAL ---
-      const isoX = (x: number, y: number) => {
-        return (x - y) * Math.cos(Math.PI / 6) * scale * 0.85 + W / 2;
+      return {
+        x: W / 2 + px * S,
+        y: H / 2 + py * S,
+        depth,
       };
-      const isoY = (x: number, y: number, z: number) => {
-        return (x + y) * Math.sin(Math.PI / 6) * scale * 0.5 - (z - minZ) * scale * 0.85 + H / 2 + 30;
-      };
+    };
 
-      // Desenha base da chapa
-      ctx.fillStyle = "#1e293b";
+    // 1. Grade e Plataforma de Impressão (Build Plate) em 3D
+    const margin = Math.max(12, Math.max(modelW, modelD) * 0.16);
+    const plateMinX = minX - margin;
+    const plateMaxX = maxX + margin;
+    const plateMinY = minY - margin;
+    const plateMaxY = maxY + margin;
+    const plateZ = minZ;
+
+    const p0 = project(plateMinX, plateMinY, plateZ);
+    const p1 = project(plateMaxX, plateMinY, plateZ);
+    const p2 = project(plateMaxX, plateMaxY, plateZ);
+    const p3 = project(plateMinX, plateMaxY, plateZ);
+
+    // Plataforma de impressão chanfrada
+    ctx.fillStyle = "rgba(15, 23, 42, 0.75)";
+    ctx.strokeStyle = "#1e293b";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(p0.x, p0.y);
+    ctx.lineTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.lineTo(p3.x, p3.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Grade milimétrica na mesa
+    ctx.strokeStyle = "rgba(30, 41, 59, 0.6)";
+    ctx.lineWidth = 0.8;
+    const gridDivs = 8;
+    for (let i = 1; i < gridDivs; i++) {
+      const t = i / gridDivs;
+      const gx = plateMinX + (plateMaxX - plateMinX) * t;
+      const gy = plateMinY + (plateMaxY - plateMinY) * t;
+
+      const lxA = project(gx, plateMinY, plateZ);
+      const lxB = project(gx, plateMaxY, plateZ);
       ctx.beginPath();
-      ctx.moveTo(isoX(minX - 5, minY - 5), isoY(minX - 5, minY - 5, minZ));
-      ctx.lineTo(isoX(maxX + 5, minY - 5), isoY(maxX + 5, minY - 5, minZ));
-      ctx.lineTo(isoX(maxX + 5, maxY + 5), isoY(maxX + 5, maxY + 5, minZ));
-      ctx.lineTo(isoX(minX - 5, maxY + 5), isoY(minX - 5, maxY + 5, minZ));
+      ctx.moveTo(lxA.x, lxA.y);
+      ctx.lineTo(lxB.x, lxB.y);
+      ctx.stroke();
+
+      const lyA = project(plateMinX, gy, plateZ);
+      const lyB = project(plateMaxX, gy, plateZ);
+      ctx.beginPath();
+      ctx.moveTo(lyA.x, lyA.y);
+      ctx.lineTo(lyB.x, lyB.y);
+      ctx.stroke();
+    }
+
+    // 2. Balsa (Raft) Chanfrada em 3D em Dourado
+    if (result) {
+      const rMargin = config.raftMargin;
+      const rMinX = minX - rMargin;
+      const rMaxX = maxX + rMargin;
+      const rMinY = minY - rMargin;
+      const rMaxY = maxY + rMargin;
+      const rTopZ = minZ + config.raftThickness;
+
+      const rf0 = project(rMinX, rMinY, rTopZ);
+      const rf1 = project(rMaxX, rMinY, rTopZ);
+      const rf2 = project(rMaxX, rMaxY, rTopZ);
+      const rf3 = project(rMinX, rMaxY, rTopZ);
+
+      ctx.fillStyle = "rgba(245, 158, 11, 0.35)";
+      ctx.strokeStyle = "#f59e0b";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(rf0.x, rf0.y);
+      ctx.lineTo(rf1.x, rf1.y);
+      ctx.lineTo(rf2.x, rf2.y);
+      ctx.lineTo(rf3.x, rf3.y);
       ctx.closePath();
       ctx.fill();
+      ctx.stroke();
+    }
 
-      // Se houver suportes calculados: desenha balsa e pilares verticais
-      if (result) {
-        // Balsa
-        ctx.fillStyle = "rgba(245, 158, 11, 0.6)";
+    // Função de desenho de todos os Suportes (Pilares, Conexões e Pontos de Contato)
+    const drawSupports = () => {
+      if (!result) return;
+
+      const baseZ = minZ + config.raftThickness;
+      const pillarRadius = Math.max(1.8, (config.pillarDiameter / 2) * S * 0.7);
+
+      for (const p of result.pillars) {
+        const contactZ = minZ + p.height;
+        const targetX = p.targetX ?? p.x;
+        const targetY = p.targetY ?? p.y;
+
+        const ptBase = project(p.x, p.y, baseZ);
+        const ptStemTop = project(p.x, p.y, contactZ - 0.5);
+        const ptContact = project(targetX, targetY, contactZ);
+
+        // Sapata / Base de fixação na balsa
+        ctx.fillStyle = "#b45309";
         ctx.beginPath();
-        ctx.moveTo(isoX(minX - config.raftMargin, minY - config.raftMargin), isoY(minX - config.raftMargin, minY - config.raftMargin, minZ + config.raftThickness));
-        ctx.lineTo(isoX(maxX + config.raftMargin, minY - config.raftMargin), isoY(maxX + config.raftMargin, minY - config.raftMargin, minZ + config.raftThickness));
-        ctx.lineTo(isoX(maxX + config.raftMargin, maxY + config.raftMargin), isoY(maxX + config.raftMargin, maxY + config.raftMargin, minZ + config.raftThickness));
-        ctx.lineTo(isoX(minX - config.raftMargin, maxY + config.raftMargin), isoY(minX - config.raftMargin, maxY + config.raftMargin, minZ + config.raftThickness));
-        ctx.closePath();
+        ctx.ellipse(ptBase.x, ptBase.y, pillarRadius * 1.6, pillarRadius * 0.9, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Pilares verticais em dourado
-        ctx.strokeStyle = "#fbbf24";
-        ctx.lineWidth = Math.max(1.5, config.pillarDiameter * scale * 0.5);
-        for (const p of result.pillars) {
-          const px0 = isoX(p.x, p.y);
-          const py0 = isoY(p.x, p.y, minZ + config.raftThickness);
-          const stemTopZ = p.targetX !== undefined ? minZ + p.height - 0.4 : minZ + p.height;
-          const pyStem = isoY(p.x, p.y, stemTopZ);
+        // Pilar vertical: traço dourado com núcleo iluminado de alto contraste
+        ctx.strokeStyle = "#b45309";
+        ctx.lineWidth = pillarRadius * 2 + 1.2;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(ptBase.x, ptBase.y);
+        ctx.lineTo(ptStemTop.x, ptStemTop.y);
+        ctx.stroke();
 
-          // Haste vertical
+        ctx.strokeStyle = "#fbbf24";
+        ctx.lineWidth = Math.max(1.6, pillarRadius * 1.5);
+        ctx.beginPath();
+        ctx.moveTo(ptBase.x, ptBase.y);
+        ctx.lineTo(ptStemTop.x, ptStemTop.y);
+        ctx.stroke();
+
+        // Conexão chanfrada até a parede (se pilar lateral)
+        if (p.targetX !== undefined || p.targetY !== undefined) {
+          ctx.strokeStyle = "#b45309";
+          ctx.lineWidth = pillarRadius * 2 + 1;
           ctx.beginPath();
-          ctx.moveTo(px0, py0);
-          ctx.lineTo(px0, pyStem);
+          ctx.moveTo(ptStemTop.x, ptStemTop.y);
+          ctx.lineTo(ptContact.x, ptContact.y);
           ctx.stroke();
 
-          // Ponta conectando ao modelo
-          const targetX = p.targetX ?? p.x;
-          const targetY = p.targetY ?? p.y;
-          const px1 = isoX(targetX, targetY);
-          const py1 = isoY(targetX, targetY, minZ + p.height);
-
-          if (p.targetX !== undefined) {
-            ctx.beginPath();
-            ctx.moveTo(px0, pyStem);
-            ctx.lineTo(px1, py1);
-            ctx.stroke();
-          }
-
-          // Ponto de contato na ponta
-          ctx.fillStyle = "#fef08a";
+          ctx.strokeStyle = "#fef08a";
+          ctx.lineWidth = Math.max(1.5, pillarRadius * 1.3);
           ctx.beginPath();
-          ctx.arc(px1, py1, 2.5, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.moveTo(ptStemTop.x, ptStemTop.y);
+          ctx.lineTo(ptContact.x, ptContact.y);
+          ctx.stroke();
         }
-      }
 
-      // Modelo Dentário Isométrico em Azul
-      ctx.fillStyle = "rgba(14, 165, 233, 0.75)";
-      ctx.strokeStyle = "#0284c7";
-      ctx.lineWidth = 0.5;
-
-      const triCount = Math.floor(pos.length / 9);
-      const step = Math.max(1, Math.floor(triCount / 8000));
-      const zLift = result ? config.elevationZ : 0;
-
-      for (let t = 0; t < triCount; t += step) {
-        const off = t * 9;
-        const ax = isoX(pos[off], pos[off + 1]);
-        const ay = isoY(pos[off], pos[off + 1], pos[off + 2] + zLift);
-
-        const bx = isoX(pos[off + 3], pos[off + 4]);
-        const by = isoY(pos[off + 3], pos[off + 4], pos[off + 5] + zLift);
-
-        const cx = isoX(pos[off + 6], pos[off + 7]);
-        const cy = isoY(pos[off + 6], pos[off + 7], pos[off + 8] + zLift);
-
+        // Esfera destacada no Ponto de Contato com o modelo
+        ctx.fillStyle = "#fef08a";
+        ctx.strokeStyle = "#92400e";
+        ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(ax, ay);
-        ctx.lineTo(bx, by);
-        ctx.lineTo(cx, cy);
-        ctx.closePath();
+        ctx.arc(ptContact.x, ptContact.y, Math.max(2.8, pillarRadius * 1.2), 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
       }
-    }
-  }, [loadedModel, result, viewMode, config]);
+    };
+
+    // Função de desenho da Geometria do Modelo Dentário com Iluminação Realista (Shading 3D)
+    const drawModel = () => {
+      const triCount = Math.floor(pos.length / 9);
+      // Amostragem fluida para interatividade 60fps
+      const step = Math.max(1, Math.floor(triCount / 14000));
+
+      // Vetor de luz direcional fixo
+      const lx = 0.45;
+      const ly = 0.55;
+      const lz = 0.70;
+
+      for (let t = 0; t < triCount; t += step) {
+        const off = t * 9;
+        const ax = pos[off];
+        const ay = pos[off + 1];
+        const az = pos[off + 2] + zLift;
+
+        const bx = pos[off + 3];
+        const by = pos[off + 4];
+        const bz = pos[off + 5] + zLift;
+
+        const cx3 = pos[off + 6];
+        const cy3 = pos[off + 7];
+        const cz3 = pos[off + 8] + zLift;
+
+        // Vetores de aresta para normal da face
+        const abx = bx - ax;
+        const aby = by - ay;
+        const abz = bz - az;
+
+        const acx = cx3 - ax;
+        const acy = cy3 - ay;
+        const acz = cz3 - az;
+
+        let nx = aby * acz - abz * acy;
+        let ny = abz * acx - abx * acz;
+        let nz = abx * acy - aby * acx;
+        const nLen = Math.sqrt(nx * nx + ny * ny + nz * nz);
+
+        if (nLen > 0.00001) {
+          nx /= nLen;
+          ny /= nLen;
+          nz /= nLen;
+        }
+
+        // Normal no referencial da câmera
+        const rotNx = nx * cosY - ny * sinY;
+        const rotNy = nx * sinY + ny * cosY;
+        const camNz = rotNy * sinP - nz * cosP;
+
+        // Backface Culling: descarta faces viradas para trás quando não em Raio-X total
+        if (camNz < -0.05 && !xRay) {
+          continue;
+        }
+
+        // Iluminação Difusa com realce nas cúspides e cristas
+        const dot = nx * lx + ny * ly + nz * lz;
+        const diffuse = Math.max(0, dot);
+        const light = 0.22 + 0.78 * diffuse;
+
+        // Tons de resina azul odontológica fatiadora
+        const r = Math.round(14 + 18 * light);
+        const g = Math.round(100 * light + 25);
+        const b = Math.round(200 * light + 45);
+        const alpha = xRay ? 0.28 : 0.90;
+
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+
+        const pA = project(ax, ay, az);
+        const pB = project(bx, by, bz);
+        const pC = project(cx3, cy3, cz3);
+
+        ctx.beginPath();
+        ctx.moveTo(pA.x, pA.y);
+        ctx.lineTo(pB.x, pB.y);
+        ctx.lineTo(pC.x, pC.y);
+        ctx.closePath();
+        ctx.fill();
+
+        // Contorno sutil para revelar as facetas anatômicas do dente
+        if (!xRay) {
+          ctx.strokeStyle = `rgba(56, 189, 248, 0.12)`;
+          ctx.lineWidth = 0.4;
+          ctx.stroke();
+        }
+      }
+    };
+
+    // Ordem de desenho com prioridade para garantir total visibilidade dos suportes:
+    // Modelo desenhado com iluminação anatômica, seguido pelos suportes e esferas de contato
+    drawModel();
+    drawSupports();
+
+  }, [loadedModel, result, config, yaw, pitch, zoom, xRay, viewPreset]);
 
   return (
     <AppShell>
@@ -691,54 +867,102 @@ export default function SuportesPage() {
 
           {/* Coluna Direita: Visualizador 3D / Canvas Preview */}
           <div className="lg:col-span-7 rounded-2xl border border-slate-800 bg-slate-900/50 p-4 space-y-3 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                  <Layers className="w-4 h-4 text-cyan-400" /> Prévia da Bancada
+                  <Layers className="w-4 h-4 text-cyan-400" /> Prévia da Bancada 3D
                 </span>
                 <span className="text-[10px] text-slate-500 hidden sm:inline">
-                  (Modelos em azul · Suportes e balsa em amarelo)
+                  (Órbita 360° · Iluminação Anatômica)
                 </span>
               </div>
 
-              {/* Alternador de Vista (Topo / Isométrica) */}
-              <div className="flex items-center bg-slate-950 border border-slate-800 rounded-lg p-0.5 text-[11px]">
+              {/* Barra de Controles: Presets e Raio-X */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <div className="flex items-center bg-slate-950 border border-slate-800 rounded-lg p-0.5 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => applyPreset("iso")}
+                    className={`px-2.5 py-1 rounded-md font-medium transition ${
+                      viewPreset === "iso"
+                        ? "bg-slate-800 text-white font-bold"
+                        : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    Perspectiva 3D
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyPreset("bottom")}
+                    className={`px-2.5 py-1 rounded-md font-medium transition ${
+                      viewPreset === "bottom"
+                        ? "bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30"
+                        : "text-amber-400 hover:text-amber-200"
+                    }`}
+                    title="Olhar por baixo para inspecionar os suportes e pontos de contato"
+                  >
+                    Por Baixo (Ver Suportes)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyPreset("top")}
+                    className={`px-2.5 py-1 rounded-md font-medium transition ${
+                      viewPreset === "top"
+                        ? "bg-slate-800 text-white font-bold"
+                        : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    Topo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyPreset("front")}
+                    className={`px-2.5 py-1 rounded-md font-medium transition ${
+                      viewPreset === "front"
+                        ? "bg-slate-800 text-white font-bold"
+                        : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    Frente
+                  </button>
+                </div>
+
+                {/* Alternador de Modo Raio-X */}
                 <button
                   type="button"
-                  onClick={() => setViewMode("top")}
-                  className={`px-2.5 py-1 rounded-md font-medium transition ${
-                    viewMode === "top"
-                      ? "bg-slate-800 text-white font-bold"
-                      : "text-slate-400 hover:text-slate-200"
+                  onClick={() => setXRay((prev) => !prev)}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition ${
+                    xRay
+                      ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40"
+                      : "bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200"
                   }`}
+                  title="Ativa transparência vítrea no modelo para ver os suportes ocultos"
                 >
-                  Topo (Planta)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode("iso")}
-                  className={`px-2.5 py-1 rounded-md font-medium transition ${
-                    viewMode === "iso"
-                      ? "bg-slate-800 text-white font-bold"
-                      : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  Perspectiva 3D
+                  {xRay ? <EyeOff className="w-3.5 h-3.5 text-cyan-400" /> : <Eye className="w-3.5 h-3.5 text-slate-400" />}
+                  Raio-X
                 </button>
               </div>
             </div>
 
-            {/* Canvas Interativo */}
-            <div className="relative rounded-xl overflow-hidden border border-slate-800 bg-slate-950 flex items-center justify-center min-h-[380px] sm:min-h-[460px]">
+            {/* Canvas Interativo com Rotação 360° e Zoom */}
+            <div className="relative rounded-xl overflow-hidden border border-slate-800 bg-slate-950 flex items-center justify-center min-h-[400px] sm:min-h-[480px]">
               <canvas
                 ref={canvasRef}
-                width={640}
-                height={460}
-                className="w-full h-auto max-h-[460px] object-contain block"
+                width={720}
+                height={480}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onWheel={handleWheel}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                className="w-full h-auto max-h-[480px] object-contain block cursor-grab active:cursor-grabbing select-none"
               />
 
               {!loadedModel && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-slate-950/80">
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-slate-950/80 pointer-events-none">
                   <Anchor className="w-10 h-10 text-slate-700 mb-2" />
                   <p className="text-xs text-slate-400 max-w-xs">
                     Arraste ou selecione um arquivo de mesa (.stl) para visualizar e aplicar os suportes médios.
@@ -746,16 +970,58 @@ export default function SuportesPage() {
                 </div>
               )}
 
-              {/* Legenda Flutuante estilo Fatiador */}
+              {/* Controles Flutuantes de Zoom e Reset */}
               {loadedModel && (
-                <div className="absolute bottom-3 left-3 bg-slate-950/85 backdrop-blur-md border border-slate-800/80 px-3 py-1.5 rounded-lg flex items-center gap-3 text-[10px]">
+                <div className="absolute top-3 right-3 flex flex-col gap-1.5 bg-slate-950/80 backdrop-blur-md border border-slate-800 p-1 rounded-lg z-10 shadow-lg">
+                  <button
+                    type="button"
+                    onClick={() => handleZoom(0.2)}
+                    title="Aproximar (Zoom In)"
+                    className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded transition"
+                  >
+                    <ZoomIn className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleZoom(-0.2)}
+                    title="Afastar (Zoom Out)"
+                    className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded transition"
+                  >
+                    <ZoomOut className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResetCamera}
+                    title="Restaurar Câmera"
+                    className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded transition"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {/* Dica de Interação */}
+              {loadedModel && (
+                <div className="absolute top-3 left-3 bg-slate-950/75 backdrop-blur-md border border-slate-800/80 px-2.5 py-1 rounded-md text-[10px] text-slate-400 pointer-events-none flex items-center gap-1.5">
+                  <Compass className="w-3 h-3 text-cyan-400" />
+                  <span>Arraste para girar 360° · Roda do mouse para zoom</span>
+                </div>
+              )}
+
+              {/* Legenda Flutuante estilo Fatiador Profissional */}
+              {loadedModel && (
+                <div className="absolute bottom-3 left-3 bg-slate-950/85 backdrop-blur-md border border-slate-800/80 px-3 py-1.5 rounded-lg flex items-center gap-3 text-[10px] flex-wrap pointer-events-none">
                   <span className="flex items-center gap-1.5 text-cyan-300 font-medium">
                     <span className="w-2.5 h-2.5 rounded-full bg-cyan-400" />
-                    Modelos Dentários
+                    Modelo (Resina Azul)
                   </span>
                   <span className="flex items-center gap-1.5 text-amber-300 font-medium">
                     <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
                     Suportes & Balsa
+                  </span>
+                  <span className="flex items-center gap-1.5 text-yellow-200 font-medium">
+                    <span className="w-2.5 h-2.5 rounded-full bg-yellow-200 ring-1 ring-amber-600" />
+                    Pontos de Contato
                   </span>
                 </div>
               )}
