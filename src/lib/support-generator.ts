@@ -645,10 +645,10 @@ export async function generateDentalSupports(
     }
   }
 
-  // 4b. SUPORTES LATERAIS (Paredes laterais inferiores do zócalo / contorno da base)
-  // Ancoragem perimetral reforçada em toda a extensão lateral contra distorção e sucção do FEP
+  // 4b. SUPORTES LATERAIS CONTÍNUOS (Paredes laterais do zócalo / contorno perimetral completo)
+  // Ancoragem perimetral contínua densa em toda a extensão lateral para evitar qualquer distorção mecânica
   const pRad = cfg.pillarDiameter / 2;
-  const lateralPillarOffset = pRad + 0.72; // Afasta a haste da parede lateral para não fundir
+  const lateralPillarOffset = pRad + 0.70; // Afasta a haste da parede lateral para não fundir
   const rawLateralCandidates: CandidatePoint[] = [];
 
   for (let t = 0; t < triCount; t++) {
@@ -658,11 +658,11 @@ export async function generateDentalSupports(
     const cz = modelPositions[off + 8] + zShift;
 
     const minTriZ = Math.min(az, bz, cz);
-    const centroidZ = (az + bz + cz) / 3;
+    const maxTriZ = Math.max(az, bz, cz);
 
     // RESTRIÇÃO CRÍTICA: Somente na base lateral inferior do zócalo.
     // NUNCA no topo, NUNCA nos dentes, NUNCA na gengiva.
-    if (centroidZ > maxSupportZ || minTriZ < elevatedMinZ - 0.5) continue;
+    if (minTriZ > maxSupportZ || minTriZ < elevatedMinZ - 0.5) continue;
 
     const ax = modelPositions[off];
     const ay = modelPositions[off + 1];
@@ -673,34 +673,53 @@ export async function generateDentalSupports(
 
     const norm = computeNormal(ax, ay, az, bx, by, bz, cx, cy, cz);
 
-    // Deve ser uma parede lateral apontando para fora do modelo (inclui zócalos com alívio até 0.30 de Nz)
+    // Deve ser uma parede lateral apontando para fora do modelo.
+    // Aceita alívios de conicidade de zócalos odontológicos até ~53° (norm.nz <= 0.60 e len2D >= 0.15)
+    // E também paredes ligeiramente voltadas para baixo (norm.nz >= -0.70).
     const len2D = Math.hypot(norm.nx, norm.ny);
-    if (len2D < 0.20 || norm.nz > 0.30) continue;
+    if (len2D < 0.15 || norm.nz > 0.60 || norm.nz < -0.70) continue;
 
-    const unx = norm.nx / len2D;
-    const uny = norm.ny / len2D;
+    // Amostragem densa: subdivide triângulos longos da lateral para cobrir todo o contorno sem lacunas
+    const edgeAB = Math.hypot(bx - ax, by - ay);
+    const edgeBC = Math.hypot(cx - bx, cy - by);
+    const edgeCA = Math.hypot(ax - cx, ay - cy);
+    const maxEdge = Math.max(edgeAB, edgeBC, edgeCA);
 
-    const centroidX = (ax + bx + cx) / 3;
-    const centroidY = (ay + by + cy) / 3;
+    // Número de divisões baseado no comprimento da face lateral
+    const numSubdivs = Math.max(1, Math.min(12, Math.ceil(maxEdge / 1.15)));
 
-    // Haste do pilar fica posicionada FORA da parede lateral do modelo
-    const px = centroidX + unx * lateralPillarOffset;
-    const py = centroidY + uny * lateralPillarOffset;
+    for (let si = 0; si <= numSubdivs; si++) {
+      for (let sj = 0; sj <= numSubdivs - si; sj++) {
+        // Coordenadas baricêntricas para cobrir a superfície da face
+        const w1 = numSubdivs === 1 ? 1 / 3 : si / numSubdivs;
+        const w2 = numSubdivs === 1 ? 1 / 3 : sj / numSubdivs;
+        const w3 = 1 - w1 - w2;
 
-    rawLateralCandidates.push({
-      x: px,
-      y: py,
-      zContact: centroidZ,
-      normal: norm,
-      targetX: centroidX,
-      targetY: centroidY,
-      isLateral: true,
-    });
+        const ptZ = w1 * az + w2 * bz + w3 * cz;
+        if (ptZ > maxSupportZ || ptZ < elevatedMinZ) continue;
+
+        const ptX = w1 * ax + w2 * bx + w3 * cx;
+        const ptY = w1 * ay + w2 * by + w3 * cy;
+
+        rawLateralCandidates.push({
+          x: ptX,
+          y: ptY,
+          zContact: ptZ,
+          normal: norm,
+          targetX: ptX,
+          targetY: ptY,
+          isLateral: true,
+        });
+
+        if (numSubdivs === 1) break; // Triângulos pequenos usam centróide único
+      }
+      if (numSubdivs === 1) break;
+    }
   }
 
-  // Filtra candidatos laterais com espaçamento perimetral denso (garante quantidade reforçada para sustentar)
-  // Passo calibrado para ~1.10 - 1.25 mm para formar barreira lateral contínua anti-empenamento
-  const latSpacing = Math.max(1.10, cfg.supportSpacing * 0.38);
+  // Filtra candidatos laterais com espaçamento perimetral denso (~1.10 mm)
+  // Garante que toda a lateral tenha suportes contínuos sem vazios
+  const latSpacing = Math.max(1.05, cfg.supportSpacing * 0.35);
   const latSpacingSq = latSpacing * latSpacing;
   const filteredLateralCandidates: CandidatePoint[] = [];
 
@@ -710,7 +729,9 @@ export async function generateDentalSupports(
     for (let j = 0; j < filteredLateralCandidates.length; j++) {
       const prev = filteredLateralCandidates[j];
       const dSq = (cand.x - prev.x) ** 2 + (cand.y - prev.y) ** 2;
-      if (dSq < latSpacingSq) {
+      // Permite suportes laterais empilhados em alturas Z diferentes na mesma parede do zócalo
+      const dz = Math.abs(cand.zContact - prev.zContact);
+      if (dSq < latSpacingSq && dz < 2.2) {
         tooClose = true;
         break;
       }
@@ -725,85 +746,107 @@ export async function generateDentalSupports(
   const raftZ = cfg.raftThickness;
   const safePillarDistSq = Math.pow(cfg.minPillarDistance, 2);
 
-  // Se o usuário passou minPillarDistance explícito (como em testes), respeitamos; senão usamos folga calibrada entre suportes laterais
+  // Se o usuário passou minPillarDistance explícito (como em testes unitários), respeitamos;
+  // senão usamos folga calibrada entre suportes laterais contínuos
   const effectiveLateralMinDist =
     userConfig.minPillarDistance !== undefined
       ? userConfig.minPillarDistance
-      : Math.max(1.40, cfg.pillarDiameter + 0.18);
+      : Math.max(1.35, cfg.pillarDiameter + 0.15);
   const effectiveLateralMinDistSq = Math.pow(effectiveLateralMinDist, 2);
   const stemRadiusWithClearance = pRad + cfg.modelClearance;
 
-  // 5a. Insere PRIMEIRO os suportes LATERAIS para garantir barreira perimetral contínua
+  // 5a. Insere PRIMEIRO os suportes LATERAIS com recuo adaptativo (garante barreira perimetral contínua)
   for (const cand of filteredLateralCandidates) {
-    const px = cand.x;
-    const py = cand.y;
+    const targetX = cand.targetX ?? cand.x;
+    const targetY = cand.targetY ?? cand.y;
     const zContact = cand.zContact;
 
     if (zContact <= raftZ + cfg.tipLength + 0.3) continue;
 
-    // Checagem anti-fusão com outros suportes já posicionados
-    let tooClose = false;
-    for (let pIdx = 0; pIdx < pillars.length; pIdx++) {
-      const p = pillars[pIdx];
-      const distSq = (px - p.x) * (px - p.x) + (py - p.y) * (py - p.y);
-      if (distSq < effectiveLateralMinDistSq) {
-        tooClose = true;
+    const normLen2D = Math.hypot(cand.normal.nx, cand.normal.ny) || 1;
+    const unx = cand.normal.nx / normLen2D;
+    const uny = cand.normal.ny / normLen2D;
+
+    // Tenta diferentes offsets de afastamento para a haste caso haja concavidade ou saliência na parede
+    let bestPillarPos: { px: number; py: number } | null = null;
+    const offsetMultipliers = [1.0, 1.25, 1.5, 1.8];
+
+    for (const mult of offsetMultipliers) {
+      const curOffset = lateralPillarOffset * mult;
+      const testPx = targetX + unx * curOffset;
+      const testPy = targetY + uny * curOffset;
+
+      // Checagem anti-fusão com outros suportes já posicionados
+      let tooClose = false;
+      for (let pIdx = 0; pIdx < pillars.length; pIdx++) {
+        const p = pillars[pIdx];
+        const distSq = (testPx - p.x) * (testPx - p.x) + (testPy - p.y) * (testPy - p.y);
+        if (distSq < effectiveLateralMinDistSq) {
+          tooClose = true;
+          break;
+        }
+      }
+      if (tooClose) {
+        // Já tem um pilar suficientemente próximo nesta região
+        bestPillarPos = null;
         break;
       }
-    }
-    if (tooClose) continue;
 
-    // Checagem anti-fusão com a parede do modelo
-    let shaftCollidesWithModel = false;
-    const zStemMax = zContact - cfg.tipLength;
-    const clearance = pRad + 0.18;
+      // Checagem de colisão da haste vertical com o modelo
+      let collides = false;
+      const zStemMax = zContact - cfg.tipLength;
+      const clearance = pRad + 0.16;
 
-    const gc0 = Math.max(0, Math.floor((px - clearance - startX) / spatialCellSize));
-    const gc1 = Math.min(gridCols - 1, Math.floor((px + clearance - startX) / spatialCellSize));
-    const gr0 = Math.max(0, Math.floor((py - clearance - startY) / spatialCellSize));
-    const gr1 = Math.min(gridRows - 1, Math.floor((py + clearance - startY) / spatialCellSize));
+      const gc0 = Math.max(0, Math.floor((testPx - clearance - startX) / spatialCellSize));
+      const gc1 = Math.min(gridCols - 1, Math.floor((testPx + clearance - startX) / spatialCellSize));
+      const gr0 = Math.max(0, Math.floor((testPy - clearance - startY) / spatialCellSize));
+      const gr1 = Math.min(gridRows - 1, Math.floor((testPy + clearance - startY) / spatialCellSize));
 
-    for (let gr = gr0; gr <= gr1 && !shaftCollidesWithModel; gr++) {
-      for (let gc = gc0; gc <= gc1 && !shaftCollidesWithModel; gc++) {
-        const triList = spatialGrid[gr * gridCols + gc];
-        for (let k = 0; k < triList.length; k++) {
-          const t = triList[k];
-          const off = t * 9;
+      for (let gr = gr0; gr <= gr1 && !collides; gr++) {
+        for (let gc = gc0; gc <= gc1 && !collides; gc++) {
+          const triList = spatialGrid[gr * gridCols + gc];
+          for (let k = 0; k < triList.length; k++) {
+            const t = triList[k];
+            const off = t * 9;
+            const az = modelPositions[off + 2] + zShift;
+            const bz = modelPositions[off + 5] + zShift;
+            const cz = modelPositions[off + 8] + zShift;
+            const tMinZ = Math.min(az, bz, cz);
 
-          const az = modelPositions[off + 2] + zShift;
-          const bz = modelPositions[off + 5] + zShift;
-          const cz = modelPositions[off + 8] + zShift;
+            if (tMinZ < zStemMax && Math.max(az, bz, cz) > raftZ) {
+              const ax = modelPositions[off];
+              const ay = modelPositions[off + 1];
+              const bx = modelPositions[off + 3];
+              const by = modelPositions[off + 4];
+              const cx = modelPositions[off + 6];
+              const cy = modelPositions[off + 7];
 
-          const tMinZ = Math.min(az, bz, cz);
-
-          if (tMinZ < zStemMax && Math.max(az, bz, cz) > raftZ) {
-            const ax = modelPositions[off];
-            const ay = modelPositions[off + 1];
-            const bx = modelPositions[off + 3];
-            const by = modelPositions[off + 4];
-            const cx = modelPositions[off + 6];
-            const cy = modelPositions[off + 7];
-
-            const d2D = distPointToTriangle2D(px, py, ax, ay, bx, by, cx, cy);
-            if (d2D < clearance) {
-              shaftCollidesWithModel = true;
-              break;
+              const d2D = distPointToTriangle2D(testPx, testPy, ax, ay, bx, by, cx, cy);
+              if (d2D < clearance) {
+                collides = true;
+                break;
+              }
             }
           }
         }
       }
+
+      if (!collides) {
+        bestPillarPos = { px: testPx, py: testPy };
+        break; // Posição perfeita encontrada!
+      }
     }
 
-    if (shaftCollidesWithModel) continue;
+    if (!bestPillarPos) continue;
 
     pillars.push({
-      x: px,
-      y: py,
+      x: bestPillarPos.px,
+      y: bestPillarPos.py,
       zBase: raftZ,
       zContact,
       height: zContact - raftZ,
-      targetX: cand.targetX,
-      targetY: cand.targetY,
+      targetX,
+      targetY,
       isLateral: true,
     });
   }

@@ -130,4 +130,33 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
     expect(result.pillars.length).toBe(result.pillarCount);
   });
+
+  it("gera amarração lateral densa e contínua em paredes com alívio sem deixar vazios", async () => {
+    // Cria modelo de zócalo com parede lateral de 35mm com conicidade de 25 graus
+    const tris: number[] = [
+      // Base inferior
+      0, 0, 0, 35, 0, 0, 35, 25, 0,
+      0, 0, 0, 35, 25, 0, 0, 25, 0,
+      // Parede lateral longa inclinada para fora (norm.nz ~ 0.40)
+      0, 0, 0, 35, 0, 0, 35, -2, 4,
+      0, 0, 0, 35, -2, 4, 0, -2, 4,
+      // Parede lateral oposta
+      0, 25, 0, 35, 25, 0, 35, 27, 4,
+      0, 25, 0, 35, 27, 4, 0, 27, 4,
+      // Topo oclusal alto (Z=16)
+      0, 0, 4, 35, 0, 4, 17, 12, 16,
+    ];
+    const pos = new Float32Array(tris);
+    const result = await generateDentalSupports(pos, { elevationZ: 5.0 });
+
+    const lateralPillars = result.pillars.filter((p) => p.isLateral || p.targetX !== undefined);
+    // Deve conter múltiplos suportes distribuídos ao longo da extensão de 35mm
+    expect(lateralPillars.length).toBeGreaterThanOrEqual(8);
+
+    // Valida que há suportes cobrindo diferentes trechos de X ao longo da parede de 35mm
+    const xs = lateralPillars.map((p) => p.x);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    expect(maxX - minX).toBeGreaterThanOrEqual(20);
+  });
 });

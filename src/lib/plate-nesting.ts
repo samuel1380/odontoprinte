@@ -115,11 +115,11 @@ function extractTriangles(buffer: ArrayBuffer): RawTriangles {
     if (bytes.length < 84) return false;
     const view = new DataView(buffer);
     const count = view.getUint32(80, true);
-    // Binário válido: tamanho exato = 84 + 50 × triângulos
-    if (84 + count * 50 === bytes.length) return true;
-    // Arquivo binário que começa com "solid": confia no cabeçalho
-    const head = new TextDecoder().decode(bytes.slice(0, 5)).toLowerCase();
-    if (head === "solid" && count > 0 && 84 + count * 50 <= bytes.length) return true;
+    // Binário válido: cabeçalho de 80 bytes + contagem uint32 de 4 bytes + 50 bytes por triângulo.
+    // Aceita arquivos com metadados de cor, thumbnails ou padding no final (84 + count * 50 <= bytes.length).
+    if (count > 0 && 84 + count * 50 <= bytes.length) return true;
+    // Arquivo binário vazio mas formatado
+    if (count === 0 && bytes.length === 84) return true;
     return false;
   };
 

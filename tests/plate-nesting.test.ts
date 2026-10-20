@@ -769,5 +769,40 @@ describe("raster", () => {
       expect(fMaxY - fMinY).toBeCloseTo(42.8, 4);
       expect(fMaxZ - fMinZ).toBeCloseTo(18.2, 4);
     });
+
+    it("ROBUSTEZ DE PARSER 1:1: lê STL binário com bytes extras/padding no final sem truncar medidas", async () => {
+      // Simula arquivo binário de 1 triângulo (50x40x20mm) com 256 bytes de metadados extras no final
+      const triCount = 1;
+      const validSize = 84 + triCount * 50;
+      const extraBytes = 256;
+      const buffer = new ArrayBuffer(validSize + extraBytes);
+      const view = new DataView(buffer);
+
+      // Header não começa com 'solid'
+      const headerStr = "Exocad Dental CAD Export";
+      for (let i = 0; i < headerStr.length; i++) view.setUint8(i, headerStr.charCodeAt(i));
+      view.setUint32(80, triCount, true);
+
+      // Triângulo 50x40x20
+      view.setFloat32(84 + 12, 0, true);
+      view.setFloat32(84 + 16, 0, true);
+      view.setFloat32(84 + 20, 0, true);
+
+      view.setFloat32(84 + 24, 50, true);
+      view.setFloat32(84 + 28, 0, true);
+      view.setFloat32(84 + 32, 0, true);
+
+      view.setFloat32(84 + 36, 0, true);
+      view.setFloat32(84 + 40, 40, true);
+      view.setFloat32(84 + 44, 20, true);
+
+      const parsed = await parseStlTriangles(buffer);
+      expect(parsed.count).toBe(1);
+
+      const dims = await parseStlDimensions(buffer);
+      expect(dims.x).toBe(50);
+      expect(dims.y).toBe(40);
+      expect(dims.z).toBe(20);
+    });
   });
 });

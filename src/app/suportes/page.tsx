@@ -72,6 +72,28 @@ export default function SuportesPage() {
   const [xRay, setXRay] = useState<boolean>(false);
   const [islands, setIslands] = useState<DetectedIsland[]>([]);
 
+  // Dimensões reais originais milimétricas do modelo (100% 1:1 sem redimensionamento)
+  const modelDims = useMemo(() => {
+    if (!loadedModel) return null;
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+    let minZ = Infinity, maxZ = -Infinity;
+    const pos = loadedModel.positions;
+    for (let i = 0; i < pos.length; i += 3) {
+      if (pos[i] < minX) minX = pos[i];
+      if (pos[i] > maxX) maxX = pos[i];
+      if (pos[i + 1] < minY) minY = pos[i + 1];
+      if (pos[i + 1] > maxY) maxY = pos[i + 1];
+      if (pos[i + 2] < minZ) minZ = pos[i + 2];
+      if (pos[i + 2] > maxZ) maxZ = pos[i + 2];
+    }
+    return {
+      w: Math.round((maxX - minX) * 10) / 10,
+      d: Math.round((maxY - minY) * 10) / 10,
+      h: Math.round((maxZ - minZ) * 10) / 10,
+    };
+  }, [loadedModel]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isDraggingRef = useRef<boolean>(false);
@@ -324,8 +346,9 @@ export default function SuportesPage() {
     const cy = (minY + maxY) / 2;
     const cz = minZ + ((maxZ - minZ) + zLift) / 2;
 
-    // Escala para enquadramento na tela
-    const maxDim = Math.max(modelW, modelD, modelH, Math.hypot(modelW, modelD) * 0.75);
+    // Escala para enquadramento na tela (estável: preserva proporção visual sem encolher o modelo pós-geração de suportes)
+    const rawModelH = maxZ - minZ || 1;
+    const maxDim = Math.max(modelW, modelD, rawModelH * 1.25, Math.hypot(modelW, modelD) * 0.72);
     const baseScale = Math.min((W - 80) / maxDim, (H - 80) / maxDim);
     const S = baseScale * zoom;
 
@@ -688,15 +711,37 @@ export default function SuportesPage() {
                   </div>
                 </div>
               ) : (
-                <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex items-center gap-3">
-                  <FileCheck2 className="w-6 h-6 text-emerald-400 shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-bold text-white truncate">{loadedModel.name}</p>
-                    <p className="text-[10px] text-slate-400">
-                      {(loadedModel.sizeBytes / (1024 * 1024)).toFixed(1)} MB ·{" "}
-                      {loadedModel.triangleCount.toLocaleString()} triângulos
-                    </p>
+                <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 space-y-2.5">
+                  <div className="flex items-center gap-3">
+                    <FileCheck2 className="w-6 h-6 text-emerald-400 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-white truncate">{loadedModel.name}</p>
+                      <p className="text-[10px] text-slate-400">
+                        {(loadedModel.sizeBytes / (1024 * 1024)).toFixed(1)} MB ·{" "}
+                        {loadedModel.triangleCount.toLocaleString()} triângulos
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
+                      Escala 1:1 Preservada
+                    </span>
                   </div>
+
+                  {modelDims && (
+                    <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-slate-800/80 text-[11px]">
+                      <div className="bg-slate-900/80 px-2 py-1 rounded-lg border border-slate-800">
+                        <span className="text-[9px] text-slate-500 block">Largura (X)</span>
+                        <strong className="text-slate-200 font-mono">{modelDims.w} mm</strong>
+                      </div>
+                      <div className="bg-slate-900/80 px-2 py-1 rounded-lg border border-slate-800">
+                        <span className="text-[9px] text-slate-500 block">Profund. (Y)</span>
+                        <strong className="text-slate-200 font-mono">{modelDims.d} mm</strong>
+                      </div>
+                      <div className="bg-slate-900/80 px-2 py-1 rounded-lg border border-slate-800">
+                        <span className="text-[9px] text-slate-500 block">Altura (Z)</span>
+                        <strong className="text-slate-200 font-mono">{modelDims.h} mm</strong>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -880,6 +925,15 @@ export default function SuportesPage() {
                   <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
                     <span className="text-[10px] text-slate-500 block">Tempo de Geração</span>
                     <span className="text-sm font-bold text-emerald-400">{result.durationMs} ms</span>
+                  </div>
+                  <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 col-span-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-slate-500">Dimensões da Peça (X × Y × Z)</span>
+                      <span className="text-[10px] text-emerald-400 font-semibold">Escala 1:1 original</span>
+                    </div>
+                    <span className="text-xs font-bold text-white font-mono mt-0.5 block">
+                      {modelDims ? `${modelDims.w} mm × ${modelDims.d} mm (altura ${modelDims.h} mm)` : `${result.bounds.width} × ${result.bounds.depth} mm`}
+                    </span>
                   </div>
                 </div>
 
