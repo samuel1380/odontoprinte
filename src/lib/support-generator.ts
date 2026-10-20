@@ -128,6 +128,52 @@ export const DENTAL_SUPPORT_PROFILES = {
 
 export type SupportProfileId = "FINE" | "MEDIUM" | "HEAVY" | "GOLD_MEDIUM" | "FINE_PRECISION" | "HEAVY_STRUCTURAL";
 
+export type DentalSupportCategoryId = "MODELS" | "VENEERS" | "CROWNS" | "GUIDES";
+
+export interface DentalSupportCategory {
+  id: DentalSupportCategoryId;
+  name: string;
+  label: string;
+  description: string;
+  badge: string;
+  isConfigured: boolean;
+}
+
+export const DENTAL_SUPPORT_CATEGORIES: Record<DentalSupportCategoryId, DentalSupportCategory> = {
+  MODELS: {
+    id: "MODELS",
+    name: "Modelos Dentários",
+    label: "Modelos Odontológicos (Zócalos & Arcadas)",
+    description: "Configurado para modelos de trabalho, alinhadores e zócalos com amarração perimetral lateral pesada anti-distorção.",
+    badge: "Configurado",
+    isConfigured: true,
+  },
+  VENEERS: {
+    id: "VENEERS",
+    name: "Facetas & Lentes",
+    label: "Facetas, Lentes & Fragmentos",
+    description: "Suportes delicados com micro-pontas para bordas incisais ultrafinas sem lascamentos (calibração específica em breve).",
+    badge: "Em breve",
+    isConfigured: false,
+  },
+  CROWNS: {
+    id: "CROWNS",
+    name: "Coroas & Sobre Dente",
+    label: "Coroas Unitárias, Pontes & Inlays",
+    description: "Ancoragem oclusal estratégica com proteção do bordo de assentamento protético (calibração específica em breve).",
+    badge: "Em breve",
+    isConfigured: false,
+  },
+  GUIDES: {
+    id: "GUIDES",
+    name: "Guias Cirúrgicos",
+    label: "Guias Cirúrgicos & Placas Miorrelaxantes",
+    description: "Sustentação pesada anti-deformação para assentamento passivo de anéis metálicos (calibração específica em breve).",
+    badge: "Em breve",
+    isConfigured: false,
+  },
+};
+
 export interface SupportPillarInfo {
   x: number;
   y: number;
@@ -600,9 +646,9 @@ export async function generateDentalSupports(
   }
 
   // 4b. SUPORTES LATERAIS (Paredes laterais inferiores do zócalo / contorno da base)
-  // Ancoragem perimetral essencial contra a sucção do FEP, sem tocar nos dentes nem na gengiva
+  // Ancoragem perimetral reforçada em toda a extensão lateral contra distorção e sucção do FEP
   const pRad = cfg.pillarDiameter / 2;
-  const lateralPillarOffset = pRad + 0.85; // Afasta a haste da parede lateral para não fundir
+  const lateralPillarOffset = pRad + 0.72; // Afasta a haste da parede lateral para não fundir
   const rawLateralCandidates: CandidatePoint[] = [];
 
   for (let t = 0; t < triCount; t++) {
@@ -614,7 +660,7 @@ export async function generateDentalSupports(
     const minTriZ = Math.min(az, bz, cz);
     const centroidZ = (az + bz + cz) / 3;
 
-    // RESTRIÇÃO CRÍTICA: Somente na base lateral inferior.
+    // RESTRIÇÃO CRÍTICA: Somente na base lateral inferior do zócalo.
     // NUNCA no topo, NUNCA nos dentes, NUNCA na gengiva.
     if (centroidZ > maxSupportZ || minTriZ < elevatedMinZ - 0.5) continue;
 
@@ -627,12 +673,9 @@ export async function generateDentalSupports(
 
     const norm = computeNormal(ax, ay, az, bx, by, bz, cx, cy, cz);
 
-    // Não pode apontar para cima (dentes, oclusal, cúspides)
-    if (norm.nz > 0.05) continue;
-
-    // Deve ser uma parede lateral apontando para fora do modelo
+    // Deve ser uma parede lateral apontando para fora do modelo (inclui zócalos com alívio até 0.30 de Nz)
     const len2D = Math.hypot(norm.nx, norm.ny);
-    if (len2D < 0.25) continue;
+    if (len2D < 0.20 || norm.nz > 0.30) continue;
 
     const unx = norm.nx / len2D;
     const uny = norm.ny / len2D;
@@ -656,7 +699,8 @@ export async function generateDentalSupports(
   }
 
   // Filtra candidatos laterais com espaçamento perimetral denso (garante quantidade reforçada para sustentar)
-  const latSpacing = Math.max(1.8, cfg.supportSpacing * 0.65);
+  // Passo calibrado para ~1.10 - 1.25 mm para formar barreira lateral contínua anti-empenamento
+  const latSpacing = Math.max(1.10, cfg.supportSpacing * 0.38);
   const latSpacingSq = latSpacing * latSpacing;
   const filteredLateralCandidates: CandidatePoint[] = [];
 
@@ -685,7 +729,7 @@ export async function generateDentalSupports(
   const effectiveLateralMinDist =
     userConfig.minPillarDistance !== undefined
       ? userConfig.minPillarDistance
-      : Math.max(1.8, cfg.pillarDiameter + 0.65);
+      : Math.max(1.40, cfg.pillarDiameter + 0.18);
   const effectiveLateralMinDistSq = Math.pow(effectiveLateralMinDist, 2);
   const stemRadiusWithClearance = pRad + cfg.modelClearance;
 
@@ -712,7 +756,7 @@ export async function generateDentalSupports(
     // Checagem anti-fusão com a parede do modelo
     let shaftCollidesWithModel = false;
     const zStemMax = zContact - cfg.tipLength;
-    const clearance = pRad + 0.28;
+    const clearance = pRad + 0.18;
 
     const gc0 = Math.max(0, Math.floor((px - clearance - startX) / spatialCellSize));
     const gc1 = Math.min(gridCols - 1, Math.floor((px + clearance - startX) / spatialCellSize));

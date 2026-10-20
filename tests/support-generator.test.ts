@@ -3,6 +3,7 @@ import {
   generateDentalSupports,
   DEFAULT_DENTAL_SUPPORT_CONFIG,
   DENTAL_SUPPORT_PROFILES,
+  DENTAL_SUPPORT_CATEGORIES,
 } from "../src/lib/support-generator";
 
 // Cria triângulos simples simulando a base de um modelo dentário (quadrado de 30x30mm na origem com triângulos inferiores)
@@ -45,6 +46,22 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     expect(DENTAL_SUPPORT_PROFILES.GOLD_MEDIUM).toBeDefined();
     expect(DENTAL_SUPPORT_PROFILES.FINE_PRECISION).toBeDefined();
     expect(DENTAL_SUPPORT_PROFILES.HEAVY_STRUCTURAL).toBeDefined();
+  });
+
+  it("disponibiliza categorias de suportes com 'Modelos Dentários' ativa e demais para expansão futura", () => {
+    expect(DENTAL_SUPPORT_CATEGORIES.MODELS).toBeDefined();
+    expect(DENTAL_SUPPORT_CATEGORIES.VENEERS).toBeDefined();
+    expect(DENTAL_SUPPORT_CATEGORIES.CROWNS).toBeDefined();
+    expect(DENTAL_SUPPORT_CATEGORIES.GUIDES).toBeDefined();
+
+    // Modelos está configurado e pronto para uso
+    expect(DENTAL_SUPPORT_CATEGORIES.MODELS.isConfigured).toBe(true);
+    expect(DENTAL_SUPPORT_CATEGORIES.MODELS.name).toBe("Modelos Dentários");
+
+    // Facetas, Coroas e Guias prontas para configuração posterior
+    expect(DENTAL_SUPPORT_CATEGORIES.VENEERS.isConfigured).toBe(false);
+    expect(DENTAL_SUPPORT_CATEGORIES.CROWNS.isConfigured).toBe(false);
+    expect(DENTAL_SUPPORT_CATEGORIES.GUIDES.isConfigured).toBe(false);
   });
 
   it("gera suportes, balsa e buffer STL binário válido", async () => {
