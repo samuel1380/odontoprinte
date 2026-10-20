@@ -16,10 +16,12 @@ import {
   detectPlate,
   unplacedReason,
   fmtMm,
+  rotPt,
   type ModelSize,
   type ModelGrid,
   type PackResult,
 } from "@/lib/plate-nesting";
+import { savePendingMesh } from "@/lib/mesh-storage";
 import { parseFileName, getWorkTypeBadgeInfo } from "@/lib/parse-filename";
 import { estimatePrintTime } from "@/lib/print-time";
 import { generateQRCodeSvg } from "@/lib/qrcode";
@@ -46,6 +48,11 @@ import {
   FileText,
   QrCode,
   Sparkles,
+  Layers,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  Compass,
 } from "lucide-react";
 
 interface UploadModel {
@@ -87,6 +94,54 @@ export default function MontagemPage() {
   const trianglesById = useRef(new Map<string, Float32Array>());
   const gridsById = useRef(new Map<string, ModelGrid>());
   const mapRef = useRef<HTMLCanvasElement>(null);
+
+  // Estados de visualização 3D e câmera da mesa
+  const [viewMode, setViewMode] = useState<"3d" | "2d">("3d");
+  const [yaw, setYaw] = useState<number>(-0.55);
+  const [pitch, setPitch] = useState<number>(0.48);
+  const [zoom, setZoom] = useState<number>(1.0);
+  const isDraggingRef = useRef<boolean>(false);
+  const lastMousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (viewMode !== "3d") return;
+    isDraggingRef.current = true;
+    lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDraggingRef.current || viewMode !== "3d") return;
+    const dx = e.clientX - lastMousePosRef.current.x;
+    const dy = e.clientY - lastMousePosRef.current.y;
+    lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+
+    setYaw((prev) => prev + dx * 0.008);
+    setPitch((prev) => {
+      const next = prev + dy * 0.008;
+      return Math.max(0.05, Math.min(Math.PI / 2 - 0.05, next));
+    });
+  };
+
+  const handleMouseUp = () => {
+    isDraggingRef.current = false;
+  };
+
+  const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
+    if (viewMode !== "3d") return;
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.1 : 0.9;
+    setZoom((prev) => Math.max(0.4, Math.min(4.0, +(prev * factor).toFixed(2))));
+  };
+
+  const handleZoom = (delta: number) => {
+    setZoom((prev) => Math.max(0.4, Math.min(4.0, +(prev + delta).toFixed(2))));
+  };
+
+  const handleResetCamera = () => {
+    setYaw(-0.55);
+    setPitch(0.48);
+    setZoom(1.0);
+  };
 
   useEffect(() => {
     OdontoPrintService.getPrinters()
@@ -283,61 +338,301 @@ export default function MontagemPage() {
     "#c084fc",
     "#2dd4bf",
   ];
+  // Renderização da Mesa em Canvas: Suporte a Prévia 3D Real (estilo Halot Box) e Mapa Técnico 2D
   useEffect(() => {
     const canvas = mapRef.current;
     if (!canvas || !result || !(effW > 0 && effD > 0)) return;
-    const S = 3; // px por mm
-    canvas.width = Math.max(1, Math.round(effW * S));
-    canvas.height = Math.max(1, Math.round(effD * S));
+
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.fillStyle = "#020617";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = "#334155";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(margin * S, margin * S, (effW - margin * 2) * S, (effD - margin * 2) * S);
-    result.placed.forEach((p, i) => {
-      const color = MAP_COLORS[i % MAP_COLORS.length];
-      const pix = (p as any).pix as
-        | { w: number; h: number; cells: number[]; cell: number }
-        | undefined;
-      ctx.fillStyle = color;
-      ctx.globalAlpha = 0.75;
-      let sx = 0;
-      let sy = 0;
-      let n = 0;
-      if (pix && pix.cells.length > 0) {
-        for (let j = 0; j < pix.h; j++) {
-          for (let k = 0; k < pix.w; k++) {
-            if (!pix.cells[j * pix.w + k]) continue;
-            const px = (p.x + k * pix.cell) * S;
-            const py = (p.y + j * pix.cell) * S;
-            ctx.fillRect(px, py, pix.cell * S, pix.cell * S);
-            sx += px + (pix.cell * S) / 2;
-            sy += py + (pix.cell * S) / 2;
-            n++;
-          }
-        }
-      } else {
-        ctx.fillRect(p.x * S, p.y * S, p.placedW * S, p.placedD * S);
-        sx = (p.x + p.placedW / 2) * S;
-        sy = (p.y + p.placedD / 2) * S;
-        n = 1;
-      }
-      ctx.globalAlpha = 1;
-      if (n > 0) {
-        ctx.fillStyle = "#0f172a";
+
+    if (viewMode === "3d") {
+      canvas.width = 720;
+      canvas.height = 460;
+      const W = canvas.width;
+      const H = canvas.height;
+
+      // Fundo escuro de alto contraste da bancada fatiadora
+      ctx.fillStyle = "#070b12";
+      ctx.fillRect(0, 0, W, H);
+
+      const maxModelZ = Math.max(0, ...models.map((m) => sized(m)?.z || 0));
+      const cx = effW / 2;
+      const cy = effD / 2;
+      const cz = (maxModelZ || 25) / 2;
+
+      const maxDim = Math.max(effW, effD, maxModelZ || 25, Math.hypot(effW, effD) * 0.7);
+      const baseScale = Math.min((W - 80) / maxDim, (H - 80) / maxDim);
+      const S = baseScale * zoom;
+
+      const cosY = Math.cos(yaw);
+      const sinY = Math.sin(yaw);
+      const cosP = Math.cos(pitch);
+      const sinP = Math.sin(pitch);
+
+      const project = (x: number, y: number, z: number) => {
+        const dx = x - cx;
+        const dy = y - cy;
+        const dz = z - cz;
+
+        const rx = dx * cosY - dy * sinY;
+        const ry = dx * sinY + dy * cosY;
+        const rz = dz;
+
+        const px = rx;
+        const py = ry * sinP - rz * cosP;
+        const depth = ry * cosP + rz * sinP;
+
+        return {
+          x: W / 2 + px * S,
+          y: H / 2 + py * S,
+          depth,
+        };
+      };
+
+      // 1. Chapa Metálica de Impressão (Build Plate) 3D
+      const p0 = project(0, 0, 0);
+      const p1 = project(effW, 0, 0);
+      const p2 = project(effW, effD, 0);
+      const p3 = project(0, effD, 0);
+
+      ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+      ctx.strokeStyle = "#334155";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.lineTo(p3.x, p3.y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Margem útil da chapa
+      const m0 = project(margin, margin, 0);
+      const m1 = project(effW - margin, margin, 0);
+      const m2 = project(effW - margin, effD - margin, 0);
+      const m3 = project(margin, effD - margin, 0);
+      ctx.strokeStyle = "rgba(56, 189, 248, 0.45)";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(m0.x, m0.y);
+      ctx.lineTo(m1.x, m1.y);
+      ctx.lineTo(m2.x, m2.y);
+      ctx.lineTo(m3.x, m3.y);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Grade milimétrica na chapa
+      ctx.strokeStyle = "rgba(30, 41, 59, 0.5)";
+      ctx.lineWidth = 0.7;
+      const stepMm = 20;
+      for (let gx = stepMm; gx < effW; gx += stepMm) {
+        const la = project(gx, 0, 0);
+        const lb = project(gx, effD, 0);
         ctx.beginPath();
-        ctx.arc(sx / n, sy / n, 9, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 11px sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(String(i + 1), sx / n, sy / n + 0.5);
+        ctx.moveTo(la.x, la.y);
+        ctx.lineTo(lb.x, lb.y);
+        ctx.stroke();
       }
-    });
-  }, [result, effW, effD]);
+      for (let gy = stepMm; gy < effD; gy += stepMm) {
+        const la = project(0, gy, 0);
+        const lb = project(effW, gy, 0);
+        ctx.beginPath();
+        ctx.moveTo(la.x, la.y);
+        ctx.lineTo(lb.x, lb.y);
+        ctx.stroke();
+      }
+
+      // 2. Renderização dos Modelos Odontológicos Posicionados na Mesa
+      const lx = 0.45;
+      const ly = 0.55;
+      const lz = 0.70;
+
+      result.placed.forEach((p, i) => {
+        const triangles = trianglesById.current.get(p.id);
+        const modelColor = MAP_COLORS[i % MAP_COLORS.length];
+
+        if (triangles && triangles.length >= 9) {
+          let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, minZ = Infinity;
+          for (let k = 0; k < triangles.length; k += 3) {
+            const x = triangles[k], y = triangles[k + 1], z = triangles[k + 2];
+            if (x < x0) x0 = x; if (y < y0) y0 = y;
+            if (x > x1) x1 = x; if (y > y1) y1 = y;
+            if (z < minZ) minZ = z;
+          }
+          const corners = [
+            rotPt(x0, y0, p.angle),
+            rotPt(x1, y0, p.angle),
+            rotPt(x0, y1, p.angle),
+            rotPt(x1, y1, p.angle),
+          ];
+          const minRotX = Math.min(corners[0].x, corners[1].x, corners[2].x, corners[3].x);
+          const minRotY = Math.min(corners[0].y, corners[1].y, corners[2].y, corners[3].y);
+          const tx = p.x - minRotX;
+          const ty = p.y - minRotY;
+          const drop = minZ;
+
+          const triCount = Math.floor(triangles.length / 9);
+          const step = Math.max(1, Math.floor(triCount / 6000));
+
+          for (let t = 0; t < triCount; t += step) {
+            const off = t * 9;
+            const aRot = rotPt(triangles[off], triangles[off + 1], p.angle);
+            const bRot = rotPt(triangles[off + 3], triangles[off + 4], p.angle);
+            const cRot = rotPt(triangles[off + 6], triangles[off + 7], p.angle);
+
+            const ax = aRot.x + tx;
+            const ay = aRot.y + ty;
+            const az = triangles[off + 2] - drop;
+
+            const bx = bRot.x + tx;
+            const by = bRot.y + ty;
+            const bz = triangles[off + 5] - drop;
+
+            const cx3 = cRot.x + tx;
+            const cy3 = cRot.y + ty;
+            const cz3 = triangles[off + 8] - drop;
+
+            const abx = bx - ax;
+            const aby = by - ay;
+            const abz = bz - az;
+
+            const acx = cx3 - ax;
+            const acy = cy3 - ay;
+            const acz = cz3 - az;
+
+            let nx = aby * acz - abz * acy;
+            let ny = abz * acx - abx * acz;
+            let nz = abx * acy - aby * acx;
+            const nLen = Math.sqrt(nx * nx + ny * ny + nz * nz);
+
+            if (nLen > 0.00001) {
+              nx /= nLen; ny /= nLen; nz /= nLen;
+            }
+
+            const rotNx = nx * cosY - ny * sinY;
+            const rotNy = nx * sinY + ny * cosY;
+            const camNz = rotNy * sinP - nz * cosP;
+
+            if (camNz < -0.05) continue;
+
+            const dot = nx * lx + ny * ly + nz * lz;
+            const diffuse = Math.max(0, dot);
+            const light = 0.22 + 0.78 * diffuse;
+
+            const r = Math.round(14 + 18 * light);
+            const g = Math.round(100 * light + 25);
+            const b = Math.round(200 * light + 45);
+            ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.90)`;
+
+            const ptA = project(ax, ay, az);
+            const ptB = project(bx, by, bz);
+            const ptC = project(cx3, cy3, cz3);
+
+            ctx.beginPath();
+            ctx.moveTo(ptA.x, ptA.y);
+            ctx.lineTo(ptB.x, ptB.y);
+            ctx.lineTo(ptC.x, ptC.y);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.strokeStyle = "rgba(56, 189, 248, 0.12)";
+            ctx.lineWidth = 0.4;
+            ctx.stroke();
+          }
+
+          // Marcador do número do modelo na mesa
+          const centerProj = project(p.x + p.placedW / 2, p.y + p.placedD / 2, (maxModelZ || 20) * 0.9);
+          ctx.fillStyle = "#0f172a";
+          ctx.beginPath();
+          ctx.arc(centerProj.x, centerProj.y, 10, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = modelColor;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "bold 11px sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(String(i + 1), centerProj.x, centerProj.y + 0.5);
+
+        } else {
+          // Caixa 3D para modelos sem geometria STL carregada
+          const b0 = project(p.x, p.y, 0);
+          const b1 = project(p.x + p.placedW, p.y, 0);
+          const b2 = project(p.x + p.placedW, p.y + p.placedD, 0);
+          const b3 = project(p.x, p.y + p.placedD, 0);
+
+          ctx.fillStyle = modelColor;
+          ctx.globalAlpha = 0.5;
+          ctx.beginPath();
+          ctx.moveTo(b0.x, b0.y);
+          ctx.lineTo(b1.x, b1.y);
+          ctx.lineTo(b2.x, b2.y);
+          ctx.lineTo(b3.x, b3.y);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+      });
+    } else {
+      // --- VISTA MAPA 2D TÉCNICO (DISTRIBUIÇÃO) ---
+      const S = 3; // px por mm
+      canvas.width = Math.max(1, Math.round(effW * S));
+      canvas.height = Math.max(1, Math.round(effD * S));
+      ctx.fillStyle = "#020617";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = "#334155";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(margin * S, margin * S, (effW - margin * 2) * S, (effD - margin * 2) * S);
+      result.placed.forEach((p, i) => {
+        const color = MAP_COLORS[i % MAP_COLORS.length];
+        const pix = (p as any).pix as
+          | { w: number; h: number; cells: number[]; cell: number }
+          | undefined;
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.75;
+        let sx = 0;
+        let sy = 0;
+        let n = 0;
+        if (pix && pix.cells.length > 0) {
+          for (let j = 0; j < pix.h; j++) {
+            for (let k = 0; k < pix.w; k++) {
+              if (!pix.cells[j * pix.w + k]) continue;
+              const px = (p.x + k * pix.cell) * S;
+              const py = (p.y + j * pix.cell) * S;
+              ctx.fillRect(px, py, pix.cell * S, pix.cell * S);
+              sx += px + (pix.cell * S) / 2;
+              sy += py + (pix.cell * S) / 2;
+              n++;
+            }
+          }
+        } else {
+          ctx.fillRect(p.x * S, p.y * S, p.placedW * S, p.placedD * S);
+          sx = (p.x + p.placedW / 2) * S;
+          sy = (p.y + p.placedD / 2) * S;
+          n = 1;
+        }
+        ctx.globalAlpha = 1;
+        if (n > 0) {
+          ctx.fillStyle = "#0f172a";
+          ctx.beginPath();
+          ctx.arc(sx / n, sy / n, 9, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "bold 11px sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(String(i + 1), sx / n, sy / n + 0.5);
+        }
+      });
+    }
+  }, [result, effW, effD, margin, viewMode, yaw, pitch, zoom, models]);
 
   const labelById = useMemo(() => {
     const map = new Map<string, string>();
@@ -486,7 +781,7 @@ export default function MontagemPage() {
     }
   };
 
-  const sendToSupports = () => {
+  const sendToSupports = async () => {
     if (!result || result.placed.length === 0) {
       router.push("/suportes");
       return;
@@ -496,7 +791,9 @@ export default function MontagemPage() {
       router.push("/suportes");
       return;
     }
+    setBuilding(true);
     try {
+      await new Promise((r) => setTimeout(r, 20));
       const buffer = buildPositionedStl(
         withGeo.map((p) => ({
           positions: trianglesById.current.get(p.id)!,
@@ -505,20 +802,14 @@ export default function MontagemPage() {
           angle: p.angle,
         }))
       );
-      const bytes = new Uint8Array(buffer);
-      let binary = "";
-      const chunk = 0x8000;
-      for (let i = 0; i < bytes.length; i += chunk) {
-        binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
-      }
-      sessionStorage.setItem("odontoprint_pending_supports_mesh", btoa(binary));
-      sessionStorage.setItem(
-        "odontoprint_pending_supports_name",
-        `mesa-${(printer?.name || "chapa").replace(/\s+/g, "-").toLowerCase()}.stl`
-      );
+      const fileName = `mesa-${(printer?.name || "chapa").replace(/\s+/g, "-").toLowerCase()}.stl`;
+      await savePendingMesh(buffer, fileName);
       router.push("/suportes");
-    } catch {
+    } catch (err: any) {
+      toast.error(err?.message || "Falha ao preparar mesa para suportes.");
       router.push("/suportes");
+    } finally {
+      setBuilding(false);
     }
   };
 
@@ -961,15 +1252,92 @@ export default function MontagemPage() {
                   Modelo com {fmtMm(maxZ)} passa da altura ({fmtMm(effH)}). Deite ou divida.
                 </p>
               )}
-              {packing && (
-                <p className="text-[11px] text-cyan-300 animate-pulse">Calculando melhor encaixe...</p>
-              )}
-              <canvas
-                ref={mapRef}
-                className="w-full h-auto max-h-[420px] rounded-xl bg-slate-950 border border-slate-800"
-                role="img"
-                aria-label="Mapa exato da chapa com os modelos encaixados"
-              />
+              {/* Barra de Alternância: Prévia 3D Real (estilo Halot Box) vs Mapa 2D */}
+              <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/80">
+                <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-lg p-0.5 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("3d")}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-medium transition ${
+                      viewMode === "3d"
+                        ? "bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30"
+                        : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    Prévia Real da Mesa (3D)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("2d")}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-medium transition ${
+                      viewMode === "2d"
+                        ? "bg-slate-800 text-white font-bold"
+                        : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    <LayoutGrid className="w-3.5 h-3.5" />
+                    Mapa Técnico (2D)
+                  </button>
+                </div>
+                <span className="text-[10px] text-slate-500 hidden sm:inline">
+                  {viewMode === "3d" ? "Visualização anatômica das peças na mesa" : "Layout de etiquetas e coordenadas"}
+                </span>
+              </div>
+
+              {/* Área do Canvas com Controles de Câmera Flutuantes */}
+              <div className="relative rounded-xl overflow-hidden border border-slate-800 bg-slate-950 flex items-center justify-center min-h-[380px] sm:min-h-[460px]">
+                <canvas
+                  ref={mapRef}
+                  onMouseDown={handleMouseDown}
+                  onMouseMove={handleMouseMove}
+                  onMouseUp={handleMouseUp}
+                  onMouseLeave={handleMouseUp}
+                  onWheel={handleWheel}
+                  className={`w-full h-auto max-h-[460px] object-contain block select-none ${
+                    viewMode === "3d" ? "cursor-grab active:cursor-grabbing" : ""
+                  }`}
+                  role="img"
+                  aria-label="Mapa da chapa com os modelos encaixados"
+                />
+
+                {/* Controles Flutuantes da Câmera 3D */}
+                {viewMode === "3d" && (
+                  <>
+                    <div className="absolute top-3 right-3 flex flex-col gap-1.5 bg-slate-950/80 backdrop-blur-md border border-slate-800 p-1 rounded-lg z-10 shadow-lg">
+                      <button
+                        type="button"
+                        onClick={() => handleZoom(0.2)}
+                        title="Aproximar (Zoom In)"
+                        className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded transition"
+                      >
+                        <ZoomIn className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleZoom(-0.2)}
+                        title="Afastar (Zoom Out)"
+                        className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded transition"
+                      >
+                        <ZoomOut className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleResetCamera}
+                        title="Restaurar Posição da Câmera"
+                        className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded transition"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <div className="absolute top-3 left-3 bg-slate-950/75 backdrop-blur-md border border-slate-800/80 px-2.5 py-1 rounded-md text-[10px] text-slate-400 pointer-events-none flex items-center gap-1.5">
+                      <Compass className="w-3 h-3 text-cyan-400" />
+                      <span>Arraste para girar a mesa 360° · Roda do mouse para zoom</span>
+                    </div>
+                  </>
+                )}
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <ol className="space-y-1 text-[11px] text-slate-300">
                   {result.placed.map((p, i) => (

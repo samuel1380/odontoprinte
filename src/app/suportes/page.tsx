@@ -41,6 +41,7 @@ import {
   levelAndOrientDentalModel,
   flipModel180,
 } from "@/lib/plate-nesting";
+import { getPendingMesh } from "@/lib/mesh-storage";
 import Link from "next/link";
 
 interface LoadedModel {
@@ -169,36 +170,32 @@ export default function SuportesPage() {
 
   // Verifica se veio alguma mesa gerada recentemente da tela de Montagem
   useEffect(() => {
-    try {
-      const stored = sessionStorage.getItem("odontoprint_pending_supports_mesh");
-      const storedName = sessionStorage.getItem("odontoprint_pending_supports_name");
-      if (stored) {
-        sessionStorage.removeItem("odontoprint_pending_supports_mesh");
-        sessionStorage.removeItem("odontoprint_pending_supports_name");
-
-        const binaryString = atob(stored);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-
-        parseStlTriangles(bytes.buffer)
+    let active = true;
+    getPendingMesh()
+      .then((data) => {
+        if (!active || !data) return;
+        parseStlTriangles(data.buffer)
           .then((parsed) => {
+            if (!active) return;
             setLoadedModel({
-              name: storedName || "mesa-montada.stl",
-              sizeBytes: bytes.byteLength,
+              name: data.fileName || "mesa-montada.stl",
+              sizeBytes: data.buffer.byteLength,
               positions: parsed.positions,
               triangleCount: parsed.count,
             });
-            toast.success("Mesa importada da seção de Montagem!");
+            toast.success(`Mesa "${data.fileName}" importada com sucesso (${parsed.count.toLocaleString()} triângulos)!`);
           })
           .catch(() => {
-            // ignora
+            toast.error("Erro ao interpretar a malha da mesa montada.");
           });
-      }
-    } catch {
-      // armazenamento local indisponível ou vazio
-    }
+      })
+      .catch(() => {
+        // ignora se vazio
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Processa o arquivo STL recebido (arrastado ou selecionado)

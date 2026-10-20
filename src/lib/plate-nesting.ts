@@ -279,7 +279,7 @@ export interface PlacementSpec {
 }
 
 /** Gira em sentido horário (90° exatos preservados). */
-function rotPt(x: number, y: number, angleDeg: number): { x: number; y: number } {
+export function rotPt(x: number, y: number, angleDeg: number): { x: number; y: number } {
   const a = ((angleDeg % 360) + 360) % 360;
   if (a === 0) return { x, y };
   if (a === 90) return { x: y, y: -x };
