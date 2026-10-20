@@ -159,4 +159,44 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     const maxX = Math.max(...xs);
     expect(maxX - minX).toBeGreaterThanOrEqual(20);
   });
+
+  it("conecta suportes até o topo na lateral posterior e desce acompanhando a gengiva na frente sem tocar dentes", async () => {
+    // Modelo com parede traseira alta livre de dentes (X=0 a 10, Y=0, Z=0 a 14)
+    // e dentes/gengiva na região anterior (X=20 a 30, Y=0 a 10, Z=8 a 15)
+    const tris: number[] = [
+      // Base plana
+      0, 0, 0, 30, 0, 0, 30, 20, 0,
+      0, 0, 0, 30, 20, 0, 0, 20, 0,
+      // Parede lateral posterior alta (X de 0 a 10, Z até 12)
+      0, 0, 0, 10, 0, 0, 10, -1, 12,
+      0, 0, 0, 10, -1, 12, 0, -1, 12,
+      // Parede lateral anterior (X de 20 a 30, Z até 7)
+      20, 0, 0, 30, 0, 0, 30, -1, 7,
+      20, 0, 0, 30, -1, 7, 20, -1, 7,
+      // Dentes / gengiva na região anterior (apenas em X >= 18, voltados para cima norm.nz > 0.5, Z de 8 a 15)
+      18, 0, 8, 30, 0, 8, 25, 10, 15,
+    ];
+
+    const pos = new Float32Array(tris);
+    const elevationZ = 5.0;
+    const result = await generateDentalSupports(pos, { elevationZ });
+
+    const lateralPillars = result.pillars.filter((p) => p.isLateral || p.targetX !== undefined);
+    expect(lateralPillars.length).toBeGreaterThan(0);
+
+    // Suportes na região posterior (X <= 10) devem subir alto na parede
+    const posteriorPillars = lateralPillars.filter((p) => (p.targetX ?? p.x) <= 12);
+    expect(posteriorPillars.length).toBeGreaterThan(0);
+    const maxPosteriorZ = Math.max(...posteriorPillars.map((p) => p.zContact));
+    expect(maxPosteriorZ).toBeGreaterThan(elevationZ + 6.0);
+
+    // Suportes na região anterior (X >= 20, onde há dentes/gengiva em Z=8 + 5 = 13)
+    // NUNCA podem tocar na gengiva ou dentes (ficam com teto seguro)
+    const anteriorPillars = lateralPillars.filter((p) => (p.targetX ?? p.x) >= 18);
+    for (const p of anteriorPillars) {
+      // Gengiva começa em Z = 8.0 + elevationZ = 13.0
+      // Suportes descem e respeitam a margem de segurança cervical
+      expect(p.zContact).toBeLessThan(elevationZ + 8.0);
+    }
+  });
 });

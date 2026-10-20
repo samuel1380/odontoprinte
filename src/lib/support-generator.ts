@@ -556,6 +556,81 @@ export async function generateDentalSupports(
     }
   }
 
+  // 3b. Mapeamento Anatômico da Margem Gengival / Oclusal
+  // Identifica a cota onde começam gengiva e dentes (superfícies voltadas para cima norm.nz > 0.30)
+  const gingivaGridCell = 2.5; // mm
+  const gingivaCols = Math.max(1, Math.ceil((endX - startX) / gingivaGridCell));
+  const gingivaRows = Math.max(1, Math.ceil((endY - startY) / gingivaGridCell));
+  const minGingivaGrid = new Float32Array(gingivaCols * gingivaRows);
+  minGingivaGrid.fill(Infinity);
+
+  for (let t = 0; t < triCount; t++) {
+    const off = t * 9;
+    const ax = modelPositions[off];
+    const ay = modelPositions[off + 1];
+    const az = modelPositions[off + 2] + zShift;
+
+    const bx = modelPositions[off + 3];
+    const by = modelPositions[off + 4];
+    const bz = modelPositions[off + 5] + zShift;
+
+    const cx = modelPositions[off + 6];
+    const cy = modelPositions[off + 7];
+    const cz = modelPositions[off + 8] + zShift;
+
+    const norm = computeNormal(ax, ay, az, bx, by, bz, cx, cy, cz);
+
+    // Gengiva e Dentes: superfícies voltadas para cima (norm.nz > 0.25)
+    // localizadas acima do plano da base inferior do zócalo
+    const minZTri = Math.min(az, bz, cz);
+    if (norm.nz > 0.25 && minZTri >= elevatedMinZ + 1.2) {
+      const tMinX = Math.min(ax, bx, cx);
+      const tMaxX = Math.max(ax, bx, cx);
+      const tMinY = Math.min(ay, by, cy);
+      const tMaxY = Math.max(ay, by, cy);
+
+      const gi0 = Math.max(0, Math.floor((tMinX - startX) / gingivaGridCell));
+      const gi1 = Math.min(gingivaCols - 1, Math.floor((tMaxX - startX) / gingivaGridCell));
+      const gj0 = Math.max(0, Math.floor((tMinY - startY) / gingivaGridCell));
+      const gj1 = Math.min(gingivaRows - 1, Math.floor((tMaxY - startY) / gingivaGridCell));
+
+      for (let gj = gj0; gj <= gj1; gj++) {
+        for (let gi = gi0; gi <= gi1; gi++) {
+          const idx = gj * gingivaCols + gi;
+          if (minZTri < minGingivaGrid[idx]) {
+            minGingivaGrid[idx] = minZTri;
+          }
+        }
+      }
+    }
+  }
+
+  // Teto seguro anatômico:
+  // - Perto de dentes e gengivas: desce acompanhando a linha cervical (com margem de 1.2 mm abaixo da gengiva)
+  // - Na parte posterior alta do zócalo (livre de dentes/gengiva acima): sobe até o topo da parede do zócalo
+  const getSafeLateralMaxZ = (px: number, py: number): number => {
+    const gi = Math.floor((px - startX) / gingivaGridCell);
+    const gj = Math.floor((py - startY) / gingivaGridCell);
+    let minGingiva = Infinity;
+    const rad = 2; // raio de ~5 mm
+    for (let dj = -rad; dj <= rad; dj++) {
+      for (let di = -rad; di <= rad; di++) {
+        const ni = gi + di;
+        const nj = gj + dj;
+        if (ni >= 0 && ni < gingivaCols && nj >= 0 && nj < gingivaRows) {
+          const gz = minGingivaGrid[nj * gingivaCols + ni];
+          if (gz < minGingiva) minGingiva = gz;
+        }
+      }
+    }
+    if (minGingiva !== Infinity) {
+      // Região com gengiva/dentes acima: desce à medida que se aproxima dos dentes/gengiva
+      return Math.max(elevatedMinZ + 1.2, Math.min(minGingiva - 1.2, elevatedMinZ + modelH * 0.40));
+    }
+    // Região posterior alta do zócalo (livre de dentes em cima): sobe até perto do topo da parede
+    return elevatedMinZ + Math.min(modelH * 0.88, 28.0);
+  };
+
   // 4. Amostragem de Suportes Odontológicos: Embaixo e nas Laterais Inferiores
   // REGRA INVIOLÁVEL: NUNCA no topo, NUNCA nos dentes, NUNCA na gengiva.
   // Suportes são restritos estritamente ao plano inferior e às paredes laterais da base (zócalo).
@@ -646,7 +721,7 @@ export async function generateDentalSupports(
   }
 
   // 4b. SUPORTES LATERAIS CONTÍNUOS (Paredes laterais do zócalo / contorno perimetral completo)
-  // Ancoragem perimetral contínua densa em toda a extensão lateral para evitar qualquer distorção mecânica
+  // Conectores sobem na lateral até o topo do zócalo atrás e descem acompanhando a gengiva na frente
   const pRad = cfg.pillarDiameter / 2;
   const lateralPillarOffset = pRad + 0.70; // Afasta a haste da parede lateral para não fundir
   const rawLateralCandidates: CandidatePoint[] = [];
@@ -658,11 +733,7 @@ export async function generateDentalSupports(
     const cz = modelPositions[off + 8] + zShift;
 
     const minTriZ = Math.min(az, bz, cz);
-    const maxTriZ = Math.max(az, bz, cz);
-
-    // RESTRIÇÃO CRÍTICA: Somente na base lateral inferior do zócalo.
-    // NUNCA no topo, NUNCA nos dentes, NUNCA na gengiva.
-    if (minTriZ > maxSupportZ || minTriZ < elevatedMinZ - 0.5) continue;
+    if (minTriZ < elevatedMinZ - 0.5) continue;
 
     const ax = modelPositions[off];
     const ay = modelPositions[off + 1];
@@ -673,33 +744,31 @@ export async function generateDentalSupports(
 
     const norm = computeNormal(ax, ay, az, bx, by, bz, cx, cy, cz);
 
-    // Deve ser uma parede lateral apontando para fora do modelo.
-    // Aceita alívios de conicidade de zócalos odontológicos até ~53° (norm.nz <= 0.60 e len2D >= 0.15)
-    // E também paredes ligeiramente voltadas para baixo (norm.nz >= -0.70).
+    // Parede lateral apontando para fora do modelo (zócalos verticais e com conicidade de alívio)
     const len2D = Math.hypot(norm.nx, norm.ny);
     if (len2D < 0.15 || norm.nz > 0.60 || norm.nz < -0.70) continue;
 
-    // Amostragem densa: subdivide triângulos longos da lateral para cobrir todo o contorno sem lacunas
     const edgeAB = Math.hypot(bx - ax, by - ay);
     const edgeBC = Math.hypot(cx - bx, cy - by);
     const edgeCA = Math.hypot(ax - cx, ay - cy);
     const maxEdge = Math.max(edgeAB, edgeBC, edgeCA);
 
-    // Número de divisões baseado no comprimento da face lateral
+    // Amostragem densa ao longo do perímetro da face
     const numSubdivs = Math.max(1, Math.min(12, Math.ceil(maxEdge / 1.15)));
 
     for (let si = 0; si <= numSubdivs; si++) {
       for (let sj = 0; sj <= numSubdivs - si; sj++) {
-        // Coordenadas baricêntricas para cobrir a superfície da face
         const w1 = numSubdivs === 1 ? 1 / 3 : si / numSubdivs;
         const w2 = numSubdivs === 1 ? 1 / 3 : sj / numSubdivs;
         const w3 = 1 - w1 - w2;
 
         const ptZ = w1 * az + w2 * bz + w3 * cz;
-        if (ptZ > maxSupportZ || ptZ < elevatedMinZ) continue;
-
         const ptX = w1 * ax + w2 * bx + w3 * cx;
         const ptY = w1 * ay + w2 * by + w3 * cy;
+
+        // Teto anatômico calculado: desce perto dos dentes e sobe até o topo do zócalo atrás
+        const safeMaxZ = getSafeLateralMaxZ(ptX, ptY);
+        if (ptZ > safeMaxZ || ptZ < elevatedMinZ) continue;
 
         rawLateralCandidates.push({
           x: ptX,
@@ -711,7 +780,7 @@ export async function generateDentalSupports(
           isLateral: true,
         });
 
-        if (numSubdivs === 1) break; // Triângulos pequenos usam centróide único
+        if (numSubdivs === 1) break;
       }
       if (numSubdivs === 1) break;
     }
