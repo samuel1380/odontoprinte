@@ -115,6 +115,9 @@ export interface PrintJobItem {
   parent_item_id?: string | null;
   reprint_count?: number;
   reprint_reason?: string | null;
+  qc_photo_url?: string | null;
+  qc_notes?: string | null;
+  qc_approved_at?: string | null;
   created_at: string;
   updated_at?: string;
 }
@@ -131,6 +134,13 @@ export interface Printer {
   plate_width_mm?: number | null;
   plate_depth_mm?: number | null;
   plate_height_mm?: number | null;
+  /** Monitor de Consumíveis: Vida útil do FEP e LCD */
+  fep_layers_current?: number | null;
+  fep_layers_limit?: number | null;
+  lcd_hours_current?: number | null;
+  lcd_hours_limit?: number | null;
+  last_fep_replacement_at?: string | null;
+  last_lcd_replacement_at?: string | null;
   created_at: string;
   updated_at?: string;
 }
@@ -232,6 +242,9 @@ export interface PrintBatch {
   printer_id?: string | null;
   status: "AGUARDANDO" | "EM_PREPARO" | "IMPRIMINDO" | "CONCLUIDO" | "FALHOU";
   failure_reason?: string | null;
+  qc_photo_url?: string | null;
+  qc_notes?: string | null;
+  qc_approved_at?: string | null;
   created_by?: string | null;
   created_at: string;
   updated_at?: string;

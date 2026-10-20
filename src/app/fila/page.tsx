@@ -53,6 +53,7 @@ import {
   Check,
   Printer,
   Layers,
+  Camera,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -200,6 +201,78 @@ export default function FilaPage() {
     to: "PREPARANDO" | "CONCLUIDO";
   } | null>(null);
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+
+  // Filtro de SLA Urgentes
+  const [onlyUrgentSla, setOnlyUrgentSla] = useState(false);
+
+  // Estados para Registro Fotográfico de CQ
+  const [qcModalOpen, setQcModalOpen] = useState(false);
+  const [qcBatchId, setQcBatchId] = useState<string | null>(null);
+  const [qcItemIds, setQcItemIds] = useState<string[]>([]);
+  const [qcPhotoPreview, setQcPhotoPreview] = useState<string | null>(null);
+  const [qcNotes, setQcNotes] = useState("");
+  const [qcSaving, setQcSaving] = useState(false);
+
+  // Modal para Visualização de Foto de CQ
+  const [qcViewModalOpen, setQcViewModalOpen] = useState(false);
+  const [qcViewPhoto, setQcViewPhoto] = useState<string | null>(null);
+  const [qcViewNotes, setQcViewNotes] = useState<string | null>(null);
+
+  const handleOpenQc = (batchId?: string | null, itemIds?: string[]) => {
+    setQcBatchId(batchId || null);
+    setQcItemIds(itemIds || []);
+    setQcPhotoPreview(null);
+    setQcNotes("");
+    setQcModalOpen(true);
+  };
+
+  const handleViewQcPhoto = (photoUrl: string, notes?: string) => {
+    setQcViewPhoto(photoUrl);
+    setQcViewNotes(notes || null);
+    setQcViewModalOpen(true);
+  };
+
+  const handleQcPhotoFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Por favor, selecione um arquivo de imagem.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setQcPhotoPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveQc = async () => {
+    if (!qcPhotoPreview) {
+      toast.error("Tire ou anexe uma foto da peça impressa para o CQ.");
+      return;
+    }
+    setQcSaving(true);
+    try {
+      const res = await OdontoPrintService.recordQualityControl({
+        batch_id: qcBatchId || undefined,
+        item_ids: qcItemIds,
+        photo_url: qcPhotoPreview,
+        notes: qcNotes,
+        user_name: user?.full_name || "Operador",
+      });
+      if (!res.success) {
+        toast.error(res.error || "Erro ao salvar CQ.");
+        return;
+      }
+      toast.success("Foto e aprovação de Controle de Qualidade registradas com sucesso!");
+      setQcModalOpen(false);
+      loadData({ silent: true });
+    } catch {
+      toast.error("Falha ao salvar CQ.");
+    } finally {
+      setQcSaving(false);
+    }
+  };
 
   // Impressões em andamento (ordens EM_IMPRESSAO vinculadas à fila)
   const [activeRuns, setActiveRuns] = useState<ActiveRunInfo[]>([]);
@@ -632,9 +705,19 @@ export default function FilaPage() {
         const inPrinter = g.printer_name ? g.printer_name.toLowerCase().includes(q) : false;
         if (!inTitle && !inPrinter && !g.items.some((c) => cardMatchesQuery(c, q))) return false;
       }
+      if (
+        onlyUrgentSla &&
+        !g.items.some(
+          (c) =>
+            c.priority === "URGENTE" ||
+            (c.due_date && new Date(c.due_date).getTime() - Date.now() <= 8 * 3600 * 1000)
+        )
+      ) {
+        return false;
+      }
       return true;
     });
-  }, [orderGroups, viewTab, statusFilter, clinicFilter, onlyReprints, todayFilter, searchQuery]);
+  }, [orderGroups, viewTab, statusFilter, clinicFilter, onlyReprints, todayFilter, onlyUrgentSla, searchQuery]);
 
   // Contadores por status do pedido
   const statusCounts = useMemo(() => {
@@ -1246,6 +1329,7 @@ export default function FilaPage() {
     clinicFilter !== "TODAS" ||
     onlyReprints ||
     todayFilter ||
+    onlyUrgentSla ||
     searchQuery.trim() !== "";
 
   const clearFilters = () => {
@@ -1253,6 +1337,7 @@ export default function FilaPage() {
     setClinicFilter("TODAS");
     setOnlyReprints(false);
     setTodayFilter(false);
+    setOnlyUrgentSla(false);
     setSearchQuery("");
   };
 
@@ -1766,6 +1851,15 @@ export default function FilaPage() {
                   />
                   Só hoje
                 </label>
+                <label className="flex items-center gap-1.5 text-xs text-amber-300 font-semibold cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={onlyUrgentSla}
+                    onChange={(e) => setOnlyUrgentSla(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-amber-500 bg-slate-800"
+                  />
+                  🚨 Urgentes / SLA Crítico
+                </label>
                 {hasActiveFilters && (
                   <button
                     type="button"
@@ -2112,6 +2206,48 @@ export default function FilaPage() {
                                       <span className="shrink-0 text-[10px] text-slate-300 bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5">
                                         {statusCfg.label}
                                       </span>
+
+                                      {/* SLA e Prazo de Entrega */}
+                                      {card.due_date && (() => {
+                                        const due = new Date(card.due_date).getTime();
+                                        const diffHours = (due - Date.now()) / (1000 * 3600);
+                                        const isOverdue = diffHours < 0;
+                                        const isCritical = diffHours >= 0 && diffHours <= 6;
+                                        const hoursLeft = Math.abs(Math.round(diffHours));
+
+                                        return (
+                                          <span
+                                            className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 ${
+                                              isOverdue
+                                                ? "bg-rose-950 text-rose-300 border-rose-500 animate-pulse"
+                                                : isCritical
+                                                ? "bg-amber-950 text-amber-300 border-amber-500"
+                                                : "bg-slate-800 text-slate-300 border-slate-700"
+                                            }`}
+                                            title={`Prazo limite: ${new Date(card.due_date).toLocaleString("pt-BR")}`}
+                                          >
+                                            <Clock className="w-3 h-3" />
+                                            {isOverdue
+                                              ? `Atrasado há ${hoursLeft}h`
+                                              : isCritical
+                                              ? `SLA Urgente: faltam ${hoursLeft}h`
+                                              : `Entrega em ${hoursLeft}h`}
+                                          </span>
+                                        );
+                                      })()}
+
+                                      {/* Foto de Controle de Qualidade */}
+                                      {card.qc_photo_url && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleViewQcPhoto(card.qc_photo_url!, card.qc_notes || undefined)}
+                                          className="shrink-0 text-[10px] font-bold text-emerald-300 bg-emerald-950/80 border border-emerald-500/50 rounded px-1.5 py-0.5 flex items-center gap-1 hover:bg-emerald-900 transition"
+                                          title={card.qc_notes || "Controle de qualidade aprovado. Clique para ver a foto."}
+                                        >
+                                          <Camera className="w-3 h-3 text-emerald-400" />
+                                          CQ Aprovado 📷
+                                        </button>
+                                      )}
                                     </>
                                   )}
                                 </div>
@@ -2239,6 +2375,15 @@ export default function FilaPage() {
                                     title="Ver histórico de movimentações deste arquivo"
                                   >
                                     <History className="w-3.5 h-3.5" />
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenQc(card.batch_id, [card.id])}
+                                    className="p-1.5 text-slate-500 hover:text-emerald-400 hover:bg-slate-800 rounded-md transition"
+                                    title="Registrar foto de Controle de Qualidade (QC)"
+                                  >
+                                    <Camera className="w-3.5 h-3.5" />
                                   </button>
 
                                   {/* Botão de APAGAR arquivo individual */}
@@ -3293,6 +3438,126 @@ export default function FilaPage() {
                 className="bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg text-xs h-9 px-5 gap-1.5 shadow"
               >
                 {isFailingBatch ? "Marcando..." : "Confirmar Falha da Mesa"}
+              </Button>
+            </div>
+          </div>
+        </Dialog>
+
+        {/* Modal: Registro Fotográfico de Controle de Qualidade (QC) */}
+        <Dialog
+          open={qcModalOpen}
+          onOpenChange={setQcModalOpen}
+          title="Controle de Qualidade (QC) - Registro Fotográfico"
+          description="Anexe ou tire uma foto das peças impressas para validação de acabamento, pós-cura e registro no histórico do laboratório."
+        >
+          <div className="space-y-4 pt-2 text-xs">
+            {/* Foto e Input */}
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-slate-200">
+                Foto das Peças Impressas *
+              </label>
+
+              {qcPhotoPreview ? (
+                <div className="relative rounded-xl overflow-hidden border border-slate-700 bg-slate-950 flex flex-col items-center p-2">
+                  <img
+                    src={qcPhotoPreview}
+                    alt="Prévia do CQ"
+                    className="max-h-60 rounded-lg object-contain"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setQcPhotoPreview(null)}
+                    className="mt-2 text-[11px] text-rose-400 hover:text-rose-300 underline"
+                  >
+                    Trocar / Tirar outra foto
+                  </button>
+                </div>
+              ) : (
+                <label className="border-2 border-dashed border-slate-700 hover:border-cyan-500/50 rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer bg-slate-950/60 transition group">
+                  <Camera className="w-8 h-8 text-cyan-400 mb-2 group-hover:scale-110 transition" />
+                  <span className="font-semibold text-white text-xs">
+                    Tirar foto com a câmera ou anexar imagem
+                  </span>
+                  <span className="text-[10px] text-slate-500 mt-1">
+                    JPG, PNG ou foto direta do celular/tablet
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={handleQcPhotoFile}
+                  />
+                </label>
+              )}
+            </div>
+
+            {/* Observações do CQ */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold text-slate-200">
+                Parecer do Controle de Qualidade
+              </label>
+              <textarea
+                value={qcNotes}
+                onChange={(e) => setQcNotes(e.target.value)}
+                placeholder="Ex: Peças sem delaminação, margens cervicais perfeitas, lavagem IPA e pós-cura UV 100% conformes."
+                rows={3}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-cyan-400 resize-none"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setQcModalOpen(false)}
+                className="border-slate-700 text-slate-300 rounded-lg text-xs"
+              >
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                disabled={qcSaving || !qcPhotoPreview}
+                onClick={handleSaveQc}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs px-5 gap-1.5 shadow"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                {qcSaving ? "Gravando CQ..." : "Aprovar CQ e Salvar"}
+              </Button>
+            </div>
+          </div>
+        </Dialog>
+
+        {/* Modal: Visualizar Foto de CQ Registrada */}
+        <Dialog
+          open={qcViewModalOpen}
+          onOpenChange={setQcViewModalOpen}
+          title="Controle de Qualidade (QC) - Registro Fotográfico"
+          description="Foto e parecer registrados no momento da conclusão das peças."
+        >
+          <div className="space-y-4 pt-2 text-xs">
+            {qcViewPhoto && (
+              <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950 flex items-center justify-center p-2">
+                <img
+                  src={qcViewPhoto}
+                  alt="Foto do Controle de Qualidade"
+                  className="max-h-96 rounded-lg object-contain w-full"
+                />
+              </div>
+            )}
+            {qcViewNotes && (
+              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                <span className="text-[10px] text-slate-500 block uppercase font-mono">Parecer Técnico:</span>
+                <p className="text-xs text-slate-200 mt-0.5">{qcViewNotes}</p>
+              </div>
+            )}
+            <div className="flex justify-end pt-2">
+              <Button
+                size="sm"
+                onClick={() => setQcViewModalOpen(false)}
+                className="rounded-full text-xs"
+              >
+                Fechar
               </Button>
             </div>
           </div>

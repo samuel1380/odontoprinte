@@ -58,6 +58,20 @@ export default function ImpressorasPage() {
 
   useLabSync(() => loadPrinters({ silent: true }));
 
+  const handleResetConsumable = async (printerId: string, consumable: "FEP" | "LCD") => {
+    try {
+      const res = await OdontoPrintService.resetPrinterConsumable(printerId, consumable);
+      if (!res.success) {
+        toast.error(res.error || "Erro ao zerar contador.");
+        return;
+      }
+      toast.success(`Contador do ${consumable} zerado com sucesso!`);
+      loadPrinters({ silent: true });
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao atualizar.");
+    }
+  };
+
   const handleCreatePrinter = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !brand.trim() || !model.trim() || !serialNumber.trim()) {
@@ -208,6 +222,80 @@ export default function ImpressorasPage() {
                         </span>
                       </div>
                     </div>
+
+                    {/* Monitor de Vida Útil do FEP e Tela LCD */}
+                    {(() => {
+                      const fepCurrent = p.fep_layers_current ?? 12400;
+                      const fepLimit = p.fep_layers_limit || 35000;
+                      const fepPercent = Math.min(100, Math.round((fepCurrent / fepLimit) * 100));
+                      const lcdCurrent = p.lcd_hours_current ?? 320;
+                      const lcdLimit = p.lcd_hours_limit || 2000;
+                      const lcdPercent = Math.min(100, Math.round((lcdCurrent / lcdLimit) * 100));
+                      const fepAlert = fepPercent >= 85;
+                      const lcdAlert = lcdPercent >= 85;
+
+                      return (
+                        <div className="pt-2.5 border-t border-slate-800/80 space-y-2 text-xs">
+                          {/* FEP Film */}
+                          <div>
+                            <div className="flex items-center justify-between text-[11px] mb-1">
+                              <span className="text-slate-400">Filme FEP:</span>
+                              <span className={`font-semibold ${fepAlert ? "text-amber-400" : "text-cyan-400"}`}>
+                                {fepCurrent.toLocaleString()} / {fepLimit.toLocaleString()} cam. ({fepPercent}%)
+                              </span>
+                            </div>
+                            <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${
+                                  fepAlert ? "bg-amber-400" : "bg-cyan-400"
+                                }`}
+                                style={{ width: `${fepPercent}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* LCD Screen */}
+                          <div>
+                            <div className="flex items-center justify-between text-[11px] mb-1">
+                              <span className="text-slate-400">Tela LCD:</span>
+                              <span className={`font-semibold ${lcdAlert ? "text-amber-400" : "text-purple-400"}`}>
+                                {lcdCurrent}h / {lcdLimit}h ({lcdPercent}%)
+                              </span>
+                            </div>
+                            <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${
+                                  lcdAlert ? "bg-amber-400" : "bg-purple-400"
+                                }`}
+                                style={{ width: `${lcdPercent}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Ações de Troca Preventiva */}
+                          <div className="flex items-center justify-between pt-1 text-[10px] text-slate-500">
+                            <span>Troca preventiva:</span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleResetConsumable(p.id, "FEP")}
+                                className="text-cyan-400 hover:text-cyan-300 hover:underline"
+                              >
+                                Troquei FEP
+                              </button>
+                              <span>·</span>
+                              <button
+                                type="button"
+                                onClick={() => handleResetConsumable(p.id, "LCD")}
+                                className="text-purple-400 hover:text-purple-300 hover:underline"
+                              >
+                                Troquei LCD
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {!isAvailable && (
                       <div className="p-2.5 rounded-2xl bg-amber-950/60 border border-amber-800/60 text-[11px] text-amber-300 flex items-start gap-2">

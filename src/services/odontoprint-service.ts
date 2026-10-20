@@ -3090,6 +3090,105 @@ export class OdontoPrintService {
     return { success: true };
   }
 
+  /**
+   * Monitor de Consumíveis: Registra substituição de FEP ou LCD e zera o contador.
+   */
+  static async resetPrinterConsumable(
+    printerId: string,
+    consumable: "FEP" | "LCD"
+  ): Promise<{ success: boolean; error?: string }> {
+    mockPrinters = loadLocal<Printer[]>("odontoprint_printers", mockPrinters);
+    const printer = mockPrinters.find((p) => p.id === printerId);
+    if (!printer) return { success: false, error: "Impressora não encontrada." };
+
+    const snap = this.snapLocals(["odontoprint_printers"]);
+    const now = new Date().toISOString();
+    const updateData: any = { updated_at: now };
+
+    if (consumable === "FEP") {
+      printer.fep_layers_current = 0;
+      printer.last_fep_replacement_at = now;
+      updateData.fep_layers_current = 0;
+      updateData.last_fep_replacement_at = now;
+    } else {
+      printer.lcd_hours_current = 0;
+      printer.last_lcd_replacement_at = now;
+      updateData.lcd_hours_current = 0;
+      updateData.last_lcd_replacement_at = now;
+    }
+    printer.updated_at = now;
+    saveLocal("odontoprint_printers", mockPrinters);
+
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client) {
+      try {
+        await client.from("printers").update(updateData).eq("id", printerId);
+      } catch {
+        // ignora erro de coluna caso banco remoto não tenha rodado migration
+      }
+    }
+    return { success: true };
+  }
+
+  /**
+   * Registro Fotográfico de Controle de Qualidade (QC)
+   */
+  static async recordQualityControl(params: {
+    batch_id?: string;
+    item_ids?: string[];
+    photo_url: string;
+    notes?: string;
+    user_name?: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    if (!params.photo_url) {
+      return { success: false, error: "Foto do controle de qualidade é obrigatória." };
+    }
+
+    mockPrintBatches = loadLocal("odontoprint_batches", mockPrintBatches);
+    mockPrintJobItems = loadLocal("odontoprint_job_items", mockPrintJobItems);
+    const now = new Date().toISOString();
+
+    if (params.batch_id) {
+      const batch = mockPrintBatches.find((b) => b.id === params.batch_id);
+      if (batch) {
+        batch.qc_photo_url = params.photo_url;
+        batch.qc_notes = params.notes?.trim() || "Controle de qualidade aprovado.";
+        batch.qc_approved_at = now;
+        batch.updated_at = now;
+      }
+    }
+
+    if (params.item_ids && params.item_ids.length > 0) {
+      const idSet = new Set(params.item_ids);
+      for (const item of mockPrintJobItems) {
+        if (idSet.has(item.id)) {
+          item.qc_photo_url = params.photo_url;
+          item.qc_notes = params.notes?.trim() || "Controle de qualidade aprovado.";
+          item.qc_approved_at = now;
+          item.updated_at = now;
+        }
+      }
+    }
+
+    saveLocal("odontoprint_batches", mockPrintBatches);
+    saveLocal("odontoprint_job_items", mockPrintJobItems);
+
+    const { client, isConfigured } = this.getSupabase();
+    if (isConfigured && client && params.batch_id) {
+      try {
+        await client.from("print_batches").update({
+          qc_photo_url: params.photo_url,
+          qc_notes: params.notes || null,
+          qc_approved_at: now,
+        }).eq("id", params.batch_id);
+      } catch {
+        // ignora erro de sync remoto
+      }
+    }
+
+    return { success: true };
+  }
+
   static async deletePrinter(id: string): Promise<{ success: boolean; error?: string }> {
     mockPrinters = loadLocal<Printer[]>("odontoprint_printers", mockPrinters);
     mockMaintenances = loadLocal<PrinterMaintenance[]>("odontoprint_maintenances", mockMaintenances);

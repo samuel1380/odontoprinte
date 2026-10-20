@@ -1066,3 +1066,88 @@ export async function generateDentalSupports(
     durationMs,
   };
 }
+
+export interface DetectedIsland {
+  x: number;
+  y: number;
+  z: number;
+  area: number;
+  isSupported: boolean;
+  severity: "CRITICAL" | "WARNING";
+}
+
+/**
+ * Detector de Ilhas Suspensas no Ar (Island Detector)
+ * Identifica regiões onde o modelo 3D começa a imprimir no ar sem sustentação por baixo.
+ */
+export function detectIslands(
+  modelPositions: Float32Array,
+  existingSupports?: Array<{ x: number; y: number; zContact?: number }>,
+  options: { minIslandAreaMm2?: number; supportRadiusMm?: number } = {}
+): DetectedIsland[] {
+  const triCount = Math.floor(modelPositions.length / 9);
+  if (triCount === 0) return [];
+
+  const minArea = options.minIslandAreaMm2 || 0.15;
+  const supportRadius = options.supportRadiusMm || 2.5;
+
+  const islands: DetectedIsland[] = [];
+  const visitedBuckets = new Set<string>();
+
+  for (let t = 0; t < triCount; t++) {
+    const off = t * 9;
+    const ax = modelPositions[off];
+    const ay = modelPositions[off + 1];
+    const az = modelPositions[off + 2];
+    const bx = modelPositions[off + 3];
+    const by = modelPositions[off + 4];
+    const bz = modelPositions[off + 5];
+    const cx = modelPositions[off + 6];
+    const cy = modelPositions[off + 7];
+    const cz = modelPositions[off + 8];
+
+    const norm = computeNormal(ax, ay, az, bx, by, bz, cx, cy, cz);
+    // Faces voltadas para baixo (overhang acentuado ou teto invertido)
+    if (norm.nz < -0.35) {
+      const abx = bx - ax, aby = by - ay, abz = bz - az;
+      const acx = cx - ax, acy = cy - ay, acz = cz - az;
+      const crossX = aby * acz - abz * acy;
+      const crossY = abz * acx - abx * acz;
+      const crossZ = abx * acy - aby * acx;
+      const triArea = 0.5 * Math.hypot(crossX, crossY, crossZ);
+
+      const lowestZ = Math.min(az, bz, cz);
+      const midX = (ax + bx + cx) / 3;
+      const midY = (ay + by + cy) / 3;
+
+      const bucketKey = `${Math.round(midX / 2.5)}_${Math.round(midY / 2.5)}`;
+      if (visitedBuckets.has(bucketKey)) continue;
+
+      let isSupported = false;
+      if (existingSupports && existingSupports.length > 0) {
+        for (const sup of existingSupports) {
+          const d = Math.hypot(sup.x - midX, sup.y - midY);
+          if (d <= supportRadius) {
+            isSupported = true;
+            break;
+          }
+        }
+      }
+
+      if (!isSupported && triArea >= minArea) {
+        visitedBuckets.add(bucketKey);
+        islands.push({
+          x: Math.round(midX * 10) / 10,
+          y: Math.round(midY * 10) / 10,
+          z: Math.round(lowestZ * 10) / 10,
+          area: Math.round(triArea * 100) / 100,
+          isSupported,
+          severity: norm.nz < -0.75 ? "CRITICAL" : "WARNING",
+        });
+      }
+    }
+  }
+
+  return islands;
+}
+

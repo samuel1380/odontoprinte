@@ -20,9 +20,12 @@ import {
   type ModelGrid,
   type PackResult,
 } from "@/lib/plate-nesting";
-import { parseFileName } from "@/lib/parse-filename";
+import { parseFileName, getWorkTypeBadgeInfo } from "@/lib/parse-filename";
+import { estimatePrintTime } from "@/lib/print-time";
+import { generateQRCodeSvg } from "@/lib/qrcode";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
   LayoutGrid,
@@ -38,6 +41,11 @@ import {
   RotateCw,
   ArrowUpDown,
   CheckCircle2,
+  Clock,
+  Send,
+  FileText,
+  QrCode,
+  Sparkles,
 } from "lucide-react";
 
 interface UploadModel {
@@ -45,6 +53,8 @@ interface UploadModel {
   file: File;
   name: string;
   patient: string;
+  workType?: string | null;
+  version?: string | null;
   size: ModelSize | null;
   error?: string;
   parsing: boolean;
@@ -71,6 +81,8 @@ export default function MontagemPage() {
   const [models, setModels] = useState<UploadModel[]>([]);
   const [copied, setCopied] = useState(false);
   const [building, setBuilding] = useState(false);
+  const [sendingToQueue, setSendingToQueue] = useState(false);
+  const [worksheetOpen, setWorksheetOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const trianglesById = useRef(new Map<string, Float32Array>());
   const gridsById = useRef(new Map<string, ModelGrid>());
@@ -109,8 +121,13 @@ export default function MontagemPage() {
         .filter((f) => !names.has(f.name.toLowerCase()))
         .map((f) => {
           let patient = f.name.replace(/\.[^/.]+$/, "");
+          let workType: string | null = null;
+          let version: string | null = null;
           try {
-            patient = parseFileName(f.name, []).patient || patient;
+            const parsed = parseFileName(f.name, []);
+            patient = parsed.patient || patient;
+            workType = parsed.workType;
+            version = parsed.version || null;
           } catch {
             // mantém nome do arquivo
           }
@@ -119,12 +136,33 @@ export default function MontagemPage() {
             file: f,
             name: f.name,
             patient: patient.toUpperCase(),
+            workType,
+            version,
             size: null,
             parsing: true,
             manualW: "",
             manualD: "",
           } as UploadModel;
         });
+
+      // Detector de Paciente Duplicado ou Versão Atualizada (v2, final, etc)
+      for (const freshModel of fresh) {
+        const existing = prev.find((p) => p.patient === freshModel.patient);
+        if (existing) {
+          if (freshModel.version) {
+            toast.warning(
+              `Versão atualizada detectada para ${freshModel.patient} (${freshModel.version}). Pode substituir o modelo anterior ou imprimir ambos na mesa.`,
+              { duration: 6000 }
+            );
+          } else {
+            toast.warning(
+              `Atenção: O paciente ${freshModel.patient} já possui outro modelo nesta mesa.`,
+              { duration: 5000 }
+            );
+          }
+        }
+      }
+
       return [...prev, ...fresh];
     });
   };
@@ -318,6 +356,62 @@ export default function MontagemPage() {
       }, 0)
     : 0;
   const estMB = ((84 + estTris * 50) / (1024 * 1024)).toFixed(1);
+
+  const printEstimate = useMemo(() => {
+    return estimatePrintTime({ maxZMm: maxZ, layerHeightMm: 0.05 });
+  }, [maxZ]);
+
+  const handleSendToQueue = async () => {
+    if (!result || result.placed.length === 0) {
+      toast.error("Nenhum modelo posicionado na mesa para enviar.");
+      return;
+    }
+    setSendingToQueue(true);
+    try {
+      const placedModels = result.placed.map((p) => {
+        const m = models.find((mod) => mod.id === p.id);
+        return {
+          patient: m?.patient || "PACIENTE",
+          fileName: m?.name || "modelo.stl",
+          workType: m?.workType || "MODELO",
+        };
+      });
+
+      const cardsRes = await OdontoPrintService.createPrintCards(
+        placedModels.map((pm) => ({
+          patient: pm.patient,
+          clinic: "Laboratório",
+          cadista: "Montagem de Mesa",
+          work_type: pm.workType,
+          file_name: pm.fileName,
+        }))
+      );
+
+      if (!cardsRes.success || cardsRes.created_ids.length === 0) {
+        throw new Error(cardsRes.error || "Falha ao registrar itens da mesa.");
+      }
+
+      const batchName = `Mesa ${printer?.name || "Chapa"} · ${placedModels.length} peças`;
+      const batchRes = await OdontoPrintService.createOrderBatch({
+        item_ids: cardsRes.created_ids,
+        batch_name: batchName,
+        printer_id: printer?.id || null,
+        printer_name: printer?.name || null,
+      });
+
+      if (!batchRes.success) {
+        throw new Error(batchRes.error || "Falha ao criar lote na fila.");
+      }
+
+      toast.success(
+        `Mesa enviada para a Fila com ${placedModels.length} modelo(s)! Lote criado com sucesso.`
+      );
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao enviar mesa para a fila.");
+    } finally {
+      setSendingToQueue(false);
+    }
+  };
 
   const copyMap = async () => {
     if (!result) return;
@@ -534,7 +628,26 @@ export default function MontagemPage() {
               Jogue os arquivos, o sistema organiza na chapa e gera o STL pronto para o fatiador.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setWorksheetOpen(true)}
+              disabled={!result || result.placed.length === 0}
+              className="gap-1.5 font-bold border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 rounded-full text-xs h-9 px-3.5 disabled:opacity-40"
+            >
+              <FileText className="w-4 h-4 text-cyan-400" />
+              Ficha de Bancada
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSendToQueue}
+              disabled={!result || result.placed.length === 0 || sendingToQueue}
+              className="gap-1.5 font-bold bg-cyan-500 hover:bg-cyan-400 text-slate-950 rounded-full text-xs h-9 px-4 disabled:opacity-40 shadow-sm"
+            >
+              <Send className="w-4 h-4" />
+              {sendingToQueue ? "Enviando..." : "Enviar p/ Fila"}
+            </Button>
             <Button
               size="sm"
               onClick={sendToSupports}
@@ -548,7 +661,7 @@ export default function MontagemPage() {
               size="sm"
               onClick={downloadStl}
               disabled={!result || result.placed.length === 0 || building}
-              className="gap-1.5 font-bold bg-white hover:bg-slate-200 text-slate-950 rounded-full text-xs h-9 px-5 disabled:opacity-40"
+              className="gap-1.5 font-bold bg-white hover:bg-slate-200 text-slate-950 rounded-full text-xs h-9 px-4 disabled:opacity-40"
             >
               <Download className="w-4 h-4" />
               {building ? "Gerando..." : "Baixar mesa (.stl)"}
@@ -717,7 +830,22 @@ export default function MontagemPage() {
                 return (
                   <div key={m.id} className="flex items-center gap-2 text-xs bg-slate-950/60 border border-slate-800 rounded-xl px-2.5 py-1.5">
                     <div className="min-w-0 flex-1">
-                      <p className="font-mono font-bold text-white truncate">{m.patient}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="font-mono font-bold text-white truncate">{m.patient}</p>
+                        {(() => {
+                          const b = getWorkTypeBadgeInfo(m.workType);
+                          return (
+                            <span className={`text-[9px] px-1.5 py-0.2 rounded font-semibold border ${b.badgeClass}`}>
+                              {b.label}
+                            </span>
+                          );
+                        })()}
+                        {m.version && (
+                          <span className="text-[9px] px-1.5 py-0.2 rounded font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            {m.version.toUpperCase()}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[10px] text-slate-500 truncate">{m.name}</p>
                     </div>
                     {s ? (
@@ -811,13 +939,19 @@ export default function MontagemPage() {
             </p>
           ) : (
             <>
-              <div className="flex items-center gap-3 text-[11px] flex-wrap">
+              <div className="flex items-center gap-2.5 text-[11px] flex-wrap">
                 <span className="px-2 py-0.5 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 font-bold">
                   {Math.round(result.utilization * 100)}% da chapa
                 </span>
                 <span className="text-emerald-300 font-semibold">{result.placed.length} na chapa</span>
                 {result.unplaced.length > 0 && (
                   <span className="text-amber-300 font-semibold">{result.unplaced.length} de fora → próxima mesa</span>
+                )}
+                {maxZ > 0 && (
+                  <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-300 font-bold">
+                    <Clock className="w-3.5 h-3.5 text-purple-400" />
+                    Tempo: {printEstimate.formattedDuration} · Conclusão {printEstimate.formattedCompletion} ({printEstimate.totalLayers} cam.)
+                  </span>
                 )}
                 <span className="text-slate-400">~{estMB} MB p/ baixar</span>
               </div>
@@ -899,6 +1033,113 @@ export default function MontagemPage() {
           )}
         </div>
       </div>
+
+      {/* Modal Ficha de Bancada com QR Code */}
+      <Dialog
+        open={worksheetOpen}
+        onOpenChange={setWorksheetOpen}
+        title="Ficha de Bancada & Ordem de Produção"
+        description="Ficha física para controle de processo na bancada de pós-processamento, lavagem e cura."
+      >
+        <div className="space-y-4 pt-2 text-xs">
+          {/* Cabeçalho da Ordem */}
+          <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 flex items-center justify-between gap-4">
+            <div className="space-y-1">
+              <p className="text-[10px] text-slate-400 font-mono uppercase">Ordem de Impressão</p>
+              <p className="font-bold text-white text-sm">
+                Mesa {printer?.name || "Impressora"}
+              </p>
+              <p className="text-[11px] text-slate-400">
+                Emitida em: {new Date().toLocaleDateString("pt-BR")} às {new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+              </p>
+              <div className="flex items-center gap-2 pt-1 text-[11px] flex-wrap">
+                <span className="text-cyan-300 font-semibold">{result?.placed.length || 0} peças na chapa</span>
+                <span className="text-slate-600">·</span>
+                <span className="text-purple-300 font-semibold">{printEstimate.formattedDuration} impressão</span>
+                <span className="text-slate-600">·</span>
+                <span className="text-emerald-300 font-semibold">Término: {printEstimate.formattedCompletion}</span>
+              </div>
+            </div>
+
+            {/* QR Code dinâmico SVG */}
+            <div className="shrink-0 bg-white p-2 rounded-xl shadow-md text-center">
+              <div
+                dangerouslySetInnerHTML={{
+                  __html: generateQRCodeSvg(
+                    typeof window !== "undefined" ? `${window.location.origin}/fila` : "https://odontoprint.app/fila",
+                    90
+                  ),
+                }}
+              />
+              <span className="text-[9px] text-slate-700 font-bold block mt-1">Ler na Fila</span>
+            </div>
+          </div>
+
+          {/* Tabela de Modelos para Conferência Física */}
+          <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-950 max-h-56 overflow-y-auto">
+            <table className="w-full text-[11px] text-left">
+              <thead className="bg-slate-900/80 text-slate-400 border-b border-slate-800 text-[10px] sticky top-0">
+                <tr>
+                  <th className="py-2 px-3 w-8">Nº</th>
+                  <th className="py-2 px-3">Paciente / Caso</th>
+                  <th className="py-2 px-3">Tipo</th>
+                  <th className="py-2 px-3 text-center">Lavado</th>
+                  <th className="py-2 px-3 text-center">Cura UV</th>
+                  <th className="py-2 px-3 text-center">CQ Visual</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {result?.placed.map((p, idx) => {
+                  const m = models.find((mod) => mod.id === p.id);
+                  const b = getWorkTypeBadgeInfo(m?.workType);
+                  return (
+                    <tr key={p.id} className="hover:bg-slate-900/40">
+                      <td className="py-2 px-3 font-mono font-bold text-cyan-400">{idx + 1}</td>
+                      <td className="py-2 px-3">
+                        <span className="font-bold text-white block">{m?.patient || "PACIENTE"}</span>
+                        <span className="text-[10px] text-slate-500">{m?.name}</span>
+                      </td>
+                      <td className="py-2 px-3">
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold border ${b.badgeClass}`}>
+                          {b.label}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 text-center text-slate-500 font-mono">[  ]</td>
+                      <td className="py-2 px-3 text-center text-slate-500 font-mono">[  ]</td>
+                      <td className="py-2 px-3 text-center text-slate-500 font-mono">[  ]</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Botões de Ação da Ficha */}
+          <div className="flex items-center justify-between pt-2">
+            <span className="text-[10px] text-slate-500">
+              Assinatura do Técnico: ___________________________
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setWorksheetOpen(false)}
+                className="rounded-full text-xs"
+              >
+                Fechar
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => window.print()}
+                className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-full text-xs gap-1.5"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                Imprimir Ficha
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Dialog>
     </AppShell>
   );
 }

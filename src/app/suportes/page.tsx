@@ -24,9 +24,11 @@ import {
   generateDentalSupports,
   DEFAULT_DENTAL_SUPPORT_CONFIG,
   DENTAL_SUPPORT_PROFILES,
+  detectIslands,
   type DentalSupportConfig,
   type SupportGenerationResult,
   type SupportProfileId,
+  type DetectedIsland,
 } from "@/lib/support-generator";
 import {
   parseStlTriangles,
@@ -54,9 +56,20 @@ export default function SuportesPage() {
     ...DENTAL_SUPPORT_PROFILES.MEDIUM.config,
   });
   const [viewMode, setViewMode] = useState<"top" | "iso">("top");
+  const [islands, setIslands] = useState<DetectedIsland[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Escaneia ilhas suspensas automaticamente
+  useEffect(() => {
+    if (!loadedModel) {
+      setIslands([]);
+      return;
+    }
+    const detected = detectIslands(loadedModel.positions, result?.pillars);
+    setIslands(detected);
+  }, [loadedModel, result]);
 
   // Verifica se veio alguma mesa gerada recentemente da tela de Montagem
   useEffect(() => {
@@ -644,6 +657,34 @@ export default function SuportesPage() {
                     {result.totalTriangles.toLocaleString()} triângulos
                   </strong>
                 </div>
+              </div>
+            )}
+
+            {/* 4. Detector de Ilhas Suspensas no Ar (Island Detector) */}
+            {loadedModel && (
+              <div className={`rounded-2xl border p-4 space-y-2.5 transition ${
+                islands.length === 0
+                  ? "border-emerald-500/30 bg-emerald-950/20"
+                  : "border-amber-500/40 bg-amber-950/25"
+              }`}>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold flex items-center gap-1.5 text-white">
+                    <AlertCircle className={`w-4 h-4 ${islands.length === 0 ? "text-emerald-400" : "text-amber-400"}`} />
+                    Detector de Ilhas Suspensas
+                  </span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
+                    islands.length === 0
+                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                      : "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                  }`}>
+                    {islands.length === 0 ? "100% Ancorado" : `${islands.length} Alertas`}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  {islands.length === 0
+                    ? "Excelente! Nenhuma ilha suspensa no ar detectada. Toda a geometria possui sustentação sólida para impressão no FEP."
+                    : `Atenção: Detectamos ${islands.length} região(ões) com início no ar sem suporte sólido embaixo. A aplicação de suportes evita descolamento e furos no FEP.`}
+                </p>
               </div>
             )}
           </div>

@@ -165,6 +165,9 @@ export interface PrintCardItem {
   parent_item_id?: string | null;
   last_failure_reason?: string | null;
   last_run_code?: string | null;
+  qc_photo_url?: string | null;
+  qc_notes?: string | null;
+  qc_approved_at?: string | null;
   created_at: string;
   updated_at?: string;
   queue_entered_at: string;

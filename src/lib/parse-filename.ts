@@ -19,7 +19,10 @@ export interface ParsedFileName {
   patient: string | null;
   /** Id de LAB_WORK_TYPES (null = manter o padrão da tela). */
   workType: string | null;
+  /** Versão ou revisão detectada no nome (ex: "v2", "final", null). */
+  version?: string | null;
 }
+
 
 const VALID_EXTENSIONS = [".stl", ".obj", ".3mf", ".ply"];
 
@@ -51,11 +54,15 @@ function splitTokens(nameWithoutExt: string): string[] {
 const CLINIC_PREFIXES = ["DRA", "DR", "DOUTORA", "DOUTOR", "CLINICA", "ODONTO"];
 
 /** Palavras que indicam tipo de peça (ordem importa: checar SEM antes de COM). */
-function detectWorkType(normalized: string): string | null {
+export function detectWorkType(normalized: string): string | null {
   const has = (kw: string) => normalized.includes(kw);
   if (has("SEM TROQUEL") || has("SEM TROQUEIS") || has("SOLIDO") || has("MACICO") || has("SEM DENTE")) {
     return "MODELO_SEM_TROQUEL";
   }
+  if (has("ALINHADOR") || has("ALIGNER") || has("SETUP")) return "ALINHADOR";
+  if (has("GUIA") || has("SURGICAL") || has("CIRURGICO")) return "GUIA_CIRURGICO";
+  if (has("ESTUDO")) return "MODELO_ESTUDO";
+  if (has("PROTESE") || has("DENTADURA") || has("PROTOCOLO")) return "PROTOCOLO";
   if (has("ANTAGONISTA") || has("OPOSITOR") || has("OPONENTE")) return "ANTAGONISTA";
   if (has("GENGIVA") || has("GENGIVAL") || has("MASCARA") || has("MASK")) return "GENGIVA";
   if (has("MIORRELAXANTE") || has("PLACA") || has("BRUXISMO")) return "PLACA";
@@ -65,6 +72,51 @@ function detectWorkType(normalized: string): string | null {
   if (has("CERAMICA") || has("CARGA")) return "CERAMICA_DE_CARGA";
   if (has("TROQUEL") || has("TROQUEIS") || has("COM TROQUEL")) return "MODELO_COM_TROQUEL";
   return null;
+}
+
+/** Detecta indicação de revisão ou versão no nome do arquivo (ex: v2, _final, _rev1) */
+export function detectVersionTag(fileName: string): string | null {
+  const base = stripExtension(fileName);
+  const match = base.match(/[-_\s.](V\d+|REV\d+|VERSAO\d+|FINAL|AJUSTADO|CORRIGIDO|REPRINT)(\b|[-_\s.])/i);
+  if (match) {
+    return match[1].toLowerCase();
+  }
+  return null;
+}
+
+export interface WorkTypeBadgeInfo {
+  label: string;
+  badgeClass: string;
+  dotColor: string;
+}
+
+export function getWorkTypeBadgeInfo(workType: string | null | undefined): WorkTypeBadgeInfo {
+  switch (workType) {
+    case "ALINHADOR":
+      return { label: "Alinhador", badgeClass: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30", dotColor: "#06b6d4" };
+    case "MODELO_COM_TROQUEL":
+      return { label: "Com Troquel", badgeClass: "bg-purple-500/15 text-purple-400 border-purple-500/30", dotColor: "#a855f7" };
+    case "MODELO_SEM_TROQUEL":
+      return { label: "Sem Troquel", badgeClass: "bg-slate-500/15 text-slate-300 border-slate-500/30", dotColor: "#94a3b8" };
+    case "PLACA":
+      return { label: "Placa / Bruxis.", badgeClass: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30", dotColor: "#10b981" };
+    case "GUIA_CIRURGICO":
+      return { label: "Guia Cirúrgico", badgeClass: "bg-amber-500/15 text-amber-400 border-amber-500/30", dotColor: "#f59e0b" };
+    case "ANTAGONISTA":
+      return { label: "Antagonista", badgeClass: "bg-pink-500/15 text-pink-400 border-pink-500/30", dotColor: "#ec4899" };
+    case "GENGIVA":
+      return { label: "Gengiva", badgeClass: "bg-rose-500/15 text-rose-400 border-rose-500/30", dotColor: "#f43f5e" };
+    case "COROA":
+    case "COROA_SOBRE_DENTE":
+    case "COROA_SOBRE_IMPLANTE":
+      return { label: "Coroa", badgeClass: "bg-indigo-500/15 text-indigo-400 border-indigo-500/30", dotColor: "#6366f1" };
+    case "MODELO_ESTUDO":
+      return { label: "Estudo", badgeClass: "bg-blue-500/15 text-blue-400 border-blue-500/30", dotColor: "#3b82f6" };
+    case "PROTOCOLO":
+      return { label: "Protocolo", badgeClass: "bg-teal-500/15 text-teal-400 border-teal-500/30", dotColor: "#14b8a6" };
+    default:
+      return { label: "Modelo", badgeClass: "bg-slate-800 text-slate-300 border-slate-700", dotColor: "#64748b" };
+  }
 }
 
 function detectClinic(
@@ -141,5 +193,8 @@ export function parseFileName(fileName: string, knownClinics: string[] = []): Pa
   if (!patient && tokens.length > 0) patient = tokens[0].trim().toUpperCase();
   if (patient && patient.length > 40) patient = patient.slice(0, 40);
 
-  return { clinic, patient, workType };
+  const version = detectVersionTag(fileName);
+
+  return { clinic, patient, workType, version };
 }
+
