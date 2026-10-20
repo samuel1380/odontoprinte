@@ -41,10 +41,35 @@ export interface PlacedItem extends PackItem {
   pix?: PlacedPixels;
 }
 
-/** Ângulos tentados (0/90/180/270 cardinais exatos + diagonais para entrelaçar arcos opostos). */
-export const PACK_ANGLES = [
-  0, 180, 90, 270, 45, -45, 135, -135, 30, -30, 150, -150, 60, -60, 120, -120, 15, -15, 75, -75,
+/** Ângulos ortogonais retos cardinais (0°, 90°, 180°, 270°) para manter modelos e troqueis retos na mesa. */
+export const PACK_ORTHOGONAL_ANGLES = [0, 90, 180, 270];
+
+/** Ângulos com diagonais para peças atípicas compridas que não cabem retas na chapa. */
+export const PACK_ALL_ANGLES = [
+  0, 90, 180, 270, 45, -45, 135, -135, 30, -30, 150, -150, 60, -60, 120, -120, 15, -15, 75, -75,
 ];
+
+export const PACK_ANGLES = PACK_ALL_ANGLES;
+
+/** Retorna os ângulos permitidos: se cabe reta (0° ou 90°), mantém 100% reta (ortogonal). */
+export function getAnglesForItem(
+  w: number,
+  d: number,
+  usableW: number,
+  usableD: number,
+  gap = 2
+): number[] {
+  const g = Math.max(1, gap || 0);
+  const fitsStraight =
+    (w + g <= usableW + 1e-6 && d + g <= usableD + 1e-6) ||
+    (d + g <= usableW + 1e-6 && w + g <= usableD + 1e-6);
+  // Se cabe reta, NUNCA inclina na diagonal: modelos e troqueis ficam retos
+  if (fitsStraight) {
+    return PACK_ORTHOGONAL_ANGLES;
+  }
+  // Se não couber reta na chapa, testa ângulos diagonais para aproveitar a hipotenusa
+  return PACK_ALL_ANGLES;
+}
 
 /** Caixa alinhada aos eixos de um retângulo girado (horário). */
 export function rotatedBox(w: number, d: number, angleDeg: number): { w: number; d: number } {
@@ -512,11 +537,13 @@ export function packPlate(
 
   const isPerfect = () => !!best && best.placed.length === valid.length;
 
-  const footprintOptions = (m: PackItem) =>
-    PACK_ANGLES.map((angle) => {
+  const footprintOptions = (m: PackItem) => {
+    const angles = getAnglesForItem(m.w, m.d, usableW, usableD, g);
+    return angles.map((angle) => {
       const box = rotatedBox(m.w, m.d, angle);
       return { w: box.w + g, d: box.d + g, angle, rotated: angle !== 0 };
     });
+  };
 
   // ---- Estratégia 1: MaxRects (guilhotina + melhor encaixe) ----
   for (const order of PACK_ORDERINGS) {
@@ -928,9 +955,11 @@ export function packRaster(
   cell = 1
 ): PackResult {
   const valid = models.filter((m) => m.w > 0 && m.d > 0);
-  const pw = Math.max(1, Math.round((plateW - margin * 2) / cell));
-  const ph = Math.max(1, Math.round((plateD - margin * 2) / cell));
-  if (plateW - margin * 2 <= 0 || plateD - margin * 2 <= 0 || valid.length === 0) {
+  const usableW = plateW - margin * 2;
+  const usableD = plateD - margin * 2;
+  const pw = Math.max(1, Math.round(usableW / cell));
+  const ph = Math.max(1, Math.round(usableD / cell));
+  if (usableW <= 0 || usableD <= 0 || valid.length === 0) {
     return { placed: [], unplaced: [...models], utilization: 0 };
   }
   const r = Math.max(1, Math.ceil(gap / 2 / cell));
@@ -946,7 +975,8 @@ export function packRaster(
       m.grid && m.grid.w > 0 && m.grid.h > 0 ? m.grid : filledGrid(m.w, m.d, cell);
     let area = 0;
     for (let i = 0; i < base.cells.length; i++) if (base.cells[i]) area++;
-    const angles: PreparedAngle[] = PACK_ANGLES.map((angle) => {
+    const allowedAngles = getAnglesForItem(m.w, m.d, usableW, usableD, gap);
+    const angles: PreparedAngle[] = allowedAngles.map((angle) => {
       const rot = rotateGrid(base, angle);
       const dil = dilateGrid(rot.grid, r + (rot.safe ? 0 : (gap > 1 ? 0 : 1)));
       const setCells: number[] = [];

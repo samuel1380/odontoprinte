@@ -804,5 +804,25 @@ describe("raster", () => {
       expect(dims.y).toBe(40);
       expect(dims.z).toBe(20);
     });
+
+    it("troquel ou modelo com troquel que cabe na mesa NUNCA fica inclinado na diagonal (sempre reto em 0°, 90°, 180° ou 270°)", () => {
+      // Simula uma mesa padrão com um modelo de arcada (65x50mm) e um troquel de dente preparado (18x14mm)
+      const models = [
+        { id: "arcada", label: "Modelo Arcada Superior", w: 65, d: 50 },
+        { id: "troquel", label: "Troquel Dente 21 Preparado", w: 18, d: 14 },
+      ];
+      const r = packPlate(models, 150, 100, 2, 3);
+
+      expect(r.unplaced).toEqual([]);
+      expect(r.placed).toHaveLength(2);
+
+      const troquelPlaced = r.placed.find((p) => p.id === "troquel")!;
+      expect(troquelPlaced).toBeDefined();
+
+      // O troquel DEVE ficar reto na mesa (ortogonal), NUNCA inclinado a 45°, 30°, -45°, etc.
+      const allowedOrthogonal = [0, 90, 180, 270];
+      const normalizedAngle = ((troquelPlaced.angle % 360) + 360) % 360;
+      expect(allowedOrthogonal).toContain(normalizedAngle);
+    });
   });
 });

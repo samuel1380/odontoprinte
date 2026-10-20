@@ -199,4 +199,40 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
       expect(p.zContact).toBeLessThan(elevationZ + 8.0);
     }
   });
+
+  it("gera quantidade expressiva de suportes na lateral formando paliçada contínua perimetral", async () => {
+    // Modelo com perímetro retangular de 40mm x 30mm com paredes laterais
+    const tris: number[] = [
+      // Base inferior (Z=0)
+      0, 0, 0, 40, 0, 0, 40, 30, 0,
+      0, 0, 0, 40, 30, 0, 0, 30, 0,
+      // Parede lateral frontal (Y=0, Z=0..8)
+      0, 0, 0, 40, 0, 0, 40, 0, 8,
+      0, 0, 0, 40, 0, 8, 0, 0, 8,
+      // Parede lateral traseira (Y=30, Z=0..8)
+      0, 30, 0, 40, 30, 0, 40, 30, 8,
+      0, 30, 0, 40, 30, 8, 0, 30, 8,
+      // Parede lateral esquerda (X=0, Z=0..8)
+      0, 0, 0, 0, 30, 0, 0, 30, 8,
+      0, 0, 0, 0, 30, 8, 0, 0, 8,
+      // Parede lateral direita (X=40, Z=0..8)
+      40, 0, 0, 40, 30, 0, 40, 30, 8,
+      40, 0, 0, 40, 30, 8, 40, 0, 8,
+    ];
+    const pos = new Float32Array(tris);
+    const result = await generateDentalSupports(pos, { elevationZ: 5.0 });
+
+    const lateralPillars = result.pillars.filter((p) => p.isLateral || p.targetX !== undefined);
+
+    // Deve gerar grande quantidade de suportes na lateral (paliçada densa sem vazios)
+    expect(lateralPillars.length).toBeGreaterThanOrEqual(30);
+
+    // Deve ter suportes nas 4 paredes (X mín/máx e Y mín/máx)
+    const xs = lateralPillars.map((p) => p.x);
+    const ys = lateralPillars.map((p) => p.y);
+    expect(Math.min(...xs)).toBeLessThan(5);
+    expect(Math.max(...xs)).toBeGreaterThan(35);
+    expect(Math.min(...ys)).toBeLessThan(5);
+    expect(Math.max(...ys)).toBeGreaterThan(25);
+  });
 });
