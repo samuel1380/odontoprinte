@@ -26,10 +26,13 @@ function createSampleModelPositions(): Float32Array {
 describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)", () => {
   it("tem as medidas padrão corretas de suporte médio anti-falhas e anti-fusão", () => {
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.elevationZ).toBe(5.0);
-    expect(DEFAULT_DENTAL_SUPPORT_CONFIG.pillarDiameter).toBe(1.3);
-    expect(DEFAULT_DENTAL_SUPPORT_CONFIG.tipDiameter).toBe(0.65);
+    expect(DEFAULT_DENTAL_SUPPORT_CONFIG.pillarDiameter).toBe(1.20);
+    expect(DEFAULT_DENTAL_SUPPORT_CONFIG.tipDiameter).toBe(0.70);
+    expect(DEFAULT_DENTAL_SUPPORT_CONFIG.tipLength).toBe(3.00);
+    expect(DEFAULT_DENTAL_SUPPORT_CONFIG.tipPenetration).toBe(0.40);
+    expect(DEFAULT_DENTAL_SUPPORT_CONFIG.tipShape).toBe("SPHERE");
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.raftThickness).toBe(1.0);
-    expect(DEFAULT_DENTAL_SUPPORT_CONFIG.minPillarDistance).toBeGreaterThanOrEqual(2.4);
+    expect(DEFAULT_DENTAL_SUPPORT_CONFIG.minPillarDistance).toBe(1.70);
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.modelClearance).toBeGreaterThanOrEqual(0.7);
   });
 
@@ -39,7 +42,11 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     expect(DENTAL_SUPPORT_PROFILES.HEAVY).toBeDefined();
 
     expect(DENTAL_SUPPORT_PROFILES.FINE.config.pillarDiameter).toBe(1.0);
-    expect(DENTAL_SUPPORT_PROFILES.MEDIUM.config.pillarDiameter).toBe(1.3);
+    expect(DENTAL_SUPPORT_PROFILES.MEDIUM.config.pillarDiameter).toBe(1.20);
+    expect(DENTAL_SUPPORT_PROFILES.MEDIUM.config.tipDiameter).toBe(0.70);
+    expect(DENTAL_SUPPORT_PROFILES.MEDIUM.config.tipLength).toBe(3.00);
+    expect(DENTAL_SUPPORT_PROFILES.MEDIUM.config.tipPenetration).toBe(0.40);
+    expect(DENTAL_SUPPORT_PROFILES.MEDIUM.config.tipShape).toBe("SPHERE");
     expect(DENTAL_SUPPORT_PROFILES.HEAVY.config.pillarDiameter).toBe(1.5);
 
     // Retrocompatibilidade
@@ -292,13 +299,40 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     // Deve conter suportes laterais mesmo com normal invertida
     expect(lateralPillars.length).toBeGreaterThan(0);
 
-    // Valida que NENHUM par de pilares tem distância menor que 2.0mm (zero fusão / interpenetração)
+    // Valida que NENHUM par de pilares tem distância menor que 1.65mm (haste 1.20mm -> folga de ar >= 0.45mm sem fusão)
     for (let i = 0; i < result.pillars.length; i++) {
       for (let j = i + 1; j < result.pillars.length; j++) {
         const p1 = result.pillars[i];
         const p2 = result.pillars[j];
         const d = Math.hypot(p1.x - p2.x, p1.y - p2.y);
-        expect(d).toBeGreaterThanOrEqual(1.99);
+        expect(d).toBeGreaterThanOrEqual(1.64);
+      }
+    }
+  });
+
+  it("gera suportes com ponta esférica de 0.70mm, profundidade 0.40mm, topo 3.00mm e haste 1.20mm sem fusão", async () => {
+    const positions = createSampleModelPositions();
+    const result = await generateDentalSupports(positions, {
+      tipShape: "SPHERE",
+      tipDiameter: 0.70,
+      tipPenetration: 0.40,
+      tipLength: 3.00,
+      pillarDiameter: 1.20,
+      minPillarDistance: 1.70,
+    });
+
+    expect(result.pillarCount).toBeGreaterThan(0);
+    // Cada pilar tem ponta esférica gerando triângulos adicionais
+    expect(result.supportTriangles).toBeGreaterThan(100);
+
+    // Valida que todas as distâncias entre pilares respeitam a proteção anti-fusão
+    for (let i = 0; i < result.pillars.length; i++) {
+      for (let j = i + 1; j < result.pillars.length; j++) {
+        const p1 = result.pillars[i];
+        const p2 = result.pillars[j];
+        const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+        // Distância centro-a-centro >= 1.65mm garante vão livre de ar de pelo menos 0.45mm para hastes de 1.20mm
+        expect(dist).toBeGreaterThanOrEqual(1.64);
       }
     }
   });

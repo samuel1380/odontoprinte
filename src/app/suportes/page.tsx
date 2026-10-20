@@ -880,11 +880,13 @@ export default function SuportesPage() {
                   </p>
                 </div>
 
-                <div className="pt-1.5 border-t border-amber-500/20 flex items-center justify-between text-[10px] text-slate-400 flex-wrap gap-2">
-                  <span>Haste: <strong className="text-white">{config.pillarDiameter} mm</strong></span>
-                  <span>Ponta: <strong className="text-white">{config.tipDiameter} mm</strong></span>
-                  <span>Folga da Parede: <strong className="text-emerald-300">{config.modelClearance} mm</strong></span>
-                  <span>Dist. entre Suportes: <strong className="text-amber-300">≥ {config.minPillarDistance} mm</strong></span>
+                <div className="pt-2 border-t border-amber-500/20 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-slate-400">
+                  <div>Haste (Diameter): <strong className="text-white font-mono">{config.pillarDiameter.toFixed(2)} mm</strong></div>
+                  <div>Contato (Esfera): <strong className="text-white font-mono">Ø {config.tipDiameter.toFixed(2)} mm</strong></div>
+                  <div>Comprimento do Topo: <strong className="text-amber-300 font-mono">{config.tipLength.toFixed(2)} mm</strong></div>
+                  <div>Profundidade de Contato: <strong className="text-emerald-300 font-mono">{config.tipPenetration.toFixed(2)} mm</strong></div>
+                  <div>Folga da Parede: <strong className="text-slate-200 font-mono">{config.modelClearance.toFixed(2)} mm</strong></div>
+                  <div>Distância Anti-Fusão: <strong className="text-amber-300 font-mono">≥ {config.minPillarDistance.toFixed(2)} mm</strong></div>
                 </div>
               </div>
 
