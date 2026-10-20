@@ -562,15 +562,18 @@ export async function generateDentalSupports(
     }
   }
 
-  // 3b. Mapeamento Anatômico da Margem Gengival / Oclusal
-  // Dentes e gengivas ficam sempre na metade superior da peça, acima do zócalo.
-  // Ignora chanfros inferiores, relevos e base do zócalo (abaixo de 40% da altura ou 3.5mm)
+  // 3b. Mapeamento Anatômico da Margem Gengival / Oclusal e Altura Local dos Modelos
+  // Permite que em mesas com múltiplos modelos (altos e baixos), cada peça tenha
+  // seus suportes calculados na metade exata da sua respectiva altura local.
   const modelH = maxZ - minZ;
   const gingivaGridCell = 1.8; // mm
   const gingivaCols = Math.max(1, Math.ceil((endX - startX) / gingivaGridCell));
   const gingivaRows = Math.max(1, Math.ceil((endY - startY) / gingivaGridCell));
   const minGingivaGrid = new Float32Array(gingivaCols * gingivaRows);
   minGingivaGrid.fill(Infinity);
+  const maxZGrid = new Float32Array(gingivaCols * gingivaRows);
+  maxZGrid.fill(-Infinity);
+
   const gingivaThresholdZ = elevatedMinZ + Math.max(3.5, modelH * 0.40);
 
   for (let t = 0; t < triCount; t++) {
@@ -587,22 +590,33 @@ export async function generateDentalSupports(
     const cy = modelPositions[off + 7];
     const cz = modelPositions[off + 8] + zShift;
 
+    const tMinX = Math.min(ax, bx, cx);
+    const tMaxX = Math.max(ax, bx, cx);
+    const tMinY = Math.min(ay, by, cy);
+    const tMaxY = Math.max(ay, by, cy);
+    const minZTri = Math.min(az, bz, cz);
+    const maxZTri = Math.max(az, bz, cz);
+
+    const gi0 = Math.max(0, Math.floor((tMinX - startX) / gingivaGridCell));
+    const gi1 = Math.min(gingivaCols - 1, Math.floor((tMaxX - startX) / gingivaGridCell));
+    const gj0 = Math.max(0, Math.floor((tMinY - startY) / gingivaGridCell));
+    const gj1 = Math.min(gingivaRows - 1, Math.floor((tMaxY - startY) / gingivaGridCell));
+
+    // Mapeia altura máxima local
+    for (let gj = gj0; gj <= gj1; gj++) {
+      for (let gi = gi0; gi <= gi1; gi++) {
+        const idx = gj * gingivaCols + gi;
+        if (maxZTri > maxZGrid[idx]) {
+          maxZGrid[idx] = maxZTri;
+        }
+      }
+    }
+
     const norm = computeNormal(ax, ay, az, bx, by, bz, cx, cy, cz);
 
     // Gengiva e Dentes: superfícies anatômicas voltadas para cima (norm.nz > 0.35)
     // localizadas estritamente acima do zócalo (gingivaThresholdZ)
-    const minZTri = Math.min(az, bz, cz);
     if (norm.nz > 0.35 && minZTri >= gingivaThresholdZ) {
-      const tMinX = Math.min(ax, bx, cx);
-      const tMaxX = Math.max(ax, bx, cx);
-      const tMinY = Math.min(ay, by, cy);
-      const tMaxY = Math.max(ay, by, cy);
-
-      const gi0 = Math.max(0, Math.floor((tMinX - startX) / gingivaGridCell));
-      const gi1 = Math.min(gingivaCols - 1, Math.floor((tMaxX - startX) / gingivaGridCell));
-      const gj0 = Math.max(0, Math.floor((tMinY - startY) / gingivaGridCell));
-      const gj1 = Math.min(gingivaRows - 1, Math.floor((tMaxY - startY) / gingivaGridCell));
-
       for (let gj = gj0; gj <= gj1; gj++) {
         for (let gi = gi0; gi <= gi1; gi++) {
           const idx = gj * gingivaCols + gi;
@@ -618,28 +632,35 @@ export async function generateDentalSupports(
   // - No canto posterior do zócalo (sem dentes/gengiva acima): sobe até perto do topo da parede do zócalo!
   // - Na lateral e parede lingual: sobe até a metade do modelo (topo do zócalo, logo abaixo da gengiva).
   // - Perto de dentes e gengivas: desce acompanhando a linha cervical (com margem de segurança de 0.8 mm abaixo da gengiva).
-  const targetLateralHalfZ = elevatedMinZ + modelH * 0.55;
   const getSafeLateralMaxZ = (px: number, py: number): number => {
-    const gi = Math.floor((px - startX) / gingivaGridCell);
-    const gj = Math.floor((py - startY) / gingivaGridCell);
+    const gi = Math.max(0, Math.min(gingivaCols - 1, Math.floor((px - startX) / gingivaGridCell)));
+    const gj = Math.max(0, Math.min(gingivaRows - 1, Math.floor((py - startY) / gingivaGridCell)));
     let minGingiva = Infinity;
+    let localMaxZ = -Infinity;
     const rad = 2; // Busca precisa cobrindo a transição parede-gengiva (~3.6 mm)
     for (let dj = -rad; dj <= rad; dj++) {
       for (let di = -rad; di <= rad; di++) {
         const ni = gi + di;
         const nj = gj + dj;
         if (ni >= 0 && ni < gingivaCols && nj >= 0 && nj < gingivaRows) {
-          const gz = minGingivaGrid[nj * gingivaCols + ni];
+          const idx = nj * gingivaCols + ni;
+          const gz = minGingivaGrid[idx];
           if (gz < minGingiva) minGingiva = gz;
+          const mz = maxZGrid[idx];
+          if (mz > localMaxZ) localMaxZ = mz;
         }
       }
     }
+
+    const effectiveLocalH = localMaxZ > elevatedMinZ + 2.0 ? localMaxZ - elevatedMinZ : modelH;
+    const targetLateralHalfZ = elevatedMinZ + effectiveLocalH * 0.55;
+
     if (minGingiva !== Infinity) {
       // Região com gengiva/dentes acima: sobe na parede do zócalo até a metade da peça (ou até 0.8mm abaixo da gengiva)
       return Math.max(elevatedMinZ + 1.5, Math.min(minGingiva - 0.8, targetLateralHalfZ));
     }
     // Canto posterior / quinas do zócalo (livre de dentes em cima): sobe até o topo da parede do modelo
-    return elevatedMinZ + Math.min(modelH * 0.88, 28.0);
+    return elevatedMinZ + Math.min(effectiveLocalH * 0.88, 28.0);
   };
 
   // 4. Amostragem de Suportes Odontológicos: Embaixo e nas Laterais Inferiores
@@ -660,7 +681,7 @@ export async function generateDentalSupports(
   const bottomCandidates: CandidatePoint[] = [];
 
   // 4a. SUPORTES DE BAIXO (Face inferior, oca e reentrâncias da base)
-  const spacing = Math.max(1.8, cfg.supportSpacing);
+  const spacing = Math.max(2.4, cfg.supportSpacing);
   const rowStepY = spacing * (Math.sqrt(3) / 2);
   const sampleRows = Math.max(1, Math.ceil((endY - startY) / rowStepY));
 
@@ -756,7 +777,7 @@ export async function generateDentalSupports(
 
     // Parede lateral apontando para fora do modelo (zócalos verticais e com conicidade de alívio)
     const len2D = Math.hypot(norm.nx, norm.ny);
-    if (len2D < 0.08 || norm.nz > 0.75 || norm.nz < -0.85) continue;
+    if (len2D < 0.05 || Math.abs(norm.nz) > 0.85) continue;
 
     const edgeAB = Math.hypot(bx - ax, by - ay);
     const edgeBC = Math.hypot(cx - bx, cy - by);
@@ -801,9 +822,8 @@ export async function generateDentalSupports(
   // em vez de colocar o suporte só embaixo na base.
   rawLateralCandidates.sort((a, b) => b.zContact - a.zContact);
 
-  // Filtra candidatos laterais com espaçamento perimetral denso (~1.0 mm)
-  // Garante que toda a lateral tenha pontos candidatos suficientes para cobrir sem vazios
-  const latSpacing = Math.max(0.95, (cfg.lateralPillarSpacing ?? 1.45) * 0.70);
+  // Filtra candidatos laterais garantindo espaçamento perimetral elegante sem amontoar (~2.2 mm)
+  const latSpacing = Math.max(2.1, userConfig.lateralPillarSpacing ?? 2.2);
   const latSpacingSq = latSpacing * latSpacing;
   const filteredLateralCandidates: CandidatePoint[] = [];
 
@@ -813,9 +833,8 @@ export async function generateDentalSupports(
     for (let j = 0; j < filteredLateralCandidates.length; j++) {
       const prev = filteredLateralCandidates[j];
       const dSq = (cand.x - prev.x) ** 2 + (cand.y - prev.y) ** 2;
-      // Permite suportes laterais empilhados em alturas Z diferentes na mesma parede do zócalo
-      const dz = Math.abs(cand.zContact - prev.zContact);
-      if (dSq < latSpacingSq && dz < 4.5) {
+      // Garante distância horizontal mínima entre suportes na lateral (sem suportes na mesma posição XY)
+      if (dSq < latSpacingSq) {
         tooClose = true;
         break;
       }
@@ -828,14 +847,8 @@ export async function generateDentalSupports(
   // 5. Filtro de Segurança Anti-Fusão de Suportes (Pilar com Pilar e Pilar com Modelo)
   const pillars: SupportPillarInfo[] = [];
   const raftZ = cfg.raftThickness;
-  const safePillarDistSq = Math.pow(cfg.minPillarDistance, 2);
-
-  // Espaçamento lateral calibrado para formar a paliçada contínua vista em fatiadores odontológicos
-  const effectiveLateralMinDist =
-    userConfig.minPillarDistance !== undefined && userConfig.lateralPillarSpacing === undefined
-      ? userConfig.minPillarDistance
-      : (userConfig.lateralPillarSpacing ?? Math.max(1.35, cfg.pillarDiameter + 0.15));
-  const effectiveLateralMinDistSq = Math.pow(effectiveLateralMinDist, 2);
+  const minPillarDist = Math.max(2.1, cfg.minPillarDistance || 2.4);
+  const minPillarDistSq = minPillarDist * minPillarDist;
   const stemRadiusWithClearance = pRad + cfg.modelClearance;
 
   // 5a. Insere PRIMEIRO os suportes LATERAIS com recuo adaptativo (garante barreira perimetral contínua)
@@ -854,74 +867,84 @@ export async function generateDentalSupports(
     let bestPillarPos: { px: number; py: number } | null = null;
     const offsetMultipliers = [1.0, 1.25, 1.5, 1.8, 2.2, 2.6, 3.2, 3.8, 4.5];
 
-    for (const mult of offsetMultipliers) {
-      const curOffset = lateralPillarOffset * mult;
-      const testPx = targetX + unx * curOffset;
-      const testPy = targetY + uny * curOffset;
+    // Testa na direção da normal; se colidir (ex: normal invertida do CAD apontando para dentro),
+    // testa na direção oposta (-1) para garantir haste sempre do lado de fora do modelo
+    for (const dir of [1, -1]) {
+      const dirNx = unx * dir;
+      const dirNy = uny * dir;
 
-      // Checagem anti-fusão com outros suportes já posicionados
-      let tooClose = false;
-      for (let pIdx = 0; pIdx < pillars.length; pIdx++) {
-        const p = pillars[pIdx];
-        const distSq = (testPx - p.x) * (testPx - p.x) + (testPy - p.y) * (testPy - p.y);
-        const dz = Math.abs(zContact - p.zContact);
-        if (distSq < effectiveLateralMinDistSq && dz < 4.5) {
-          tooClose = true;
-          break;
+      for (const mult of offsetMultipliers) {
+        const curOffset = lateralPillarOffset * mult;
+        const testPx = targetX + dirNx * curOffset;
+        const testPy = targetY + dirNy * curOffset;
+
+        // Checagem anti-fusão absoluta: distância mínima entre hastes vizinhas no plano da balsa
+        let tooClose = false;
+        for (let pIdx = 0; pIdx < pillars.length; pIdx++) {
+          const p = pillars[pIdx];
+          const distSq = (testPx - p.x) * (testPx - p.x) + (testPy - p.y) * (testPy - p.y);
+          if (distSq < minPillarDistSq) {
+            tooClose = true;
+            break;
+          }
         }
-      }
-      if (tooClose) {
-        continue;
-      }
+        if (tooClose) {
+          continue;
+        }
 
-      // Checagem de colisão da haste vertical com o modelo
-      // A haste vertical só existe entre Z = raftZ e Z = zStemMax.
-      // O modelo só existe acima de elevatedMinZ.
-      let collides = false;
-      const zStemMax = zContact - cfg.tipLength;
-      const clearance = pRad + 0.12;
+        // Checagem de colisão da haste vertical com o modelo
+        // A haste vertical só existe entre Z = raftZ e Z = zStemMax.
+        // O modelo só existe acima de elevatedMinZ.
+        let collides = false;
+        const zStemMax = zContact - cfg.tipLength;
+        const clearance = pRad + 0.10;
 
-      if (zStemMax > elevatedMinZ + 0.2) {
-        const gc0 = Math.max(0, Math.floor((testPx - clearance - startX) / spatialCellSize));
-        const gc1 = Math.min(gridCols - 1, Math.floor((testPx + clearance - startX) / spatialCellSize));
-        const gr0 = Math.max(0, Math.floor((testPy - clearance - startY) / spatialCellSize));
-        const gr1 = Math.min(gridRows - 1, Math.floor((testPy + clearance - startY) / spatialCellSize));
+        if (zStemMax > elevatedMinZ + 0.2) {
+          const gc0 = Math.max(0, Math.floor((testPx - clearance - startX) / spatialCellSize));
+          const gc1 = Math.min(gridCols - 1, Math.floor((testPx + clearance - startX) / spatialCellSize));
+          const gr0 = Math.max(0, Math.floor((testPy - clearance - startY) / spatialCellSize));
+          const gr1 = Math.min(gridRows - 1, Math.floor((testPy + clearance - startY) / spatialCellSize));
 
-        for (let gr = gr0; gr <= gr1 && !collides; gr++) {
-          for (let gc = gc0; gc <= gc1 && !collides; gc++) {
-            const triList = spatialGrid[gr * gridCols + gc];
-            for (let k = 0; k < triList.length; k++) {
-              const t = triList[k];
-              const off = t * 9;
-              const az = modelPositions[off + 2] + zShift;
-              const bz = modelPositions[off + 5] + zShift;
-              const cz = modelPositions[off + 8] + zShift;
-              const tMinZ = Math.min(az, bz, cz);
-              const tMaxZ = Math.max(az, bz, cz);
+          for (let gr = gr0; gr <= gr1 && !collides; gr++) {
+            for (let gc = gc0; gc <= gc1 && !collides; gc++) {
+              const triList = spatialGrid[gr * gridCols + gc];
+              for (let k = 0; k < triList.length; k++) {
+                const t = triList[k];
+                const off = t * 9;
+                const az = modelPositions[off + 2] + zShift;
+                const bz = modelPositions[off + 5] + zShift;
+                const cz = modelPositions[off + 8] + zShift;
+                const tMinZ = Math.min(az, bz, cz);
+                const tMaxZ = Math.max(az, bz, cz);
 
-              if (tMinZ < zStemMax && tMaxZ > elevatedMinZ + 0.1) {
-                const ax = modelPositions[off];
-                const ay = modelPositions[off + 1];
-                const bx = modelPositions[off + 3];
-                const by = modelPositions[off + 4];
-                const cx = modelPositions[off + 6];
-                const cy = modelPositions[off + 7];
+                // A haste vertical só colide com o modelo se o triângulo existir
+                // dentro da faixa de Z da haste (entre elevatedMinZ e zStemMax)
+                if (tMinZ < zStemMax && tMaxZ > elevatedMinZ + 0.1) {
+                  const ax = modelPositions[off];
+                  const ay = modelPositions[off + 1];
+                  const bx = modelPositions[off + 3];
+                  const by = modelPositions[off + 4];
+                  const cx = modelPositions[off + 6];
+                  const cy = modelPositions[off + 7];
 
-                const d2D = distPointToTriangle2D(testPx, testPy, ax, ay, bx, by, cx, cy);
-                if (d2D < clearance) {
-                  collides = true;
-                  break;
+                  const d2D = distPointToTriangle2D(testPx, testPy, ax, ay, bx, by, cx, cy);
+                  if (d2D < clearance) {
+                    collides = true;
+                    break;
+                  }
                 }
               }
             }
           }
         }
+
+        if (!collides) {
+          bestPillarPos = { px: testPx, py: testPy };
+          break; // Posição perfeita encontrada!
+        }
       }
 
-      if (!collides) {
-        bestPillarPos = { px: testPx, py: testPy };
-        break; // Posição perfeita encontrada!
-      }
+      if (bestPillarPos) break;
     }
 
     if (!bestPillarPos) continue;
@@ -952,8 +975,7 @@ export async function generateDentalSupports(
     for (let pIdx = 0; pIdx < pillars.length; pIdx++) {
       const p = pillars[pIdx];
       const distSq = (px - p.x) * (px - p.x) + (py - p.y) * (py - p.y);
-      const requiredDistSq = p.isLateral ? effectiveLateralMinDistSq : safePillarDistSq;
-      if (distSq < requiredDistSq) {
+      if (distSq < minPillarDistSq) {
         tooClose = true;
         break;
       }

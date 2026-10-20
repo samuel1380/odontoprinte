@@ -271,4 +271,35 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
       expect(p.zContact).toBeLessThan(elevationZ + 12.0);
     }
   });
+
+  it("gera suportes laterais mesmo em modelos com normais invertidas e sem interpenetracao de hastes", async () => {
+    // Modelo com paredes laterais cujos triângulos têm ordem horária (normais apontando para dentro)
+    const tris: number[] = [
+      // Base plana
+      0, 0, 0, 30, 20, 0, 30, 0, 0,
+      0, 0, 0, 0, 20, 0, 30, 20, 0,
+      // Parede lateral invertida (sentido horário)
+      0, 0, 0, 30, -0.5, 12, 30, 0, 0,
+      0, 0, 0, 0, -0.5, 12, 30, -0.5, 12,
+      // Parede oposta
+      0, 20, 0, 30, 20, 0, 30, 20.5, 12,
+      0, 20, 0, 30, 20.5, 12, 0, 20.5, 12,
+    ];
+    const pos = new Float32Array(tris);
+    const result = await generateDentalSupports(pos, { elevationZ: 5.0 });
+
+    const lateralPillars = result.pillars.filter((p) => p.isLateral || p.targetX !== undefined);
+    // Deve conter suportes laterais mesmo com normal invertida
+    expect(lateralPillars.length).toBeGreaterThan(0);
+
+    // Valida que NENHUM par de pilares tem distância menor que 2.0mm (zero fusão / interpenetração)
+    for (let i = 0; i < result.pillars.length; i++) {
+      for (let j = i + 1; j < result.pillars.length; j++) {
+        const p1 = result.pillars[i];
+        const p2 = result.pillars[j];
+        const d = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+        expect(d).toBeGreaterThanOrEqual(1.99);
+      }
+    }
+  });
 });
