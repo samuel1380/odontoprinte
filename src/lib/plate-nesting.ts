@@ -217,6 +217,34 @@ export async function parseStlDimensions(input: File | Blob | ArrayBuffer): Prom
   };
 }
 
+/** Calcula as dimensões (bounding box milimétrico) a partir de posições já carregadas em memória. */
+export function computePositionsDimensions(positions: Float32Array): ModelSize {
+  let minX = Infinity,
+    minY = Infinity,
+    minZ = Infinity;
+  let maxX = -Infinity,
+    maxY = -Infinity,
+    maxZ = -Infinity;
+  for (let i = 0; i < positions.length; i += 3) {
+    const x = positions[i];
+    const y = positions[i + 1];
+    const z = positions[i + 2];
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) continue;
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (z < minZ) minZ = z;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+    if (z > maxZ) maxZ = z;
+  }
+  return {
+    x: round1(maxX - minX),
+    y: round1(maxY - minY),
+    z: round1(maxZ - minZ),
+    triangles: Math.floor(positions.length / 9),
+  };
+}
+
 /** Extrai os triângulos (para montar o STL posicionado). */
 export async function parseStlTriangles(input: File | Blob | ArrayBuffer): Promise<RawTriangles> {
   const buffer = input instanceof ArrayBuffer ? input : await (input as Blob).arrayBuffer();
@@ -272,6 +300,134 @@ export function flipModel180(inputPositions: Float32Array): Float32Array {
       out[i + 1] -= minY;
       out[i + 2] -= minZ;
     }
+  }
+
+  return out;
+}
+
+/**
+ * Detecta a face plana da base do troquel (ou modelo) e assenta a base perfeitamente
+ * plana e reta no plano horizontal Z=0 (eliminando inclinações de 45° ou angulações do CAD).
+ */
+export function alignTroquelBaseToBed(inputPositions: Float32Array): Float32Array {
+  const count = Math.floor(inputPositions.length / 9);
+  if (count === 0) return inputPositions;
+
+  interface PlaneGroup {
+    nx: number;
+    ny: number;
+    nz: number;
+    area: number;
+    avgZ: number;
+  }
+
+  const planes: PlaneGroup[] = [];
+
+  for (let t = 0; t < count; t++) {
+    const off = t * 9;
+    const ax = inputPositions[off], ay = inputPositions[off + 1], az = inputPositions[off + 2];
+    const bx = inputPositions[off + 3], by = inputPositions[off + 4], bz = inputPositions[off + 5];
+    const cx = inputPositions[off + 6], cy = inputPositions[off + 7], cz = inputPositions[off + 8];
+
+    const ux = bx - ax, uy = by - ay, uz = bz - az;
+    const vx = cx - ax, vy = cy - ay, vz = cz - az;
+    const cxN = uy * vz - uz * vy;
+    const cyN = uz * vx - ux * vz;
+    const czN = ux * vy - uy * vx;
+    const len = Math.hypot(cxN, cyN, czN);
+    if (len < 1e-6) continue;
+
+    const nx = cxN / len;
+    const ny = cyN / len;
+    const nz = czN / len;
+    const area = 0.5 * len;
+    const avgZ = (az + bz + cz) / 3;
+
+    let matched = false;
+    for (let p = 0; p < planes.length; p++) {
+      const pl = planes[p];
+      const dot = nx * pl.nx + ny * pl.ny + nz * pl.nz;
+      if (dot > 0.94) {
+        pl.area += area;
+        pl.avgZ = (pl.avgZ * (pl.area - area) + avgZ * area) / pl.area;
+        matched = true;
+        break;
+      }
+    }
+
+    if (!matched) {
+      planes.push({ nx, ny, nz, area, avgZ });
+    }
+  }
+
+  if (planes.length === 0) return inputPositions;
+
+  // Procura a face plana mais expressiva (maior área contínua)
+  planes.sort((a, b) => b.area - a.area);
+  const bestBase = planes[0];
+
+  // Se já estiver assentada para baixo (nz <= -0.98), já está reta
+  if (bestBase.nz <= -0.98) {
+    return inputPositions;
+  }
+
+  // Se a face plana estiver apontando para cima (nz >= 0.98), inverte 180°
+  if (bestBase.nz >= 0.98) {
+    return flipModel180(inputPositions);
+  }
+
+  // Rotação de Rodrigues para alinhar bestBase.N ao vetor (0, 0, -1)
+  const vx = -bestBase.ny;
+  const vy = bestBase.nx;
+  const vLen = Math.hypot(vx, vy);
+
+  if (vLen < 1e-5) {
+    return inputPositions;
+  }
+
+  const uX = vx / vLen;
+  const uY = vy / vLen;
+  const cosTheta = -bestBase.nz;
+  const sinTheta = vLen;
+  const oneMinusCos = 1 - cosTheta;
+
+  const m00 = cosTheta + uX * uX * oneMinusCos;
+  const m01 = uX * uY * oneMinusCos;
+  const m02 = uY * sinTheta;
+
+  const m10 = uY * uX * oneMinusCos;
+  const m11 = cosTheta + uY * uY * oneMinusCos;
+  const m12 = -uX * sinTheta;
+
+  const m20 = -uY * sinTheta;
+  const m21 = uX * sinTheta;
+  const m22 = cosTheta;
+
+  const out = new Float32Array(inputPositions.length);
+  let minX = Infinity, minY = Infinity, minZ = Infinity;
+
+  for (let i = 0; i < inputPositions.length; i += 3) {
+    const x = inputPositions[i];
+    const y = inputPositions[i + 1];
+    const z = inputPositions[i + 2];
+
+    const rx = m00 * x + m01 * y + m02 * z;
+    const ry = m10 * x + m11 * y + m12 * z;
+    const rz = m20 * x + m21 * y + m22 * z;
+
+    out[i] = rx;
+    out[i + 1] = ry;
+    out[i + 2] = rz;
+
+    if (rx < minX) minX = rx;
+    if (ry < minY) minY = ry;
+    if (rz < minZ) minZ = rz;
+  }
+
+  for (let i = 0; i < out.length; i += 3) {
+    out[i] -= minX;
+    out[i + 1] -= minY;
+    out[i + 2] -= minZ;
   }
 
   return out;

@@ -12,6 +12,8 @@ import {
   buildPositionedStl,
   levelAndOrientDentalModel,
   flipModel180,
+  alignTroquelBaseToBed,
+  computePositionsDimensions,
   packRaster,
   detectPlate,
   unplacedReason,
@@ -236,16 +238,27 @@ export default function MontagemPage() {
               : Promise.resolve(null),
           ]);
           if (cancelled) return;
-          if (cancelled) return;
           if (tris) {
-            trianglesById.current.set(m.id, tris.positions);
+            let positions = tris.positions;
+            let currentSize = size;
+            const isTroquel = m.workType === "TROQUEL" || /troquel|troqueis|die/i.test(m.file.name);
+            if (isTroquel) {
+              const aligned = alignTroquelBaseToBed(positions);
+              if (aligned !== positions) {
+                positions = aligned;
+                currentSize = computePositionsDimensions(positions);
+              }
+            }
+            trianglesById.current.set(m.id, positions);
             try {
-              gridsById.current.set(m.id, rasterizeTriangles(tris.positions, 1));
+              gridsById.current.set(m.id, rasterizeTriangles(positions, 1));
             } catch {
               // sem grade: cai para retângulo cheio no encaixe
             }
+            setModels((prev) => prev.map((p) => (p.id === m.id ? { ...p, size: currentSize, parsing: false } : p)));
+          } else {
+            setModels((prev) => prev.map((p) => (p.id === m.id ? { ...p, size, parsing: false } : p)));
           }
-          setModels((prev) => prev.map((p) => (p.id === m.id ? { ...p, size, parsing: false } : p)));
         } catch (err: any) {
           if (cancelled) return;
           setModels((prev) =>
@@ -881,6 +894,22 @@ export default function MontagemPage() {
     toast.success("Modelo virado 180° com sucesso!");
   };
 
+  const alignModelStraight = (id: string) => {
+    const geo = trianglesById.current.get(id);
+    if (!geo) return;
+    const aligned = alignTroquelBaseToBed(geo);
+    trianglesById.current.set(id, aligned);
+
+    const newSize = computePositionsDimensions(aligned);
+    try {
+      gridsById.current.set(id, rasterizeTriangles(aligned, 1));
+    } catch {
+      //
+    }
+    setModels((prev) => prev.map((m) => (m.id === id ? { ...m, size: newSize } : m)));
+    toast.success("Base assentada e endireitada na horizontal com sucesso!");
+  };
+
   const downloadSingleModel = (id: string, name: string) => {
     const geo = trianglesById.current.get(id);
     if (!geo) return;
@@ -1180,6 +1209,14 @@ export default function MontagemPage() {
                     {/* Controles de Nivelamento e Orientação 3D */}
                     {trianglesById.current.has(m.id) && (
                       <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => alignModelStraight(m.id)}
+                          className="text-slate-400 hover:text-emerald-400 p-1 rounded hover:bg-slate-800 transition"
+                          title="Endireitar base reta na mesa (corrige troquel ou modelo inclinado a 45°)"
+                        >
+                          <Compass className="w-3.5 h-3.5" />
+                        </button>
                         <button
                           type="button"
                           onClick={() => flipModel(m.id)}

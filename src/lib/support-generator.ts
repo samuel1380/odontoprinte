@@ -564,7 +564,7 @@ export async function generateDentalSupports(
 
   // 3b. Mapeamento Anatômico da Margem Gengival / Oclusal
   // Identifica a cota onde começam gengiva e dentes (superfícies voltadas para cima norm.nz > 0.30)
-  const gingivaGridCell = 2.5; // mm
+  const gingivaGridCell = 1.8; // mm
   const gingivaCols = Math.max(1, Math.ceil((endX - startX) / gingivaGridCell));
   const gingivaRows = Math.max(1, Math.ceil((endY - startY) / gingivaGridCell));
   const minGingivaGrid = new Float32Array(gingivaCols * gingivaRows);
@@ -586,10 +586,10 @@ export async function generateDentalSupports(
 
     const norm = computeNormal(ax, ay, az, bx, by, bz, cx, cy, cz);
 
-    // Gengiva e Dentes: superfícies voltadas para cima (norm.nz > 0.25)
+    // Gengiva e Dentes: superfícies voltadas para cima (norm.nz > 0.30)
     // localizadas acima do plano da base inferior do zócalo
     const minZTri = Math.min(az, bz, cz);
-    if (norm.nz > 0.25 && minZTri >= elevatedMinZ + 1.2) {
+    if (norm.nz > 0.30 && minZTri >= elevatedMinZ + 1.5) {
       const tMinX = Math.min(ax, bx, cx);
       const tMaxX = Math.max(ax, bx, cx);
       const tMinY = Math.min(ay, by, cy);
@@ -612,13 +612,14 @@ export async function generateDentalSupports(
   }
 
   // Teto seguro anatômico:
-  // - Perto de dentes e gengivas: desce acompanhando a linha cervical (com margem de 1.2 mm abaixo da gengiva)
-  // - Na parte posterior alta do zócalo (livre de dentes/gengiva acima): sobe até o topo da parede do zócalo
+  // - No canto posterior do zócalo (sem dentes/gengiva acima): sobe até perto do topo da parede do zócalo!
+  // - Na lateral e parede lingual: sobe até a metade do modelo (topo do zócalo, logo abaixo da gengiva).
+  // - Perto de dentes e gengivas: desce acompanhando a linha cervical (com margem de segurança de 1.0 mm abaixo da gengiva).
   const getSafeLateralMaxZ = (px: number, py: number): number => {
     const gi = Math.floor((px - startX) / gingivaGridCell);
     const gj = Math.floor((py - startY) / gingivaGridCell);
     let minGingiva = Infinity;
-    const rad = 2; // raio de ~5 mm
+    const rad = 1; // Busca precisa logo acima da parede (~2.0 mm)
     for (let dj = -rad; dj <= rad; dj++) {
       for (let di = -rad; di <= rad; di++) {
         const ni = gi + di;
@@ -630,10 +631,10 @@ export async function generateDentalSupports(
       }
     }
     if (minGingiva !== Infinity) {
-      // Região com gengiva/dentes acima: desce à medida que se aproxima dos dentes/gengiva
-      return Math.max(elevatedMinZ + 1.2, Math.min(minGingiva - 1.2, elevatedMinZ + modelH * 0.40));
+      // Região com gengiva/dentes acima: sobe na parede do zócalo até a metade da peça (ou até 1.0mm abaixo da gengiva)
+      return Math.max(elevatedMinZ + 1.2, Math.min(minGingiva - 1.0, elevatedMinZ + modelH * 0.60));
     }
-    // Região posterior alta do zócalo (livre de dentes em cima): sobe até perto do topo da parede
+    // Canto posterior / quinas do zócalo (livre de dentes em cima): sobe até o topo da parede do modelo
     return elevatedMinZ + Math.min(modelH * 0.88, 28.0);
   };
 
@@ -792,6 +793,11 @@ export async function generateDentalSupports(
     }
   }
 
+  // ORDENAÇÃO ESTRATÉGICA: candidatos mais altos da parede são processados PRIMEIRO!
+  // Isso garante que no canto do modelo o suporte suba até o topo, e na lateral suba até a metade do modelo,
+  // em vez de colocar o suporte só embaixo na base.
+  rawLateralCandidates.sort((a, b) => b.zContact - a.zContact);
+
   // Filtra candidatos laterais com espaçamento perimetral denso (~1.0 mm)
   // Garante que toda a lateral tenha pontos candidatos suficientes para cobrir sem vazios
   const latSpacing = Math.max(0.95, (cfg.lateralPillarSpacing ?? 1.45) * 0.70);
@@ -806,7 +812,7 @@ export async function generateDentalSupports(
       const dSq = (cand.x - prev.x) ** 2 + (cand.y - prev.y) ** 2;
       // Permite suportes laterais empilhados em alturas Z diferentes na mesma parede do zócalo
       const dz = Math.abs(cand.zContact - prev.zContact);
-      if (dSq < latSpacingSq && dz < 2.0) {
+      if (dSq < latSpacingSq && dz < 4.5) {
         tooClose = true;
         break;
       }
@@ -855,7 +861,8 @@ export async function generateDentalSupports(
       for (let pIdx = 0; pIdx < pillars.length; pIdx++) {
         const p = pillars[pIdx];
         const distSq = (testPx - p.x) * (testPx - p.x) + (testPy - p.y) * (testPy - p.y);
-        if (distSq < effectiveLateralMinDistSq) {
+        const dz = Math.abs(zContact - p.zContact);
+        if (distSq < effectiveLateralMinDistSq && dz < 4.5) {
           tooClose = true;
           break;
         }
