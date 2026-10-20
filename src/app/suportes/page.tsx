@@ -869,20 +869,20 @@ export default function SuportesPage() {
                   {DENTAL_SUPPORT_PROFILES[activeProfile].description}
                 </p>
 
-                {/* Garantia Odontológica: Ponta Esférica + Amarração Lateral Estratégica */}
+                {/* Garantia Odontológica: Destaque de Amarração Lateral */}
                 <div className="bg-slate-950/70 border border-slate-800 rounded-lg p-2.5 space-y-1.5 text-[11px]">
                   <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Ponta Esférica + Amarração Lateral Estratégica</span>
+                    <span>Amarração Lateral Contínua Anti-Distorção</span>
                   </div>
                   <p className="text-[10px] text-slate-400 leading-normal">
-                    Bolinha de contato arredondada no modelo (sem ponta fina em chapa) e suportes laterais distribuídos em pontos-chave, sem excesso de hastes para remover.
+                    Malha reforçada de suportes em toda a lateral do zócalo. Trava as paredes contra deformação e sucção do FEP, mantendo cúspides e dentes 100% livres de marcas.
                   </p>
                 </div>
 
                 <div className="pt-1.5 border-t border-amber-500/20 flex items-center justify-between text-[10px] text-slate-400 flex-wrap gap-2">
                   <span>Haste: <strong className="text-white">{config.pillarDiameter} mm</strong></span>
-                  <span>Ponta esférica: <strong className="text-white">{config.tipDiameter} mm</strong></span>
+                  <span>Ponta: <strong className="text-white">{config.tipDiameter} mm</strong></span>
                   <span>Folga da Parede: <strong className="text-emerald-300">{config.modelClearance} mm</strong></span>
                   <span>Dist. entre Suportes: <strong className="text-amber-300">≥ {config.minPillarDistance} mm</strong></span>
                 </div>

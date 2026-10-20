@@ -23,31 +23,6 @@ function createSampleModelPositions(): Float32Array {
   return new Float32Array(tris);
 }
 
-// Caixa fechada 30×30×10 com base real voltada para baixo (normais -Z).
-function createClosedBoxPositions(): Float32Array {
-  const tris: number[] = [
-    // Base inferior (Z=0, normal -Z)
-    0, 0, 0, 30, 30, 0, 30, 0, 0,
-    0, 0, 0, 0, 30, 0, 30, 30, 0,
-    // Topo (Z=10, normal +Z)
-    0, 0, 10, 30, 0, 10, 30, 30, 10,
-    0, 0, 10, 30, 30, 10, 0, 30, 10,
-    // Parede frontal (Y=0)
-    0, 0, 0, 30, 0, 0, 30, 0, 10,
-    0, 0, 0, 30, 0, 10, 0, 0, 10,
-    // Parede traseira (Y=30)
-    0, 30, 0, 30, 30, 10, 30, 30, 0,
-    0, 30, 0, 0, 30, 10, 30, 30, 10,
-    // Parede esquerda (X=0)
-    0, 0, 0, 0, 30, 10, 0, 30, 0,
-    0, 0, 0, 0, 0, 10, 0, 30, 10,
-    // Parede direita (X=30)
-    30, 0, 0, 30, 30, 0, 30, 30, 10,
-    30, 0, 0, 30, 30, 10, 30, 0, 10,
-  ];
-  return new Float32Array(tris);
-}
-
 describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)", () => {
   it("tem as medidas padrão corretas de suporte médio anti-falhas e anti-fusão", () => {
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.elevationZ).toBe(5.0);
@@ -56,7 +31,6 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.raftThickness).toBe(1.0);
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.minPillarDistance).toBeGreaterThanOrEqual(2.4);
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.modelClearance).toBeGreaterThanOrEqual(0.7);
-    expect(DEFAULT_DENTAL_SUPPORT_CONFIG.lateralPillarSpacing).toBeGreaterThanOrEqual(5.0);
   });
 
   it("disponibiliza perfis predefinidos calibrados (Fino, Médio e Grosso)", () => {
@@ -226,7 +200,7 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     }
   });
 
-  it("distribui suportes laterais em pontos estratégicos sem excesso de hastes", async () => {
+  it("gera quantidade expressiva de suportes na lateral formando paliçada contínua perimetral", async () => {
     // Modelo com perímetro retangular de 40mm x 30mm com paredes laterais
     const tris: number[] = [
       // Base inferior (Z=0)
@@ -250,9 +224,8 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
 
     const lateralPillars = result.pillars.filter((p) => p.isLateral || p.targetX !== undefined);
 
-    // Deve manter cobertura perimetral, mas sem a antiga paliçada densa (1 suporte a cada ~2 mm).
-    expect(lateralPillars.length).toBeGreaterThanOrEqual(8);
-    expect(lateralPillars.length).toBeLessThanOrEqual(30);
+    // Deve gerar grande quantidade de suportes na lateral (paliçada densa sem vazios)
+    expect(lateralPillars.length).toBeGreaterThanOrEqual(30);
 
     // Deve ter suportes nas 4 paredes (X mín/máx e Y mín/máx)
     const xs = lateralPillars.map((p) => p.x);
@@ -296,47 +269,6 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     // NUNCA pode atingir dentes ou oclusal (dentes começam em 12 + 5 = 17mm)
     for (const p of lateralPillars) {
       expect(p.zContact).toBeLessThan(elevationZ + 12.0);
-    }
-  });
-
-  it("gera ponta esférica (bolinha) no contato, sem disco achatado de chapa", async () => {
-    const positions = createClosedBoxPositions();
-    const originalTriangles = Math.floor(positions.length / 9);
-    const result = await generateDentalSupports(positions);
-    const view = new DataView(result.stlBuffer);
-
-    const supportVertices: Array<{ x: number; y: number; z: number }> = [];
-    for (let t = originalTriangles; t < result.totalTriangles; t++) {
-      const base = 84 + t * 50 + 12;
-      for (let v = 0; v < 3; v++) {
-        const off = base + v * 12;
-        supportVertices.push({
-          x: view.getFloat32(off, true),
-          y: view.getFloat32(off + 4, true),
-          z: view.getFloat32(off + 8, true),
-        });
-      }
-    }
-
-    const tipRad = Math.max(0.25, DEFAULT_DENTAL_SUPPORT_CONFIG.tipDiameter / 2);
-    const penetration = Math.min(DEFAULT_DENTAL_SUPPORT_CONFIG.tipPenetration, tipRad * 0.9);
-    const bottomPillars = result.pillars.filter((p) => !p.isLateral);
-
-    expect(bottomPillars.length).toBeGreaterThan(0);
-
-    for (const pillar of bottomPillars.slice(0, 5)) {
-      const nearTip = supportVertices.filter(
-        (v) => Math.hypot(v.x - pillar.x, v.y - pillar.y) <= tipRad + 0.05
-      );
-      const topZ = Math.max(...nearTip.map((v) => v.z));
-      expect(topZ).toBeCloseTo(pillar.zContact + penetration, 3);
-
-      // A esfera termina em um único polo; uma tampa plana teria um anel de
-      // vértices afastados do centro, formando a antiga "chapa" fina.
-      const topVertices = nearTip.filter((v) => Math.abs(v.z - topZ) < 0.01);
-      for (const v of topVertices) {
-        expect(Math.hypot(v.x - pillar.x, v.y - pillar.y)).toBeLessThan(0.02);
-      }
     }
   });
 
