@@ -563,12 +563,15 @@ export async function generateDentalSupports(
   }
 
   // 3b. Mapeamento Anatômico da Margem Gengival / Oclusal
-  // Identifica a cota onde começam gengiva e dentes (superfícies voltadas para cima norm.nz > 0.30)
+  // Dentes e gengivas ficam sempre na metade superior da peça, acima do zócalo.
+  // Ignora chanfros inferiores, relevos e base do zócalo (abaixo de 40% da altura ou 3.5mm)
+  const modelH = maxZ - minZ;
   const gingivaGridCell = 1.8; // mm
   const gingivaCols = Math.max(1, Math.ceil((endX - startX) / gingivaGridCell));
   const gingivaRows = Math.max(1, Math.ceil((endY - startY) / gingivaGridCell));
   const minGingivaGrid = new Float32Array(gingivaCols * gingivaRows);
   minGingivaGrid.fill(Infinity);
+  const gingivaThresholdZ = elevatedMinZ + Math.max(3.5, modelH * 0.40);
 
   for (let t = 0; t < triCount; t++) {
     const off = t * 9;
@@ -586,10 +589,10 @@ export async function generateDentalSupports(
 
     const norm = computeNormal(ax, ay, az, bx, by, bz, cx, cy, cz);
 
-    // Gengiva e Dentes: superfícies voltadas para cima (norm.nz > 0.30)
-    // localizadas acima do plano da base inferior do zócalo
+    // Gengiva e Dentes: superfícies anatômicas voltadas para cima (norm.nz > 0.35)
+    // localizadas estritamente acima do zócalo (gingivaThresholdZ)
     const minZTri = Math.min(az, bz, cz);
-    if (norm.nz > 0.30 && minZTri >= elevatedMinZ + 1.5) {
+    if (norm.nz > 0.35 && minZTri >= gingivaThresholdZ) {
       const tMinX = Math.min(ax, bx, cx);
       const tMaxX = Math.max(ax, bx, cx);
       const tMinY = Math.min(ay, by, cy);
@@ -614,12 +617,13 @@ export async function generateDentalSupports(
   // Teto seguro anatômico:
   // - No canto posterior do zócalo (sem dentes/gengiva acima): sobe até perto do topo da parede do zócalo!
   // - Na lateral e parede lingual: sobe até a metade do modelo (topo do zócalo, logo abaixo da gengiva).
-  // - Perto de dentes e gengivas: desce acompanhando a linha cervical (com margem de segurança de 1.0 mm abaixo da gengiva).
+  // - Perto de dentes e gengivas: desce acompanhando a linha cervical (com margem de segurança de 0.8 mm abaixo da gengiva).
+  const targetLateralHalfZ = elevatedMinZ + modelH * 0.55;
   const getSafeLateralMaxZ = (px: number, py: number): number => {
     const gi = Math.floor((px - startX) / gingivaGridCell);
     const gj = Math.floor((py - startY) / gingivaGridCell);
     let minGingiva = Infinity;
-    const rad = 1; // Busca precisa logo acima da parede (~2.0 mm)
+    const rad = 2; // Busca precisa cobrindo a transição parede-gengiva (~3.6 mm)
     for (let dj = -rad; dj <= rad; dj++) {
       for (let di = -rad; di <= rad; di++) {
         const ni = gi + di;
@@ -631,8 +635,8 @@ export async function generateDentalSupports(
       }
     }
     if (minGingiva !== Infinity) {
-      // Região com gengiva/dentes acima: sobe na parede do zócalo até a metade da peça (ou até 1.0mm abaixo da gengiva)
-      return Math.max(elevatedMinZ + 1.2, Math.min(minGingiva - 1.0, elevatedMinZ + modelH * 0.60));
+      // Região com gengiva/dentes acima: sobe na parede do zócalo até a metade da peça (ou até 0.8mm abaixo da gengiva)
+      return Math.max(elevatedMinZ + 1.5, Math.min(minGingiva - 0.8, targetLateralHalfZ));
     }
     // Canto posterior / quinas do zócalo (livre de dentes em cima): sobe até o topo da parede do modelo
     return elevatedMinZ + Math.min(modelH * 0.88, 28.0);
@@ -641,7 +645,6 @@ export async function generateDentalSupports(
   // 4. Amostragem de Suportes Odontológicos: Embaixo e nas Laterais Inferiores
   // REGRA INVIOLÁVEL: NUNCA no topo, NUNCA nos dentes, NUNCA na gengiva.
   // Suportes são restritos estritamente ao plano inferior e às paredes laterais da base (zócalo).
-  const modelH = maxZ - minZ;
   const maxSupportZ = elevatedMinZ + Math.min(modelH * 0.40, 14.0);
 
   interface CandidatePoint {
@@ -849,7 +852,7 @@ export async function generateDentalSupports(
 
     // Tenta diferentes offsets de afastamento para a haste caso haja concavidade ou saliência na parede
     let bestPillarPos: { px: number; py: number } | null = null;
-    const offsetMultipliers = [1.0, 1.25, 1.5, 1.8, 2.2, 2.6];
+    const offsetMultipliers = [1.0, 1.25, 1.5, 1.8, 2.2, 2.6, 3.2, 3.8, 4.5];
 
     for (const mult of offsetMultipliers) {
       const curOffset = lateralPillarOffset * mult;

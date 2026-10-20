@@ -235,4 +235,40 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     expect(Math.min(...ys)).toBeLessThan(5);
     expect(Math.max(...ys)).toBeGreaterThan(25);
   });
+
+  it("garante que suportes nas laterais do zócalo sobem até a metade do modelo e respeitam oclusal", async () => {
+    // Modelo com 20mm de altura total (Z de 0 a 20)
+    // Parede lateral do zócalo vai de Z=0 a Z=12
+    // Dentes/gengiva acima de Z=12 (Z=12 a 20)
+    const tris: number[] = [
+      // Base
+      0, 0, 0, 30, 0, 0, 30, 20, 0,
+      0, 0, 0, 30, 20, 0, 0, 20, 0,
+      // Parede lateral vestibular (Y=0, Z vai de 0 a 12 com leve inclinação externa)
+      0, 0, 0, 30, 0, 0, 30, -0.5, 12,
+      0, 0, 0, 30, -0.5, 12, 0, -0.5, 12,
+      // Parede lateral oposta
+      0, 20, 0, 30, 20, 0, 30, 20.5, 12,
+      0, 20, 0, 30, 20.5, 12, 0, 20.5, 12,
+      // Dentes / topo oclusal voltados para cima (Z de 12 a 20, norm.nz > 0.40)
+      0, 0, 12, 30, 0, 12, 15, 10, 20,
+      0, 20, 12, 15, 10, 20, 30, 20, 12,
+    ];
+    const pos = new Float32Array(tris);
+    const elevationZ = 5.0;
+    const modelH = 20.0;
+    const result = await generateDentalSupports(pos, { elevationZ });
+
+    const lateralPillars = result.pillars.filter((p) => p.isLateral || p.targetX !== undefined);
+    expect(lateralPillars.length).toBeGreaterThan(0);
+
+    // Deve subir até a metade do modelo (modelH * 0.50 = 10mm -> cota Z = 5 + 10 = 15mm)
+    const maxLateralZ = Math.max(...lateralPillars.map((p) => p.zContact));
+    expect(maxLateralZ).toBeGreaterThanOrEqual(elevationZ + modelH * 0.50);
+
+    // NUNCA pode atingir dentes ou oclusal (dentes começam em 12 + 5 = 17mm)
+    for (const p of lateralPillars) {
+      expect(p.zContact).toBeLessThan(elevationZ + 12.0);
+    }
+  });
 });
