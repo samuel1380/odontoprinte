@@ -231,12 +231,14 @@ export default function MontagemPage() {
       for (const m of models) {
         if (m.size || m.error || !m.parsing) continue;
         try {
-          const [size, tris] = await Promise.all([
-            parseStlDimensions(m.file),
-            /\.stl$/i.test(m.file.name)
-              ? parseStlTriangles(m.file)
-              : Promise.resolve(null),
-          ]);
+          // Lê o STL UMA única vez. Antes o arquivo era lido/decodificado duas
+          // vezes (dimensões + triângulos), dobrando o tempo de importação.
+          const tris = /\.stl$/i.test(m.file.name)
+            ? await parseStlTriangles(m.file)
+            : null;
+          const size = tris
+            ? computePositionsDimensions(tris.positions)
+            : await parseStlDimensions(m.file);
           if (cancelled) return;
           if (tris) {
             let positions = tris.positions;

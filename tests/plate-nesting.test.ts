@@ -14,6 +14,7 @@ import {
   fmtMm,
   levelAndOrientDentalModel,
   flipModel180,
+  alignTroquelBaseToBed,
 } from "../src/lib/plate-nesting";
 
 // STL binário mínimo: 1 triângulo (0,0,0)-(10,0,0)-(0,5,2)
@@ -294,6 +295,43 @@ describe("packPlate", () => {
     expect(r.placed.length).toBeGreaterThanOrEqual(9);
     assertNoOverlap(r, 2);
     assertInside(r, 153.4, 87, 2);
+  });
+});
+
+describe("alignTroquelBaseToBed", () => {
+  it("assenta um troquel inclinado sem depender da ordem das normais", () => {
+    // Caixa 20 × 20 × 10 rotacionada 30° em X: o Z final deve voltar a ~10 mm.
+    const w = 20, d = 20, h = 10;
+    const v = [
+      [0, 0, 0], [w, 0, 0], [w, d, 0], [0, d, 0],
+      [0, 0, h], [w, 0, h], [w, d, h], [0, d, h],
+    ];
+    const faces = [
+      [0, 1, 2], [0, 2, 3], [4, 6, 5], [4, 7, 6],
+      [0, 4, 5], [0, 5, 1], [1, 5, 6], [1, 6, 2],
+      [2, 6, 7], [2, 7, 3], [3, 7, 4], [3, 4, 0],
+    ];
+    const a = (30 * Math.PI) / 180;
+    const ca = Math.cos(a), sa = Math.sin(a);
+    const pos = new Float32Array(faces.length * 9);
+    let o = 0;
+    for (const f of faces) {
+      for (const idx of f) {
+        const [x, y, z] = v[idx];
+        pos[o++] = x;
+        pos[o++] = y * ca - z * sa;
+        pos[o++] = y * sa + z * ca;
+      }
+    }
+
+    const aligned = alignTroquelBaseToBed(pos);
+    let minZ = Infinity, maxZ = -Infinity;
+    for (let i = 2; i < aligned.length; i += 3) {
+      minZ = Math.min(minZ, aligned[i]);
+      maxZ = Math.max(maxZ, aligned[i]);
+    }
+    expect(minZ).toBeCloseTo(0, 4);
+    expect(maxZ).toBeCloseTo(10, 2);
   });
 });
 

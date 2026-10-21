@@ -321,7 +321,27 @@ export function alignTroquelBaseToBed(inputPositions: Float32Array): Float32Arra
     avgZ: number;
   }
 
+  // Agrupa normais por bucket espacial (O(1) por triângulo). Antes cada
+  // triângulo varria TODOS os grupos, o que ficava O(n²) em malhas com muitas
+  // normais distintas e travava a importação de troqueis grandes.
   const planes: PlaneGroup[] = [];
+  const buckets = new Map<number, PlaneGroup[]>();
+  const Q = 8; // resolução ~0.125 por componente
+  const bucketKey = (kx: number, ky: number, kz: number) =>
+    ((kx + 64) << 16) | ((ky + 64) << 8) | (kz + 64);
+
+  const mergeInto = (list: PlaneGroup[] | undefined, nx: number, ny: number, nz: number, area: number, avgZ: number): boolean => {
+    if (!list) return false;
+    for (let p = 0; p < list.length; p++) {
+      const pl = list[p];
+      if (nx * pl.nx + ny * pl.ny + nz * pl.nz > 0.94) {
+        pl.area += area;
+        pl.avgZ = (pl.avgZ * (pl.area - area) + avgZ * area) / pl.area;
+        return true;
+      }
+    }
+    return false;
+  };
 
   for (let t = 0; t < count; t++) {
     const off = t * 9;
@@ -343,20 +363,18 @@ export function alignTroquelBaseToBed(inputPositions: Float32Array): Float32Arra
     const area = 0.5 * len;
     const avgZ = (az + bz + cz) / 3;
 
-    let matched = false;
-    for (let p = 0; p < planes.length; p++) {
-      const pl = planes[p];
-      const dot = nx * pl.nx + ny * pl.ny + nz * pl.nz;
-      if (dot > 0.94) {
-        pl.area += area;
-        pl.avgZ = (pl.avgZ * (pl.area - area) + avgZ * area) / pl.area;
-        matched = true;
-        break;
-      }
-    }
+    const kx = Math.round(nx * Q);
+    const ky = Math.round(ny * Q);
+    const kz = Math.round(nz * Q);
+    const key = bucketKey(kx, ky, kz);
+    const matched = mergeInto(buckets.get(key), nx, ny, nz, area, avgZ);
 
     if (!matched) {
-      planes.push({ nx, ny, nz, area, avgZ });
+      const plane = { nx, ny, nz, area, avgZ };
+      planes.push(plane);
+      const list = buckets.get(key);
+      if (list) list.push(plane);
+      else buckets.set(key, [plane]);
     }
   }
 
