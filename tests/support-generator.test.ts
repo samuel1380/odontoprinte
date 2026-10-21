@@ -1,10 +1,13 @@
 import { describe, it, expect } from "vitest";
 import {
   generateDentalSupports,
+  sampleSupportGeometry,
+  minSupportClearance,
   DEFAULT_DENTAL_SUPPORT_CONFIG,
   DENTAL_SUPPORT_PROFILES,
   DENTAL_SUPPORT_CATEGORIES,
 } from "../src/lib/support-generator";
+import { parseStlTriangles } from "../src/lib/plate-nesting";
 
 // Cria triângulos simples simulando a base de um modelo dentário (quadrado de 30x30mm na origem com triângulos inferiores)
 function createSampleModelPositions(): Float32Array {
@@ -373,5 +376,76 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     expect(result.bounds.depth).toBeGreaterThanOrEqual(30.0);
     expect(result.bounds.minZ).toBe(0);
     expect(result.bounds.height).toBe(result.bounds.maxZ);
+  });
+
+  it("mantém folga 3D real entre todos os suportes, sem fusão de hastes/braços", async () => {
+    const positions = createSampleModelPositions();
+    const cfg = { ...DEFAULT_DENTAL_SUPPORT_CONFIG };
+    const result = await generateDentalSupports(positions, cfg);
+
+    expect(result.pillarCount).toBeGreaterThan(0);
+    const gap = cfg.minSupportGap ?? 0.40;
+    const samples = result.pillars.map((p) => sampleSupportGeometry(p, cfg));
+
+    for (let i = 0; i < samples.length; i++) {
+      for (let j = i + 1; j < samples.length; j++) {
+        expect(minSupportClearance(samples[i], samples[j])).toBeGreaterThanOrEqual(gap - 0.001);
+      }
+    }
+  });
+
+  it("contém pilares e balsa dentro da chapa informada (evita auto-escala no Halot Box)", async () => {
+    const plateW = 34;
+    const plateD = 34;
+    const cfg = {
+      ...DEFAULT_DENTAL_SUPPORT_CONFIG,
+      plateWidth: plateW,
+      plateDepth: plateD,
+    };
+    const result = await generateDentalSupports(createSampleModelPositions(), cfg);
+
+    expect(result.pillarCount).toBeGreaterThan(0);
+    for (const p of result.pillars) {
+      expect(p.x).toBeGreaterThanOrEqual(0);
+      expect(p.x).toBeLessThanOrEqual(plateW);
+      expect(p.y).toBeGreaterThanOrEqual(0);
+      expect(p.y).toBeLessThanOrEqual(plateD);
+    }
+    expect(result.bounds.minX).toBeGreaterThanOrEqual(0);
+    expect(result.bounds.maxX).toBeLessThanOrEqual(plateW);
+    expect(result.bounds.minY).toBeGreaterThanOrEqual(0);
+    expect(result.bounds.maxY).toBeLessThanOrEqual(plateD);
+  });
+
+  it("exporta o modelo em escala 1:1 (X/Y intactos, apenas deslocamento em Z)", async () => {
+    const positions = createSampleModelPositions();
+    const elevationZ = 5.0;
+    const result = await generateDentalSupports(positions, { elevationZ });
+
+    expect(result.modelBounds.width).toBeCloseTo(30, 3);
+    expect(result.modelBounds.depth).toBeCloseTo(30, 3);
+    expect(result.modelBounds.height).toBeCloseTo(12, 3);
+
+    const exported = await parseStlTriangles(result.stlBuffer);
+    const modelTriCount = Math.floor(positions.length / 9);
+    const modelVerts = modelTriCount * 9;
+
+    // O parser normaliza XY pelo canto global (inclui balsa); comparação justa
+    // é feita descontando essa translação rígida, sem qualquer escala.
+    let inMinX = Infinity, inMinY = Infinity, exMinX = Infinity, exMinY = Infinity;
+    for (let i = 0; i < modelVerts; i += 3) {
+      inMinX = Math.min(inMinX, positions[i]);
+      inMinY = Math.min(inMinY, positions[i + 1]);
+      exMinX = Math.min(exMinX, exported.positions[i]);
+      exMinY = Math.min(exMinY, exported.positions[i + 1]);
+    }
+    const shiftX = exMinX - inMinX;
+    const shiftY = exMinY - inMinY;
+
+    for (let i = 0; i < modelVerts; i += 3) {
+      expect(exported.positions[i]).toBeCloseTo(positions[i] + shiftX, 3);
+      expect(exported.positions[i + 1]).toBeCloseTo(positions[i + 1] + shiftY, 3);
+      expect(exported.positions[i + 2]).toBeCloseTo(positions[i + 2] + elevationZ, 3);
+    }
   });
 });

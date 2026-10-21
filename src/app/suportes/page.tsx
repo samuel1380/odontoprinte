@@ -276,7 +276,11 @@ export default function SuportesPage() {
     try {
       // Pequeno timeout para permitir que o spinner do React pinte antes do cálculo intensivo
       await new Promise((r) => setTimeout(r, 40));
-      const res = await generateDentalSupports(loadedModel.positions, config);
+      const res = await generateDentalSupports(loadedModel.positions, {
+        ...config,
+        plateWidth: plateMeta?.plateW,
+        plateDepth: plateMeta?.plateD,
+      });
       setResult(res);
       toast.success(
         `Suportes médios gerados com sucesso! (${res.pillarCount} pilares e balsa anti-falhas aplicados).`
