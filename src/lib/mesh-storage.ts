@@ -29,6 +29,7 @@ function openDb(): Promise<IDBDatabase> {
 export interface PendingMeshMeta {
   plateW?: number;
   plateD?: number;
+  plateH?: number;
   printerName?: string;
 }
 
@@ -48,6 +49,7 @@ export async function savePendingMesh(
           fileName,
           plateW: meta?.plateW,
           plateD: meta?.plateD,
+          plateH: meta?.plateH,
           printerName: meta?.printerName,
           timestamp: Date.now(),
         },
@@ -83,6 +85,7 @@ export async function getPendingMesh(): Promise<{
   fileName: string;
   plateW?: number;
   plateD?: number;
+  plateH?: number;
   printerName?: string;
 } | null> {
   try {
@@ -103,6 +106,7 @@ export async function getPendingMesh(): Promise<{
         fileName: data.fileName || "mesa-montada.stl",
         plateW: data.plateW,
         plateD: data.plateD,
+        plateH: data.plateH,
         printerName: data.printerName,
       };
     }
@@ -138,6 +142,7 @@ export async function getPendingMesh(): Promise<{
           fileName: storedName || "mesa-montada.stl",
           plateW: parsedMeta.plateW,
           plateD: parsedMeta.plateD,
+          plateH: parsedMeta.plateH,
           printerName: parsedMeta.printerName,
         };
       }

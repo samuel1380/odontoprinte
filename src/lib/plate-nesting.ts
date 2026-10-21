@@ -245,12 +245,23 @@ export function computePositionsDimensions(positions: Float32Array): ModelSize {
   };
 }
 
-/** Extrai os triângulos (para montar o STL posicionado). */
-export async function parseStlTriangles(input: File | Blob | ArrayBuffer): Promise<RawTriangles> {
+/**
+ * Extrai os triângulos (para montar o STL posicionado).
+ * `normalizeXY: false` mantém as coordenadas originais (necessário para a mesa
+ * montada: as coordenadas precisam continuar no sistema da chapa para que
+ * suportes e balsa caibam na área de impressão).
+ */
+export async function parseStlTriangles(
+  input: File | Blob | ArrayBuffer,
+  options: { normalizeXY?: boolean } = {}
+): Promise<RawTriangles> {
   const buffer = input instanceof ArrayBuffer ? input : await (input as Blob).arrayBuffer();
   const { positions, count } = extractTriangles(buffer);
   if (count === 0) {
     throw new Error("Não foi possível ler a geometria do STL (arquivo vazio ou inválido).");
+  }
+  if (options.normalizeXY === false) {
+    return { positions, count };
   }
   // Normaliza XY para a origem: o raster e o writer giram no MESMO pivô
   // (canto do bbox), senão o planejado e o gravado divergem e fundem peças.

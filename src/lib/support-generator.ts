@@ -37,6 +37,8 @@ export interface DentalSupportConfig {
   modelClearance: number;
   /** Espaçamento entre pilares perimetrais na lateral para formar paliçada densa contínua (mm). Padrão: 1.45 mm */
   lateralPillarSpacing?: number;
+  /** Altura útil da chapa (mm). Usada para caber a elevação + modelo dentro do volume de impressão. */
+  plateHeight?: number;
   /** Folga de ar mínima entre a superfície de dois suportes distintos (mm). Padrão: 0.40 mm */
   minSupportGap?: number;
   /** Largura útil da chapa da impressora (mm). Quando informada, balsa e suportes são contidos na chapa. */
@@ -50,7 +52,7 @@ export const DEFAULT_DENTAL_SUPPORT_CONFIG: DentalSupportConfig = {
   pillarDiameter: 1.20,
   tipDiameter: 0.70,
   tipLength: 3.00,
-  tipPenetration: 0.40,
+  tipPenetration: 0.30,
   tipShape: "SPHERE",
   baseDiameter: 1.6,
   baseLength: 0.8,
@@ -75,7 +77,7 @@ export const DENTAL_SUPPORT_PROFILES = {
       pillarDiameter: 1.20,
       tipDiameter: 0.70,
       tipLength: 3.00,
-      tipPenetration: 0.40,
+      tipPenetration: 0.30,
       tipShape: "SPHERE" as const,
       baseDiameter: 1.6,
       baseLength: 0.8,
@@ -540,7 +542,7 @@ export function sampleSupportGeometry(p: SupportPillarInfo, cfg: DentalSupportCo
   const uny = tNorm.ny / nLen3D;
   const unz = tNorm.nz / nLen3D;
 
-  const effPen = Math.min(tipRad * 0.70, Math.max(0.10, cfg.tipPenetration));
+  const effPen = Math.min(tipRad, Math.max(0.05, cfg.tipPenetration));
   const offsetOut = tipRad - effPen;
   const sCx = targetX + unx * offsetOut;
   const sCy = targetY + uny * offsetOut;
@@ -691,27 +693,49 @@ export async function generateDentalSupports(
   const modelWidth = maxX - minX;
   const modelDepth = maxY - minY;
 
-  // Limites da chapa (opcionais): evita que a balsa/suportes ultrapassem a mesa
-  // e forcem o Halot Box a reduzir a escala do conjunto ao importar.
+  // Limites da chapa (opcionais). As coordenadas do modelo chegam no sistema
+  // da própria chapa (origem no canto 0,0 da mesa), então a janela útil é
+  // [0, plateW] × [0, plateD]. Todo suporte/balsa precisa caber NESSA janela:
+  // se o conjunto ultrapassar a chapa, o Halot Box reescala a peça inteira
+  // ("model is too large or too small scale to the fit size") e o modelo sai
+  // menor que o original.
   const plateW = cfg.plateWidth && cfg.plateWidth > 0 ? cfg.plateWidth : null;
   const plateD = cfg.plateDepth && cfg.plateDepth > 0 ? cfg.plateDepth : null;
-  const platePad = 0.8;
+  const plateH = cfg.plateHeight && cfg.plateHeight > 0 ? cfg.plateHeight : null;
   const insidePlate = (x: number, y: number): boolean => {
-    if (plateW !== null && (x < platePad || x > plateW - platePad)) return false;
-    if (plateD !== null && (y < platePad || y > plateD - platePad)) return false;
+    if (plateW !== null && (x < 0 || x > plateW)) return false;
+    if (plateD !== null && (y < 0 || y > plateD)) return false;
     return true;
   };
-  // A balsa ainda recebe o chanfro de 45° (1 espessura para fora): reserva essa margem.
-  const raftPad = platePad + cfg.raftThickness;
-  const insidePlateForRaft = (x: number, y: number): boolean => {
-    if (plateW !== null && (x < raftPad || x > plateW - raftPad)) return false;
-    if (plateD !== null && (y < raftPad || y > plateD - raftPad)) return false;
+  // A balsa recebe chanfro de 45° (1 espessura para fora): a célula precisa
+  // caber inteira (célula + chanfro) dentro da chapa.
+  const raftChamfer = cfg.raftThickness;
+  const insidePlateForRaftCell = (x0: number, y0: number, x1: number, y1: number): boolean => {
+    if (plateW !== null && (x0 - raftChamfer < 0 || x1 + raftChamfer > plateW)) return false;
+    if (plateD !== null && (y0 - raftChamfer < 0 || y1 + raftChamfer > plateD)) return false;
+    return true;
+  };
+  // Célula totalmente dentro da chapa (sem chanfro): garante base sob o pilar
+  // mesmo encostado na borda da mesa.
+  const insidePlateCell = (x0: number, y0: number, x1: number, y1: number): boolean => {
+    if (plateW !== null && (x0 < 0 || x1 > plateW)) return false;
+    if (plateD !== null && (y0 < 0 || y1 > plateD)) return false;
     return true;
   };
 
   // 2. Modelo elevado: Z é deslocado para (Z - minZ + elevationZ)
-  const zShift = -minZ + cfg.elevationZ;
-  const elevatedMinZ = cfg.elevationZ;
+  // A elevação é encolhida se o conjunto (elevação + modelo) não couber na
+  // altura útil da chapa: assim o STL não é reescalado pelo fatiador.
+  const modelHeight = maxZ - minZ;
+  let elevationZ = cfg.elevationZ;
+  if (plateH !== null) {
+    const maxElevation = plateH - modelHeight - 0.5;
+    if (maxElevation < elevationZ) {
+      elevationZ = Math.max(1.0, maxElevation);
+    }
+  }
+  const zShift = -minZ + elevationZ;
+  const elevatedMinZ = elevationZ;
   const elevatedMaxZ = maxZ + zShift;
 
   const gridMargin = Math.max(cfg.raftMargin + 1.5, cfg.pillarDiameter + 2.5);
@@ -1039,8 +1063,9 @@ export async function generateDentalSupports(
   const dedupCell = 0.6;
   const bestByCell = new Map<string, CandidatePoint>();
   for (const cand of rawLateralCandidates) {
-    // O ponto de contato fica na parede do modelo e não pode ser descartado
-    // pela margem da chapa: paredes em X=0/Y=0 ficariam inteiras sem suporte.
+    // O contato fica na parede do modelo: só entra na lista se o modelo estiver
+    // dentro da chapa (a haste é que precisa caber na janela da mesa).
+    if (!insidePlate(cand.x, cand.y)) continue;
     const key = `${Math.round(cand.x / dedupCell)}_${Math.round(cand.y / dedupCell)}`;
     const prev = bestByCell.get(key);
     if (!prev || cand.zContact > prev.zContact) bestByCell.set(key, cand);
@@ -1121,8 +1146,10 @@ export async function generateDentalSupports(
         const testPx = targetX + dirNx * curOffset;
         const testPy = targetY + dirNy * curOffset;
 
-        // A lateral é prioritária: se a mesa normalizada encostou o modelo na
-        // borda, a haste ainda precisa existir para não deixar a parede sem apoio.
+        // A haste E o pé cônico precisam caber na chapa: caso contrário o
+        // conjunto passa da mesa e o fatiador reescala tudo (modelo encolhido).
+        if (!insidePlate(testPx - baseRad, testPy - baseRad)) continue;
+        if (!insidePlate(testPx + baseRad, testPy + baseRad)) continue;
 
         // Checagem anti-fusão absoluta: distância mínima entre hastes vizinhas no plano da balsa
         let tooClose = false;
@@ -1148,7 +1175,7 @@ export async function generateDentalSupports(
         const cnx = cand.normal.nx / nLen3D;
         const cny = cand.normal.ny / nLen3D;
         const cnz = cand.normal.nz / nLen3D;
-        const effPen = Math.min(tipRad * 0.70, Math.max(0.10, cfg.tipPenetration));
+        const effPen = Math.min(tipRad, Math.max(0.05, cfg.tipPenetration));
         const offsetOut = tipRad - effPen;
         const sCx = targetX + cnx * offsetOut;
         const sCy = targetY + cny * offsetOut;
@@ -1318,7 +1345,8 @@ export async function generateDentalSupports(
     const zContact = cand.zContact;
 
     if (zContact <= raftZ + cfg.tipLength + 0.3) continue;
-    if (!insidePlate(px, py)) continue;
+    if (!insidePlate(px - baseRad, py - baseRad)) continue;
+    if (!insidePlate(px + baseRad, py + baseRad)) continue;
 
     let tooClose = false;
     for (let pIdx = 0; pIdx < pillars.length; pIdx++) {
@@ -1428,9 +1456,9 @@ export async function generateDentalSupports(
           const ni = ri + di;
           const nj = rj + dj;
           if (ni >= 0 && ni < raftCols && nj >= 0 && nj < raftRows) {
-            const cxCell = startX + (ni + 0.5) * raftGridCell;
-            const cyCell = startY + (nj + 0.5) * raftGridCell;
-            if (insidePlateForRaft(cxCell, cyCell)) {
+            const cx0 = startX + ni * raftGridCell;
+            const cy0 = startY + nj * raftGridCell;
+            if (insidePlateForRaftCell(cx0, cy0, cx0 + raftGridCell, cy0 + raftGridCell)) {
               raftDilated[nj * raftCols + ni] = 1;
             }
           }
@@ -1448,9 +1476,13 @@ export async function generateDentalSupports(
         const ni = ri + di;
         const nj = rj + dj;
         if (ni >= 0 && ni < raftCols && nj >= 0 && nj < raftRows) {
-          // Garante balsa sob TODO pilar lateral, inclusive quando o modelo
-          // normalizado encosta na borda da chapa (a lateral não pode ficar sem base).
-          raftDilated[nj * raftCols + ni] = 1;
+          // Garante balsa sob o pilar, mas nunca além da chapa (o conjunto tem
+          // que caber 1:1 no volume de impressão).
+          const cx0 = startX + ni * raftGridCell;
+          const cy0 = startY + nj * raftGridCell;
+          if (insidePlateCell(cx0, cy0, cx0 + raftGridCell, cy0 + raftGridCell)) {
+            raftDilated[nj * raftCols + ni] = 1;
+          }
         }
       }
     }
@@ -1492,7 +1524,7 @@ export async function generateDentalSupports(
 
     if (cfg.tipShape === "SPHERE") {
       // Penetração real controlada: esfera de raio tipRad entra exatamente tipPenetration sem cratera
-      const effPen = Math.min(tipRad * 0.70, Math.max(0.10, cfg.tipPenetration));
+      const effPen = Math.min(tipRad, Math.max(0.05, cfg.tipPenetration));
       const offsetOut = tipRad - effPen;
       const sCx = targetX + unx * offsetOut;
       const sCy = targetY + uny * offsetOut;
@@ -1565,29 +1597,36 @@ export async function generateDentalSupports(
       supportTrianglesCoords.push(x0, y0, 0, x0, y1, 0, x1, y1, 0);
 
       // Bordas com chanfro a 45° reais (rampa de espátula)
+      // O chanfro NUNCA pode ultrapassar a chapa: seria o conjunto maior que a
+      // mesa e o fatiador reescalaria o modelo.
+      const canNorth = plateD === null || y1 + chamfer <= plateD;
+      const canSouth = plateD === null || y0 - chamfer >= 0;
+      const canEast = plateW === null || x1 + chamfer <= plateW;
+      const canWest = plateW === null || x0 - chamfer >= 0;
+
       // Norte (Y+)
-      if (isNorth) {
+      if (isNorth && canNorth) {
         supportTrianglesCoords.push(x0, y1, raftZ, x1, y1, raftZ, x1, y1 + chamfer, 0);
         supportTrianglesCoords.push(x0, y1, raftZ, x1, y1 + chamfer, 0, x0, y1 + chamfer, 0);
         supportTrianglesCoords.push(x0, y1, 0, x1, y1 + chamfer, 0, x1, y1, 0);
         supportTrianglesCoords.push(x0, y1, 0, x0, y1 + chamfer, 0, x1, y1 + chamfer, 0);
       }
       // Sul (Y-)
-      if (isSouth) {
+      if (isSouth && canSouth) {
         supportTrianglesCoords.push(x1, y0, raftZ, x0, y0, raftZ, x0, y0 - chamfer, 0);
         supportTrianglesCoords.push(x1, y0, raftZ, x0, y0 - chamfer, 0, x1, y0 - chamfer, 0);
         supportTrianglesCoords.push(x0, y0 - chamfer, 0, x0, y0, 0, x1, y0, 0);
         supportTrianglesCoords.push(x0, y0 - chamfer, 0, x1, y0, 0, x1, y0 - chamfer, 0);
       }
       // Leste (X+)
-      if (isEast) {
+      if (isEast && canEast) {
         supportTrianglesCoords.push(x1, y1, raftZ, x1, y0, raftZ, x1 + chamfer, y0, 0);
         supportTrianglesCoords.push(x1, y1, raftZ, x1 + chamfer, y0, 0, x1 + chamfer, y1, 0);
         supportTrianglesCoords.push(x1, y0, 0, x1 + chamfer, y1, 0, x1 + chamfer, y0, 0);
         supportTrianglesCoords.push(x1, y0, 0, x1, y1, 0, x1 + chamfer, y1, 0);
       }
       // Oeste (X-)
-      if (isWest) {
+      if (isWest && canWest) {
         supportTrianglesCoords.push(x0, y0, raftZ, x0, y1, raftZ, x0 - chamfer, y1, 0);
         supportTrianglesCoords.push(x0, y0, raftZ, x0 - chamfer, y1, 0, x0 - chamfer, y0, 0);
         supportTrianglesCoords.push(x0 - chamfer, y0, 0, x0 - chamfer, y1, 0, x0, y1, 0);

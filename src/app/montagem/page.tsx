@@ -85,8 +85,11 @@ export default function MontagemPage() {
   const [plateD, setPlateD] = useState("");
   const [plateH, setPlateH] = useState("");
   const [savingPlate, setSavingPlate] = useState(false);
-  const [gap, setGap] = useState(2);
-  const [margin, setMargin] = useState(1.5);
+  // Gap/margem reservam espaço para os suportes laterais + balsa: sem essa
+  // folga o conjunto (modelo + suportes) passa da chapa e o fatiador reescala
+  // a peça inteira, deixando o modelo menor que o original.
+  const [gap, setGap] = useState(5);
+  const [margin, setMargin] = useState(3.5);
   const [models, setModels] = useState<UploadModel[]>([]);
   const [copied, setCopied] = useState(false);
   const [building, setBuilding] = useState(false);
@@ -819,8 +822,9 @@ export default function MontagemPage() {
       );
       const fileName = `mesa-${(printer?.name || "chapa").replace(/\s+/g, "-").toLowerCase()}.stl`;
       await savePendingMesh(buffer, fileName, {
-        plateW: Number(plateW),
-        plateD: Number(plateD),
+        plateW: Number(plateW) || effW,
+        plateD: Number(plateD) || effD,
+        plateH: Number(plateH) || effH,
         printerName: printer?.name,
       });
       router.push("/suportes");

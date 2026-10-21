@@ -27,18 +27,19 @@ function createSampleModelPositions(): Float32Array {
 }
 
 // Perímetro retangular fechado (4 paredes laterais) para validar cobertura completa.
-function createPerimeterModel(w = 40, d = 30, h = 8): Float32Array {
+function createPerimeterModel(w = 40, d = 30, h = 8, ox = 0, oy = 0): Float32Array {
+  const x0 = ox, y0 = oy, x1 = ox + w, y1 = oy + d;
   return new Float32Array([
-    0, 0, 0, w, 0, 0, w, d, 0,
-    0, 0, 0, w, d, 0, 0, d, 0,
-    0, 0, 0, w, 0, 0, w, 0, h,
-    0, 0, 0, w, 0, h, 0, 0, h,
-    0, d, 0, w, d, 0, w, d, h,
-    0, d, 0, w, d, h, 0, d, h,
-    0, 0, 0, 0, d, 0, 0, d, h,
-    0, 0, 0, 0, d, h, 0, 0, h,
-    w, 0, 0, w, d, 0, w, d, h,
-    w, 0, 0, w, d, h, w, 0, h,
+    x0, y0, 0, x1, y0, 0, x1, y1, 0,
+    x0, y0, 0, x1, y1, 0, x0, y1, 0,
+    x0, y0, 0, x1, y0, 0, x1, y0, h,
+    x0, y0, 0, x1, y0, h, x0, y0, h,
+    x0, y1, 0, x1, y1, 0, x1, y1, h,
+    x0, y1, 0, x1, y1, h, x0, y1, h,
+    x0, y0, 0, x0, y1, 0, x0, y1, h,
+    x0, y0, 0, x0, y1, h, x0, y0, h,
+    x1, y0, 0, x1, y1, 0, x1, y1, h,
+    x1, y0, 0, x1, y1, h, x1, y0, h,
   ]);
 }
 
@@ -48,7 +49,7 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.pillarDiameter).toBe(1.20);
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.tipDiameter).toBe(0.70);
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.tipLength).toBe(3.00);
-    expect(DEFAULT_DENTAL_SUPPORT_CONFIG.tipPenetration).toBe(0.40);
+    expect(DEFAULT_DENTAL_SUPPORT_CONFIG.tipPenetration).toBe(0.30);
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.tipShape).toBe("SPHERE");
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.raftThickness).toBe(1.0);
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.minPillarDistance).toBe(1.70);
@@ -64,7 +65,7 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     expect(DENTAL_SUPPORT_PROFILES.MEDIUM.config.pillarDiameter).toBe(1.20);
     expect(DENTAL_SUPPORT_PROFILES.MEDIUM.config.tipDiameter).toBe(0.70);
     expect(DENTAL_SUPPORT_PROFILES.MEDIUM.config.tipLength).toBe(3.00);
-    expect(DENTAL_SUPPORT_PROFILES.MEDIUM.config.tipPenetration).toBe(0.40);
+    expect(DENTAL_SUPPORT_PROFILES.MEDIUM.config.tipPenetration).toBe(0.30);
     expect(DENTAL_SUPPORT_PROFILES.MEDIUM.config.tipShape).toBe("SPHERE");
     expect(DENTAL_SUPPORT_PROFILES.HEAVY.config.pillarDiameter).toBe(1.5);
 
@@ -329,12 +330,12 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     }
   });
 
-  it("gera suportes com ponta esférica de 0.70mm, profundidade 0.40mm, topo 3.00mm e haste 1.20mm sem fusão", async () => {
+  it("gera suportes com ponta esférica de 0.70mm, profundidade 0.30mm, topo 3.00mm e haste 1.20mm sem fusão", async () => {
     const positions = createSampleModelPositions();
     const result = await generateDentalSupports(positions, {
       tipShape: "SPHERE",
       tipDiameter: 0.70,
-      tipPenetration: 0.40,
+      tipPenetration: 0.30,
       tipLength: 3.00,
       pillarDiameter: 1.20,
       minPillarDistance: 1.70,
@@ -427,14 +428,16 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     expect(result.bounds.depth).toBeLessThanOrEqual(plateD);
   });
 
-  it("não deixa nenhuma das quatro laterais sem suporte mesmo com chapa informada", async () => {
-    // Modelo normalizado começa em X=0/Y=0 (como a mesa vinda da Montagem).
-    // Antes, a margem da chapa descartava candidatos em X=0/Y=0 e deixava
-    // paredes inteiras sem suporte.
-    const result = await generateDentalSupports(createPerimeterModel(), {
+  it("não deixa nenhuma das quatro laterais sem suporte e cabe na chapa", async () => {
+    // Mesa real: o modelo fica com a margem da chapa (3,5 mm) ao redor, e a
+    // balsa/suportes precisam caber na área de impressão (sem reescala).
+    const offset = 3.5;
+    const model = createPerimeterModel(40, 30, 8, offset, offset);
+    const result = await generateDentalSupports(model, {
       elevationZ: 5.0,
-      plateWidth: 34,
-      plateDepth: 34,
+      plateWidth: 192,
+      plateDepth: 120,
+      plateHeight: 200,
     });
 
     const lateral = result.pillars.filter((p) => p.isLateral);
@@ -442,16 +445,45 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     for (const p of lateral) {
       const x = p.targetX ?? p.x;
       const y = p.targetY ?? p.y;
-      if (y < 1) walls.front++;
-      else if (y > 29) walls.back++;
-      else if (x < 1) walls.left++;
-      else if (x > 39) walls.right++;
+      if (y < offset + 1) walls.front++;
+      else if (y > offset + 29) walls.back++;
+      else if (x < offset + 1) walls.left++;
+      else if (x > offset + 39) walls.right++;
     }
 
     expect(walls.front).toBeGreaterThanOrEqual(5);
     expect(walls.back).toBeGreaterThanOrEqual(5);
     expect(walls.left).toBeGreaterThanOrEqual(5);
     expect(walls.right).toBeGreaterThanOrEqual(5);
+
+    // O conjunto tem que caber 1:1 na chapa: se ultrapassar, o fatiador reescala.
+    expect(result.bounds.width).toBeLessThanOrEqual(192);
+    expect(result.bounds.depth).toBeLessThanOrEqual(120);
+    expect(result.bounds.height).toBeLessThanOrEqual(200);
+  });
+
+  it("mantém a profundidade de contato em 0,30 mm (a ponta não entra demais no modelo)", async () => {
+    // Parede vertical em X=0 com o modelo do lado +X (normal externa -X).
+    const wall: number[] = [
+      0, 0, 0, 0, 0, 10, 0, 20, 10,
+      0, 0, 0, 0, 20, 10, 0, 20, 0,
+    ];
+    const result = await generateDentalSupports(new Float32Array(wall), { elevationZ: 5.0 });
+
+    const view = new DataView(result.stlBuffer);
+    const total = view.getUint32(80, true);
+    let deepest = -Infinity;
+    for (let t = 2; t < total; t++) {
+      const off = 84 + t * 50;
+      for (let k = 0; k < 3; k++) {
+        const x = view.getFloat32(off + 12 + k * 12, true);
+        const z = view.getFloat32(off + 20 + k * 12, true);
+        // ignora a balsa (z <= 1): mede só a ponta de contato
+        if (z > 1.5 && x > deepest) deepest = x;
+      }
+    }
+    // A esfera (raio 0,35) fica 0,05 mm fora da parede => penetra 0,30 mm
+    expect(deepest).toBeCloseTo(0.30, 2);
   });
 
   it("exporta o modelo em escala 1:1 (X/Y intactos, apenas deslocamento em Z)", async () => {

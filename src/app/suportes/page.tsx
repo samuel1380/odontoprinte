@@ -71,7 +71,12 @@ export default function SuportesPage() {
   const [zoom, setZoom] = useState<number>(1.0);
   const [xRay, setXRay] = useState<boolean>(false);
   const [islands, setIslands] = useState<DetectedIsland[]>([]);
-  const [plateMeta, setPlateMeta] = useState<{ plateW?: number; plateD?: number; printerName?: string } | null>(null);
+  const [plateMeta, setPlateMeta] = useState<{
+    plateW?: number;
+    plateD?: number;
+    plateH?: number;
+    printerName?: string;
+  } | null>(null);
 
   // Dimensões reais originais milimétricas do modelo (100% 1:1 sem redimensionamento)
   const modelDims = useMemo(() => {
@@ -201,9 +206,17 @@ export default function SuportesPage() {
       .then((data) => {
         if (!active || !data) return;
         if (data.plateW && data.plateD) {
-          setPlateMeta({ plateW: data.plateW, plateD: data.plateD, printerName: data.printerName });
+          setPlateMeta({
+            plateW: data.plateW,
+            plateD: data.plateD,
+            plateH: data.plateH,
+            printerName: data.printerName,
+          });
         }
-        parseStlTriangles(data.buffer)
+        // NÃO normaliza XY: a mesa precisa continuar no sistema de coordenadas
+        // da chapa (origem 0,0) para que suportes e balsa caibam exatamente na
+        // área de impressão e o fatiador não reescale a peça.
+        parseStlTriangles(data.buffer, { normalizeXY: false })
           .then((parsed) => {
             if (!active) return;
             setLoadedModel({
@@ -280,6 +293,7 @@ export default function SuportesPage() {
         ...config,
         plateWidth: plateMeta?.plateW,
         plateDepth: plateMeta?.plateD,
+        plateHeight: plateMeta?.plateH,
       });
       setResult(res);
       toast.success(
@@ -948,20 +962,29 @@ export default function SuportesPage() {
 
                   {plateMeta?.plateW && plateMeta?.plateD && (
                     <div className="col-span-2">
-                      {result.bounds.width > plateMeta.plateW || result.bounds.depth > plateMeta.plateD ? (
+                      {result.bounds.width > plateMeta.plateW ||
+                      result.bounds.depth > plateMeta.plateD ||
+                      (!!plateMeta.plateH && result.bounds.height > plateMeta.plateH) ? (
                         <div className="bg-rose-500/15 border border-rose-500/40 rounded-xl p-2.5 text-xs text-rose-300 space-y-1">
                           <div className="font-bold flex items-center gap-1.5 text-rose-200">
                             <AlertCircle className="w-4 h-4 text-rose-400" />
-                            Atenção: A balsa excede a chapa da impressora!
+                            Atenção: o conjunto passa da chapa e o fatiador vai REDUZIR a escala!
                           </div>
                           <p className="text-[10px] leading-relaxed text-rose-300/90">
-                            Balsa total: <strong>{result.bounds.width} × {result.bounds.depth} mm</strong>. Área da impressora {plateMeta.printerName || ""}: <strong>{plateMeta.plateW} × {plateMeta.plateD} mm</strong>.
+                            Conjunto: <strong>{result.bounds.width} × {result.bounds.depth} × {result.bounds.height} mm</strong>. Área da impressora {plateMeta.printerName || ""}: <strong>{plateMeta.plateW} × {plateMeta.plateD} × {plateMeta.plateH || "?"} mm</strong>.
+                          </p>
+                          <p className="text-[10px] leading-relaxed text-rose-300/90">
+                            Volte à Montagem e aumente a <strong>margem</strong> e o <strong>espaçamento (gap)</strong> entre os modelos para reservar espaço dos suportes e da balsa.
                           </p>
                         </div>
                       ) : (
                         <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-xl p-2 text-[10px] text-emerald-300 flex items-center justify-between">
                           <span>Chapa ({plateMeta.printerName || "Impressora"}):</span>
-                          <strong>{result.bounds.width} × {result.bounds.depth} mm (Dentro da mesa de {plateMeta.plateW}×{plateMeta.plateD} mm)</strong>
+                          <strong>
+                            {result.bounds.width} × {result.bounds.depth} × {result.bounds.height} mm
+                            (Dentro da mesa de {plateMeta.plateW}×{plateMeta.plateD}
+                            {plateMeta.plateH ? `×${plateMeta.plateH}` : ""} mm)
+                          </strong>
                         </div>
                       )}
                     </div>
