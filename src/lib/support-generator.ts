@@ -5,7 +5,7 @@
  * 1. Não funde suporte com modelo (folga de segurança da haste e fixação apenas em superfícies inferiores).
  * 2. Não funde suporte com outro suporte (distância mínima garantida por malha estocástica/hexagonal).
  * 3. Ponta cônica micrométrica destacável (0,12 mm de penetração sólida para não quebrar no descolamento).
- * 4. Balsa (raft) com chanfro de 45° para remoção rápida e segura na espátula de laboratório.
+ * 4. Balsa (raft) com rampa de espátula a 30° (igual Halot Box/Chitubox) para remoção rápida e segura.
  */
 
 export interface DentalSupportConfig {
@@ -27,10 +27,16 @@ export interface DentalSupportConfig {
   baseDiameter: number;
   /** Altura do pé cônico de reforço na balsa (mm). Padrão: 0.8 mm */
   baseLength: number;
-  /** Espessura da balsa/raft (mm). Padrão: 1.0 mm */
+  /** Espessura da balsa/raft (mm). Padrão: 1.5 mm */
   raftThickness: number;
   /** Margem de extensão da balsa além do perímetro do modelo (mm). Padrão: 2.0 mm */
   raftMargin: number;
+  /**
+   * Inclinação da parede da balsa em relação à chapa (graus). Padrão: 30°.
+   * É a rampa que guia a espátula para soltar a base da mesa (Halot Box/Chitubox).
+   * Quanto menor o ângulo, mais longa e suave fica a rampa.
+   */
+  raftSlopeDeg?: number;
   /** Espaçamento médio da malha de suportes (mm). Padrão: 2.8 mm */
   supportSpacing: number;
   /** Distância mínima entre centros de pilares para evitar fusão de suportes vizinhos (mm). Padrão: 1.70 mm */
@@ -61,6 +67,7 @@ export const DEFAULT_DENTAL_SUPPORT_CONFIG: DentalSupportConfig = {
   baseLength: 0.8,
   raftThickness: 1.5,
   raftMargin: 2.0,
+  raftSlopeDeg: 30,
   supportSpacing: 2.6,
   minPillarDistance: 1.70,
   modelClearance: 0.75,
@@ -718,9 +725,12 @@ export async function generateDentalSupports(
     if (plateD !== null && (y < 0 || y > plateD)) return false;
     return true;
   };
-  // A balsa recebe chanfro de 45° (1 espessura para fora): a célula precisa
-  // caber inteira (célula + chanfro) dentro da chapa.
-  const raftChamfer = cfg.raftThickness;
+  // Rampa de espátula: parede da balsa inclinada em relação à chapa (30° por
+  // padrão, como no Halot Box/Chitubox). O avanço horizontal é
+  // raftThickness / tan(ângulo) — bem mais largo que o antigo chanfro a 45°,
+  // que deixava a borda "reta" e dificultava a entrada da espátula.
+  const raftSlopeDeg = Math.min(80, Math.max(10, cfg.raftSlopeDeg ?? 30));
+  const raftChamfer = cfg.raftThickness / Math.tan((raftSlopeDeg * Math.PI) / 180);
   const insidePlateForRaftCell = (x0: number, y0: number, x1: number, y1: number): boolean => {
     if (plateW !== null && (x0 - raftChamfer < 0 || x1 + raftChamfer > plateW)) return false;
     if (plateD !== null && (y0 - raftChamfer < 0 || y1 + raftChamfer > plateD)) return false;
@@ -1610,8 +1620,8 @@ export async function generateDentalSupports(
     }
   }
 
-  // Geometria da Balsa com Chanfro Real a 45°
-  const chamfer = raftZ; // Para 45°, o avanço horizontal na base é igual à espessura da balsa (1.0 mm)
+  // Geometria da Balsa com Rampa de Espátula (30° em relação à chapa)
+  const chamfer = raftChamfer;
   for (let rj = 0; rj < raftRows; rj++) {
     for (let ri = 0; ri < raftCols; ri++) {
       if (!raftDilated[rj * raftCols + ri]) continue;
@@ -1634,67 +1644,98 @@ export async function generateDentalSupports(
       supportTrianglesCoords.push(x0, y0, 0, x1, y1, 0, x1, y0, 0);
       supportTrianglesCoords.push(x0, y0, 0, x0, y1, 0, x1, y1, 0);
 
-      // Bordas com chanfro a 45° reais (rampa de espátula)
-      // O chanfro NUNCA pode ultrapassar a chapa: seria o conjunto maior que a
-      // mesa e o fatiador reescalaria o modelo.
-      const canNorth = plateD === null || y1 + chamfer <= plateD;
-      const canSouth = plateD === null || y0 - chamfer >= 0;
-      const canEast = plateW === null || x1 + chamfer <= plateW;
-      const canWest = plateW === null || x0 - chamfer >= 0;
+      // Bordas com rampa de espátula a 30°. O chanfro NUNCA pode ultrapassar a
+      // chapa: seria o conjunto maior que a mesa e o fatiador reescalaria o
+      // modelo. Quando a rampa não cabe, a borda é fechada com parede vertical
+      // para a malha continuar estanque.
+      const fitNorth = isNorth && (plateD === null || y1 + chamfer <= plateD);
+      const fitSouth = isSouth && (plateD === null || y0 - chamfer >= 0);
+      const fitEast = isEast && (plateW === null || x1 + chamfer <= plateW);
+      const fitWest = isWest && (plateW === null || x0 - chamfer >= 0);
 
       // Norte (Y+)
-      if (isNorth && canNorth) {
-        supportTrianglesCoords.push(x0, y1, raftZ, x1, y1, raftZ, x1, y1 + chamfer, 0);
-        supportTrianglesCoords.push(x0, y1, raftZ, x1, y1 + chamfer, 0, x0, y1 + chamfer, 0);
-        supportTrianglesCoords.push(x0, y1, 0, x1, y1 + chamfer, 0, x1, y1, 0);
-        supportTrianglesCoords.push(x0, y1, 0, x0, y1 + chamfer, 0, x1, y1 + chamfer, 0);
+      if (isNorth) {
+        const yOut = fitNorth ? y1 + chamfer : y1;
+        supportTrianglesCoords.push(x0, y1, raftZ, x1, y1, raftZ, x1, yOut, 0);
+        supportTrianglesCoords.push(x0, y1, raftZ, x1, yOut, 0, x0, yOut, 0);
+        if (fitNorth) {
+          supportTrianglesCoords.push(x0, y1, 0, x1, yOut, 0, x1, y1, 0);
+          supportTrianglesCoords.push(x0, y1, 0, x0, yOut, 0, x1, yOut, 0);
+        }
       }
       // Sul (Y-)
-      if (isSouth && canSouth) {
-        supportTrianglesCoords.push(x1, y0, raftZ, x0, y0, raftZ, x0, y0 - chamfer, 0);
-        supportTrianglesCoords.push(x1, y0, raftZ, x0, y0 - chamfer, 0, x1, y0 - chamfer, 0);
-        supportTrianglesCoords.push(x0, y0 - chamfer, 0, x0, y0, 0, x1, y0, 0);
-        supportTrianglesCoords.push(x0, y0 - chamfer, 0, x1, y0, 0, x1, y0 - chamfer, 0);
+      if (isSouth) {
+        const yOut = fitSouth ? y0 - chamfer : y0;
+        supportTrianglesCoords.push(x1, y0, raftZ, x0, y0, raftZ, x0, yOut, 0);
+        supportTrianglesCoords.push(x1, y0, raftZ, x0, yOut, 0, x1, yOut, 0);
+        if (fitSouth) {
+          supportTrianglesCoords.push(x0, yOut, 0, x0, y0, 0, x1, y0, 0);
+          supportTrianglesCoords.push(x0, yOut, 0, x1, y0, 0, x1, yOut, 0);
+        }
       }
       // Leste (X+)
-      if (isEast && canEast) {
-        supportTrianglesCoords.push(x1, y1, raftZ, x1, y0, raftZ, x1 + chamfer, y0, 0);
-        supportTrianglesCoords.push(x1, y1, raftZ, x1 + chamfer, y0, 0, x1 + chamfer, y1, 0);
-        supportTrianglesCoords.push(x1, y0, 0, x1 + chamfer, y1, 0, x1 + chamfer, y0, 0);
-        supportTrianglesCoords.push(x1, y0, 0, x1, y1, 0, x1 + chamfer, y1, 0);
+      if (isEast) {
+        const xOut = fitEast ? x1 + chamfer : x1;
+        supportTrianglesCoords.push(x1, y1, raftZ, x1, y0, raftZ, xOut, y0, 0);
+        supportTrianglesCoords.push(x1, y1, raftZ, xOut, y0, 0, xOut, y1, 0);
+        if (fitEast) {
+          supportTrianglesCoords.push(x1, y0, 0, xOut, y1, 0, xOut, y0, 0);
+          supportTrianglesCoords.push(x1, y0, 0, x1, y1, 0, xOut, y1, 0);
+        }
       }
       // Oeste (X-)
-      if (isWest && canWest) {
-        supportTrianglesCoords.push(x0, y0, raftZ, x0, y1, raftZ, x0 - chamfer, y1, 0);
-        supportTrianglesCoords.push(x0, y0, raftZ, x0 - chamfer, y1, 0, x0 - chamfer, y0, 0);
-        supportTrianglesCoords.push(x0 - chamfer, y0, 0, x0 - chamfer, y1, 0, x0, y1, 0);
-        supportTrianglesCoords.push(x0 - chamfer, y0, 0, x0, y1, 0, x0, y0, 0);
+      if (isWest) {
+        const xOut = fitWest ? x0 - chamfer : x0;
+        supportTrianglesCoords.push(x0, y0, raftZ, x0, y1, raftZ, xOut, y1, 0);
+        supportTrianglesCoords.push(x0, y0, raftZ, xOut, y1, 0, xOut, y0, 0);
+        if (fitWest) {
+          supportTrianglesCoords.push(xOut, y0, 0, xOut, y1, 0, x0, y1, 0);
+          supportTrianglesCoords.push(xOut, y0, 0, x0, y1, 0, x0, y0, 0);
+        }
       }
 
-      // Quinas chanfradas a 45°
+      // Quinas: miter a 45° (rampa contínua) quando as duas rampas cabem;
+      // aresta de fechamento quando só uma cabe; paredes verticais quando
+      // nenhuma cabe.
       if (isNorth && isEast) {
-        supportTrianglesCoords.push(x1, y1, raftZ, x1, y1 + chamfer, 0, x1 + chamfer, y1 + chamfer, 0);
-        supportTrianglesCoords.push(x1, y1, raftZ, x1 + chamfer, y1 + chamfer, 0, x1 + chamfer, y1, 0);
-        supportTrianglesCoords.push(x1, y1, 0, x1, y1 + chamfer, 0, x1 + chamfer, y1 + chamfer, 0);
-        supportTrianglesCoords.push(x1, y1, 0, x1 + chamfer, y1 + chamfer, 0, x1 + chamfer, y1, 0);
+        if (fitNorth && fitEast) {
+          supportTrianglesCoords.push(x1, y1, raftZ, x1 + chamfer, y1, 0, x1, y1 + chamfer, 0);
+          supportTrianglesCoords.push(x1, y1, 0, x1, y1 + chamfer, 0, x1 + chamfer, y1, 0);
+        } else if (!fitNorth && fitEast) {
+          supportTrianglesCoords.push(x1, y1, raftZ, x1 + chamfer, y1, 0, x1, y1, 0);
+        } else if (fitNorth && !fitEast) {
+          supportTrianglesCoords.push(x1, y1, raftZ, x1, y1, 0, x1, y1 + chamfer, 0);
+        }
       }
       if (isNorth && isWest) {
-        supportTrianglesCoords.push(x0, y1, raftZ, x0 - chamfer, y1, 0, x0 - chamfer, y1 + chamfer, 0);
-        supportTrianglesCoords.push(x0, y1, raftZ, x0 - chamfer, y1 + chamfer, 0, x0, y1 + chamfer, 0);
-        supportTrianglesCoords.push(x0, y1, 0, x0 - chamfer, y1 + chamfer, 0, x0 - chamfer, y1, 0);
-        supportTrianglesCoords.push(x0, y1, 0, x0, y1 + chamfer, 0, x0 - chamfer, y1 + chamfer, 0);
+        if (fitNorth && fitWest) {
+          supportTrianglesCoords.push(x0, y1, raftZ, x0, y1 + chamfer, 0, x0 - chamfer, y1, 0);
+          supportTrianglesCoords.push(x0, y1, 0, x0 - chamfer, y1, 0, x0, y1 + chamfer, 0);
+        } else if (!fitNorth && fitWest) {
+          supportTrianglesCoords.push(x0, y1, raftZ, x0, y1, 0, x0 - chamfer, y1, 0);
+        } else if (fitNorth && !fitWest) {
+          supportTrianglesCoords.push(x0, y1, raftZ, x0, y1 + chamfer, 0, x0, y1, 0);
+        }
       }
       if (isSouth && isEast) {
-        supportTrianglesCoords.push(x1, y0, raftZ, x1 + chamfer, y0, 0, x1 + chamfer, y0 - chamfer, 0);
-        supportTrianglesCoords.push(x1, y0, raftZ, x1 + chamfer, y0 - chamfer, 0, x1, y0 - chamfer, 0);
-        supportTrianglesCoords.push(x1, y0, 0, x1 + chamfer, y0 - chamfer, 0, x1 + chamfer, y0, 0);
-        supportTrianglesCoords.push(x1, y0, 0, x1, y0 - chamfer, 0, x1 + chamfer, y0 - chamfer, 0);
+        if (fitSouth && fitEast) {
+          supportTrianglesCoords.push(x1, y0, raftZ, x1, y0 - chamfer, 0, x1 + chamfer, y0, 0);
+          supportTrianglesCoords.push(x1, y0, 0, x1 + chamfer, y0, 0, x1, y0 - chamfer, 0);
+        } else if (!fitSouth && fitEast) {
+          supportTrianglesCoords.push(x1, y0, raftZ, x1, y0, 0, x1 + chamfer, y0, 0);
+        } else if (fitSouth && !fitEast) {
+          supportTrianglesCoords.push(x1, y0, raftZ, x1, y0 - chamfer, 0, x1, y0, 0);
+        }
       }
       if (isSouth && isWest) {
-        supportTrianglesCoords.push(x0, y0, raftZ, x0, y0 - chamfer, 0, x0 - chamfer, y0 - chamfer, 0);
-        supportTrianglesCoords.push(x0, y0, raftZ, x0 - chamfer, y0 - chamfer, 0, x0 - chamfer, y0, 0);
-        supportTrianglesCoords.push(x0, y0, 0, x0 - chamfer, y0, 0, x0 - chamfer, y0 - chamfer, 0);
-        supportTrianglesCoords.push(x0, y0, 0, x0 - chamfer, y0 - chamfer, 0, x0, y0 - chamfer, 0);
+        if (fitSouth && fitWest) {
+          supportTrianglesCoords.push(x0, y0, raftZ, x0 - chamfer, y0, 0, x0, y0 - chamfer, 0);
+          supportTrianglesCoords.push(x0, y0, 0, x0, y0 - chamfer, 0, x0 - chamfer, y0, 0);
+        } else if (!fitSouth && fitWest) {
+          supportTrianglesCoords.push(x0, y0, raftZ, x0 - chamfer, y0, 0, x0, y0, 0);
+        } else if (fitSouth && !fitWest) {
+          supportTrianglesCoords.push(x0, y0, raftZ, x0, y0, 0, x0, y0 - chamfer, 0);
+        }
       }
     }
   }

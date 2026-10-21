@@ -52,6 +52,7 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.tipPenetration).toBe(0.30);
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.tipShape).toBe("SPHERE");
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.raftThickness).toBe(1.5);
+    expect(DEFAULT_DENTAL_SUPPORT_CONFIG.raftSlopeDeg).toBe(30);
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.supportSpacing).toBe(2.6);
     // Receita "Column Support-Medium" do Halot Box:
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.tipUpperDiameter).toBe(0.60);
@@ -363,30 +364,48 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     }
   });
 
-  it("gera balsa com chanfro de 45° real na borda perimetral para entrada de espátula", async () => {
+  it("gera balsa com rampa de espátula a 30° na borda perimetral (igual Halot Box)", async () => {
+    const raftThickness = 1.0;
     const positions = createSampleModelPositions();
-    const result = await generateDentalSupports(positions, { raftThickness: 1.0 });
+    const result = await generateDentalSupports(positions, { raftThickness });
 
     const view = new DataView(result.stlBuffer);
     const triCount = view.getUint32(80, true);
-    let foundChamferTriangle = false;
+    let rampSlopeDeg: number | null = null;
 
-    // Varre triângulos do STL em busca de faces chanfradas a 45° (|nz| entre 0.50 e 0.85 com normal horizontal pronunciada)
-    for (let t = 0; t < triCount; t++) {
+    // Procura um triângulo que liga o topo da balsa (Z = raftThickness) ao
+    // fundo (Z = 0): é a parede inclinada que guia a espátula.
+    for (let t = 0; t < triCount && rampSlopeDeg === null; t++) {
       const off = 84 + t * 50;
-      const nz = view.getFloat32(off + 8, true);
       const nx = view.getFloat32(off, true);
       const ny = view.getFloat32(off + 4, true);
-
+      const nz = view.getFloat32(off + 8, true);
       const hLen = Math.hypot(nx, ny);
-      // Face a 45 graus: hLen e |nz| são aproximadamente iguais (ratio entre 0.8 e 1.25)
-      if (hLen > 0.4 && Math.abs(nz) > 0.4 && Math.abs(hLen - Math.abs(nz)) < 0.25) {
-        foundChamferTriangle = true;
-        break;
+      // Só as rampas das bordas (normais alinhadas a X ou Y). As quinas em
+      // miter têm componente diagonal e não servem para medir o ângulo.
+      if (hLen < 0.3 || Math.min(Math.abs(nx), Math.abs(ny)) > 1e-3) continue;
+
+      let hasTop = false;
+      let hasBottom = false;
+      for (let k = 0; k < 3; k++) {
+        const z = view.getFloat32(off + 20 + k * 12, true);
+        if (Math.abs(z - raftThickness) < 1e-3) hasTop = true;
+        if (Math.abs(z) < 1e-3) hasBottom = true;
       }
+      if (!hasTop || !hasBottom) continue;
+
+      // A normal da rampa fica a 30° da vertical quando a parede faz 30° com a chapa.
+      const slopeDeg = (Math.atan2(hLen, Math.abs(nz)) * 180) / Math.PI;
+      if (slopeDeg > 5 && slopeDeg < 60) rampSlopeDeg = slopeDeg;
     }
 
-    expect(foundChamferTriangle).toBe(true);
+    expect(rampSlopeDeg).not.toBeNull();
+    expect(rampSlopeDeg!).toBeGreaterThan(25);
+    expect(rampSlopeDeg!).toBeLessThan(35);
+
+    // Avanço horizontal da rampa = espessura / tan(30°) ≈ 1.73 × espessura.
+    expect(result.bounds.width).toBeGreaterThan(30 + 2 * 1.5);
+    expect(result.bounds.depth).toBeGreaterThan(30 + 2 * 1.5);
   });
 
   it("calcula bounding box real refletindo a extensão exata da balsa chanfrada", async () => {
