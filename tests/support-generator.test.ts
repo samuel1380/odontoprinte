@@ -26,6 +26,22 @@ function createSampleModelPositions(): Float32Array {
   return new Float32Array(tris);
 }
 
+// Perímetro retangular fechado (4 paredes laterais) para validar cobertura completa.
+function createPerimeterModel(w = 40, d = 30, h = 8): Float32Array {
+  return new Float32Array([
+    0, 0, 0, w, 0, 0, w, d, 0,
+    0, 0, 0, w, d, 0, 0, d, 0,
+    0, 0, 0, w, 0, 0, w, 0, h,
+    0, 0, 0, w, 0, h, 0, 0, h,
+    0, d, 0, w, d, 0, w, d, h,
+    0, d, 0, w, d, h, 0, d, h,
+    0, 0, 0, 0, d, 0, 0, d, h,
+    0, 0, 0, 0, d, h, 0, 0, h,
+    w, 0, 0, w, d, 0, w, d, h,
+    w, 0, 0, w, d, h, w, 0, h,
+  ]);
+}
+
 describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)", () => {
   it("tem as medidas padrão corretas de suporte médio anti-falhas e anti-fusão", () => {
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.elevationZ).toBe(5.0);
@@ -394,9 +410,9 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     }
   });
 
-  it("contém pilares e balsa dentro da chapa informada (evita auto-escala no Halot Box)", async () => {
-    const plateW = 34;
-    const plateD = 34;
+  it("mantém o conjunto dentro da chapa quando há margem disponível", async () => {
+    const plateW = 60;
+    const plateD = 50;
     const cfg = {
       ...DEFAULT_DENTAL_SUPPORT_CONFIG,
       plateWidth: plateW,
@@ -405,16 +421,37 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     const result = await generateDentalSupports(createSampleModelPositions(), cfg);
 
     expect(result.pillarCount).toBeGreaterThan(0);
-    for (const p of result.pillars) {
-      expect(p.x).toBeGreaterThanOrEqual(0);
-      expect(p.x).toBeLessThanOrEqual(plateW);
-      expect(p.y).toBeGreaterThanOrEqual(0);
-      expect(p.y).toBeLessThanOrEqual(plateD);
+    // A chapa é validada pela pegada total (largura/profundidade), não pela
+    // coordenada absoluta: o Halot Box centraliza o conjunto ao importar.
+    expect(result.bounds.width).toBeLessThanOrEqual(plateW);
+    expect(result.bounds.depth).toBeLessThanOrEqual(plateD);
+  });
+
+  it("não deixa nenhuma das quatro laterais sem suporte mesmo com chapa informada", async () => {
+    // Modelo normalizado começa em X=0/Y=0 (como a mesa vinda da Montagem).
+    // Antes, a margem da chapa descartava candidatos em X=0/Y=0 e deixava
+    // paredes inteiras sem suporte.
+    const result = await generateDentalSupports(createPerimeterModel(), {
+      elevationZ: 5.0,
+      plateWidth: 34,
+      plateDepth: 34,
+    });
+
+    const lateral = result.pillars.filter((p) => p.isLateral);
+    const walls = { front: 0, back: 0, left: 0, right: 0 };
+    for (const p of lateral) {
+      const x = p.targetX ?? p.x;
+      const y = p.targetY ?? p.y;
+      if (y < 1) walls.front++;
+      else if (y > 29) walls.back++;
+      else if (x < 1) walls.left++;
+      else if (x > 39) walls.right++;
     }
-    expect(result.bounds.minX).toBeGreaterThanOrEqual(0);
-    expect(result.bounds.maxX).toBeLessThanOrEqual(plateW);
-    expect(result.bounds.minY).toBeGreaterThanOrEqual(0);
-    expect(result.bounds.maxY).toBeLessThanOrEqual(plateD);
+
+    expect(walls.front).toBeGreaterThanOrEqual(5);
+    expect(walls.back).toBeGreaterThanOrEqual(5);
+    expect(walls.left).toBeGreaterThanOrEqual(5);
+    expect(walls.right).toBeGreaterThanOrEqual(5);
   });
 
   it("exporta o modelo em escala 1:1 (X/Y intactos, apenas deslocamento em Z)", async () => {

@@ -1039,7 +1039,8 @@ export async function generateDentalSupports(
   const dedupCell = 0.6;
   const bestByCell = new Map<string, CandidatePoint>();
   for (const cand of rawLateralCandidates) {
-    if (!insidePlate(cand.x, cand.y)) continue;
+    // O ponto de contato fica na parede do modelo e não pode ser descartado
+    // pela margem da chapa: paredes em X=0/Y=0 ficariam inteiras sem suporte.
     const key = `${Math.round(cand.x / dedupCell)}_${Math.round(cand.y / dedupCell)}`;
     const prev = bestByCell.get(key);
     if (!prev || cand.zContact > prev.zContact) bestByCell.set(key, cand);
@@ -1120,8 +1121,8 @@ export async function generateDentalSupports(
         const testPx = targetX + dirNx * curOffset;
         const testPy = targetY + dirNy * curOffset;
 
-        // Nunca posiciona haste/braço fora da chapa da impressora.
-        if (!insidePlate(testPx, testPy)) continue;
+        // A lateral é prioritária: se a mesa normalizada encostou o modelo na
+        // borda, a haste ainda precisa existir para não deixar a parede sem apoio.
 
         // Checagem anti-fusão absoluta: distância mínima entre hastes vizinhas no plano da balsa
         let tooClose = false;
@@ -1447,11 +1448,9 @@ export async function generateDentalSupports(
         const ni = ri + di;
         const nj = rj + dj;
         if (ni >= 0 && ni < raftCols && nj >= 0 && nj < raftRows) {
-          const cxCell = startX + (ni + 0.5) * raftGridCell;
-          const cyCell = startY + (nj + 0.5) * raftGridCell;
-          if (insidePlateForRaft(cxCell, cyCell)) {
-            raftDilated[nj * raftCols + ni] = 1;
-          }
+          // Garante balsa sob TODO pilar lateral, inclusive quando o modelo
+          // normalizado encosta na borda da chapa (a lateral não pode ficar sem base).
+          raftDilated[nj * raftCols + ni] = 1;
         }
       }
     }
