@@ -246,13 +246,13 @@ export default function MontagemPage() {
           if (tris) {
             let positions = tris.positions;
             let currentSize = size;
-            const isTroquel = m.workType === "TROQUEL" || /troquel|troqueis|die/i.test(m.file.name);
-            if (isTroquel) {
-              const aligned = alignTroquelBaseToBed(positions);
-              if (aligned !== positions) {
-                positions = aligned;
-                currentSize = computePositionsDimensions(positions);
-              }
+            // ASSENTA A BASE DE TODOS OS MODELOS na horizontal (a função é
+            // no-op quando a base já está reta para baixo). Sem isso, um modelo
+            // com a base torta é impresso inclinado e o "fundo" sai deformado.
+            const aligned = alignTroquelBaseToBed(positions);
+            if (aligned !== positions) {
+              positions = aligned;
+              currentSize = computePositionsDimensions(positions);
             }
             trianglesById.current.set(m.id, positions);
             try {

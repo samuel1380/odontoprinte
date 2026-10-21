@@ -48,7 +48,7 @@ export interface DentalSupportConfig {
 }
 
 export const DEFAULT_DENTAL_SUPPORT_CONFIG: DentalSupportConfig = {
-  elevationZ: 5.0,
+  elevationZ: 3.5,
   pillarDiameter: 1.20,
   tipDiameter: 0.70,
   tipLength: 3.00,
@@ -56,9 +56,9 @@ export const DEFAULT_DENTAL_SUPPORT_CONFIG: DentalSupportConfig = {
   tipShape: "SPHERE",
   baseDiameter: 1.6,
   baseLength: 0.8,
-  raftThickness: 1.0,
+  raftThickness: 1.5,
   raftMargin: 2.0,
-  supportSpacing: 3.8,
+  supportSpacing: 2.6,
   minPillarDistance: 1.70,
   modelClearance: 0.75,
   lateralPillarSpacing: 1.45,
@@ -73,7 +73,7 @@ export const DENTAL_SUPPORT_PROFILES = {
     badge: "Recomendado",
     description: "Equilíbrio ideal de alta precisão para arcadas completas e modelos de trabalho. Firmeza excelente sem fusão de pilares e sem marcar.",
     config: {
-      elevationZ: 5.0,
+      elevationZ: 3.5,
       pillarDiameter: 1.20,
       tipDiameter: 0.70,
       tipLength: 3.00,
@@ -81,9 +81,9 @@ export const DENTAL_SUPPORT_PROFILES = {
       tipShape: "SPHERE" as const,
       baseDiameter: 1.6,
       baseLength: 0.8,
-      raftThickness: 1.0,
-      raftMargin: 2.2,
-      supportSpacing: 3.8,
+      raftThickness: 1.5,
+      raftMargin: 2.0,
+      supportSpacing: 2.6,
       minPillarDistance: 1.70,
       modelClearance: 0.75,
       lateralPillarSpacing: 1.45,
@@ -96,16 +96,16 @@ export const DENTAL_SUPPORT_PROFILES = {
     badge: "Precisão Fina",
     description: "Recomendado para detalhes delicados, facetas e troquéis. Remoção ultra suave e mínima marcação na peça.",
     config: {
-      elevationZ: 4.5,
+      elevationZ: 3.0,
       pillarDiameter: 1.0,
       tipDiameter: 0.50,
       tipLength: 1.1,
       tipPenetration: 0.08,
       baseDiameter: 1.8,
       baseLength: 0.6,
-      raftThickness: 0.8,
+      raftThickness: 1.2,
       raftMargin: 1.8,
-      supportSpacing: 2.6,
+      supportSpacing: 2.2,
       minPillarDistance: 2.0,
       modelClearance: 0.70,
       lateralPillarSpacing: 1.25,
@@ -118,16 +118,16 @@ export const DENTAL_SUPPORT_PROFILES = {
     badge: "Anti-Sucção Forte",
     description: "Para modelos maciços ou pesados que exigem sustentação estrutural máxima contra a sucção do filme FEP.",
     config: {
-      elevationZ: 6.0,
+      elevationZ: 4.0,
       pillarDiameter: 1.5,
       tipDiameter: 0.80,
       tipLength: 1.5,
       tipPenetration: 0.15,
       baseDiameter: 2.6,
       baseLength: 1.0,
-      raftThickness: 1.2,
+      raftThickness: 1.8,
       raftMargin: 2.6,
-      supportSpacing: 3.2,
+      supportSpacing: 3.0,
       minPillarDistance: 2.8,
       modelClearance: 1.00,
       lateralPillarSpacing: 1.65,
@@ -959,9 +959,12 @@ export async function generateDentalSupports(
         const norm = computeNormal(ax, ay, az, bx, by, bz, cx, cy, cz);
 
         // REGRA ANTI-FUSÃO NO MODELO E PROTEÇÃO TOTAL DE DENTES/GENGIVA:
-        // Apenas superfícies voltadas para baixo (nz < -0.10) ou corte inferior da base.
-        // NUNCA atinge dentes ou superfícies superiores.
-        if (norm.nz > 0.05 || Math.min(az, bz, cz) > maxSupportZ) {
+        // Só superfícies quase horizontais na metade inferior do modelo.
+        // A malha pode vir com o SENTIDO (winding) invertido — comum em CAD
+        // (boolean/espelhar) — e aí a base não tinha NENHUM suporte: ficava
+        // 5 mm no ar e o fundo saía ondulado. Por isso aceitamos |nz| alto e
+        // usamos a direção geométrica (o suporte sempre vem de baixo).
+        if (Math.abs(norm.nz) < 0.85 || Math.min(az, bz, cz) > maxSupportZ) {
           continue;
         }
 
@@ -970,7 +973,8 @@ export async function generateDentalSupports(
           if (zHit !== null && zHit >= elevatedMinZ - 0.2 && zHit <= maxSupportZ) {
             if (bestHitZ === null || zHit < bestHitZ) {
               bestHitZ = zHit;
-              bestNorm = norm;
+              // Normal sempre apontando para BAIXO (suporte entra por baixo)
+              bestNorm = norm.nz > 0 ? { nx: -norm.nx, ny: -norm.ny, nz: -norm.nz } : norm;
             }
           }
         }
@@ -1124,7 +1128,10 @@ export async function generateDentalSupports(
     const targetY = cand.targetY ?? cand.y;
     const zContact = cand.zContact;
 
-    if (zContact <= raftZ + cfg.tipLength + 0.3) continue;
+    // Precisa de altura útil mínima entre a balsa e o ponto de contato.
+    // (A ponta é adaptativa: com elevação menor o suporte encurta e ainda
+    //  apoia o rodapé do modelo sem perder a lateral.)
+    if (zContact - raftZ < 0.9) continue;
 
     const normLen2D = Math.hypot(cand.normal.nx, cand.normal.ny) || 1;
     const unx = cand.normal.nx / normLen2D;
@@ -1182,12 +1189,17 @@ export async function generateDentalSupports(
         const sCz = zContact + cnz * offsetOut;
 
         const hDist = Math.hypot(sCx - testPx, sCy - testPy);
-        // Garante inclinação do braço >= 45 graus (rise >= hDist * 0.95)
+        // Garante inclinação do braço >= 45 graus (rise >= hDist * 0.95).
+        // A ponta é adaptativa (igual à geometria final): com elevação menor o
+        // suporte encurta e continua cabendo até perto do fundo do modelo.
+        const totalHeight = zContact - raftZ;
+        const effBaseHeight = Math.min(cfg.baseLength, totalHeight * 0.20);
+        const effTipHeight = Math.min(cfg.tipLength, Math.max(0.8, totalHeight - effBaseHeight - 0.5));
         const requiredRise = hDist * 0.95;
-        const zStemMax = sCz - Math.max(cfg.tipLength, requiredRise);
+        const zStemMax = sCz - Math.max(effTipHeight, requiredRise);
 
         // Se a haste vertical não tiver espaço para subir da balsa, o ângulo seria < 45° (overhang severo)
-        if (zStemMax < raftZ + cfg.baseLength) {
+        if (zStemMax < raftZ + effBaseHeight + 0.1) {
           continue;
         }
 
@@ -1344,7 +1356,7 @@ export async function generateDentalSupports(
     const py = cand.y;
     const zContact = cand.zContact;
 
-    if (zContact <= raftZ + cfg.tipLength + 0.3) continue;
+    if (zContact - raftZ < 0.9) continue;
     if (!insidePlate(px - baseRad, py - baseRad)) continue;
     if (!insidePlate(px + baseRad, py + baseRad)) continue;
 

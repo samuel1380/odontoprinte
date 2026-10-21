@@ -45,13 +45,15 @@ function createPerimeterModel(w = 40, d = 30, h = 8, ox = 0, oy = 0): Float32Arr
 
 describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)", () => {
   it("tem as medidas padrão corretas de suporte médio anti-falhas e anti-fusão", () => {
-    expect(DEFAULT_DENTAL_SUPPORT_CONFIG.elevationZ).toBe(5.0);
+    expect(DEFAULT_DENTAL_SUPPORT_CONFIG.elevationZ).toBe(3.5);
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.pillarDiameter).toBe(1.20);
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.tipDiameter).toBe(0.70);
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.tipLength).toBe(3.00);
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.tipPenetration).toBe(0.30);
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.tipShape).toBe("SPHERE");
-    expect(DEFAULT_DENTAL_SUPPORT_CONFIG.raftThickness).toBe(1.0);
+    expect(DEFAULT_DENTAL_SUPPORT_CONFIG.raftThickness).toBe(1.5);
+    expect(DEFAULT_DENTAL_SUPPORT_CONFIG.supportSpacing).toBe(2.6);
+    expect(DEFAULT_DENTAL_SUPPORT_CONFIG.minSupportGap).toBe(0.40);
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.minPillarDistance).toBe(1.70);
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.modelClearance).toBeGreaterThanOrEqual(0.7);
   });
@@ -484,6 +486,76 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     }
     // A esfera (raio 0,35) fica 0,05 mm fora da parede => penetra 0,30 mm
     expect(deepest).toBeCloseTo(0.30, 2);
+  });
+
+  it("cria suportes de fundo mesmo com a malha de sentido (winding) invertido", async () => {
+    // Caixa 60 × 30 × 12 com a face de baixo com winding invertido (normal +Z).
+    // Antes o gerador ignorava essa face e o modelo ficava SEM NENHUM apoio
+    // embaixo: a base saía ondulada/torta na impressão.
+    const w = 60, d = 30, h = 12;
+    const x0 = 3.5, y0 = 3.5, x1 = x0 + w, y1 = y0 + d;
+    const pos = new Float32Array([
+      // base com winding invertido (normal +Z)
+      x0, y0, 0, x1, y0, 0, x1, y1, 0,
+      x0, y0, 0, x1, y1, 0, x0, y1, 0,
+      // laterais
+      x0, y0, 0, x1, y0, 0, x1, y0, h,
+      x0, y0, 0, x1, y0, h, x0, y0, h,
+      x0, y1, 0, x1, y1, 0, x1, y1, h,
+      x0, y1, 0, x1, y1, h, x0, y1, h,
+      x1, y0, 0, x1, y1, 0, x1, y1, h,
+      x1, y0, 0, x1, y1, h, x1, y0, h,
+      // topo
+      x0, y0, h, x1, y0, h, x1, y1, h,
+      x0, y0, h, x1, y1, h, x0, y1, h,
+    ]);
+
+    const result = await generateDentalSupports(pos, {
+      plateWidth: 192,
+      plateDepth: 120,
+      plateHeight: 200,
+    });
+
+    const bottom = result.pillars.filter((p) => !p.isLateral);
+    expect(bottom.length).toBeGreaterThan(50);
+
+    // Todos os suportes de fundo tocam a base do modelo (na altura dele)
+    const modelBaseZ = DEFAULT_DENTAL_SUPPORT_CONFIG.elevationZ;
+    for (const p of bottom) {
+      expect(p.zContact).toBeCloseTo(modelBaseZ, 2);
+    }
+
+    // Malha de apoio densa: distância média entre apoios menor que 3,5 mm
+    let minGap = Infinity;
+    for (let i = 0; i < bottom.length; i++) {
+      for (let j = i + 1; j < bottom.length; j++) {
+        const d = Math.hypot(bottom[i].x - bottom[j].x, bottom[i].y - bottom[j].y);
+        if (d < minGap) minGap = d;
+      }
+    }
+    expect(minGap).toBeLessThan(3.5);
+  });
+
+  it("mantém a base do modelo perto da balsa (apoio curto e rígido)", async () => {
+    // Quanto menor a elevação, menos "ponte" a base precisa fazer:
+    // é o que evita a deformação/ondulação no fundo impresso.
+    const w = 40, d = 30, h = 12;
+    const pos = new Float32Array([
+      0, d, 0, w, d, 0, w, 0, 0, 0, d, 0, w, 0, 0, 0, 0, 0,
+      0, 0, 0, w, 0, 0, w, 0, h, 0, 0, 0, w, 0, h, 0, 0, h,
+      0, d, 0, w, d, 0, w, d, h, 0, d, 0, w, d, h, 0, d, h,
+      w, 0, 0, w, d, 0, w, d, h, w, 0, 0, w, d, h, w, 0, h,
+      0, 0, h, w, 0, h, w, d, h, 0, 0, h, w, d, h, 0, d, h,
+    ]);
+    const result = await generateDentalSupports(pos, { elevationZ: 3.5, raftThickness: 1.5 });
+
+    const bottom = result.pillars.filter((p) => !p.isLateral);
+    expect(bottom.length).toBeGreaterThan(0);
+    for (const p of bottom) {
+      // pé do suporte na balsa (1,5) e ponta na base do modelo (3,5)
+      expect(p.zBase).toBeCloseTo(1.5, 3);
+      expect(p.zContact - p.zBase).toBeLessThanOrEqual(2.5);
+    }
   });
 
   it("exporta o modelo em escala 1:1 (X/Y intactos, apenas deslocamento em Z)", async () => {
