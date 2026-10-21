@@ -46,11 +46,11 @@ export const DEFAULT_DENTAL_SUPPORT_CONFIG: DentalSupportConfig = {
   tipLength: 3.00,
   tipPenetration: 0.40,
   tipShape: "SPHERE",
-  baseDiameter: 2.2,
+  baseDiameter: 1.6,
   baseLength: 0.8,
   raftThickness: 1.0,
   raftMargin: 2.0,
-  supportSpacing: 2.8,
+  supportSpacing: 3.8,
   minPillarDistance: 1.70,
   modelClearance: 0.75,
   lateralPillarSpacing: 1.45,
@@ -70,11 +70,11 @@ export const DENTAL_SUPPORT_PROFILES = {
       tipLength: 3.00,
       tipPenetration: 0.40,
       tipShape: "SPHERE" as const,
-      baseDiameter: 2.2,
+      baseDiameter: 1.6,
       baseLength: 0.8,
       raftThickness: 1.0,
       raftMargin: 2.2,
-      supportSpacing: 2.8,
+      supportSpacing: 3.8,
       minPillarDistance: 1.70,
       modelClearance: 0.75,
       lateralPillarSpacing: 1.45,
@@ -193,6 +193,7 @@ export interface SupportPillarInfo {
   targetX?: number;
   targetY?: number;
   isLateral?: boolean;
+  targetNormal?: { nx: number; ny: number; nz: number };
 }
 
 export interface SupportGenerationResult {
@@ -378,6 +379,80 @@ function appendCap(
 }
 
 /**
+ * Gera calota esférica destacável 3D (domo exterior) fechando na borda superior do cone.
+ * Elimina 100% de faces internas dentro do cone e arestas não-manifoldes (manifold perfeita).
+ */
+function appendSphericalCap(
+  triangles: number[],
+  cx: number,
+  cy: number,
+  cz: number,
+  radius: number,
+  dirX: number = 0,
+  dirY: number = 0,
+  dirZ: number = 1,
+  rings: number = 5,
+  sectors: number = 8
+) {
+  const len = Math.hypot(dirX, dirY, dirZ) || 1;
+  const dx = dirX / len;
+  const dy = dirY / len;
+  const dz = dirZ / len;
+
+  let ux = 0, uy = 1, uz = 0;
+  if (Math.abs(dy) > 0.88) {
+    ux = 1; uy = 0; uz = 0;
+  }
+  const dotUD = ux * dx + uy * dy + uz * dz;
+  ux -= dotUD * dx;
+  uy -= dotUD * dy;
+  uz -= dotUD * dz;
+  const uLen = Math.hypot(ux, uy, uz) || 1;
+  ux /= uLen; uy /= uLen; uz /= uLen;
+
+  const vx = dy * uz - dz * uy;
+  const vy = dz * ux - dx * uz;
+  const vz = dx * uy - dy * ux;
+
+  for (let r = 0; r < rings; r++) {
+    const phi0 = (Math.PI * 0.5 * r) / rings;
+    const phi1 = (Math.PI * 0.5 * (r + 1)) / rings;
+    const sin0 = Math.sin(phi0), cos0 = Math.cos(phi0);
+    const sin1 = Math.sin(phi1), cos1 = Math.cos(phi1);
+
+    for (let s = 0; s < sectors; s++) {
+      const th0 = (2 * Math.PI * s) / sectors;
+      const th1 = (2 * Math.PI * (s + 1)) / sectors;
+      const cosT0 = Math.cos(th0), sinT0 = Math.sin(th0);
+      const cosT1 = Math.cos(th1), sinT1 = Math.sin(th1);
+
+      const p00x = cx + radius * (cos0 * dx + sin0 * (cosT0 * ux + sinT0 * vx));
+      const p00y = cy + radius * (cos0 * dy + sin0 * (cosT0 * uy + sinT0 * vy));
+      const p00z = cz + radius * (cos0 * dz + sin0 * (cosT0 * uz + sinT0 * vz));
+
+      const p01x = cx + radius * (cos0 * dx + sin0 * (cosT1 * ux + sinT1 * vx));
+      const p01y = cy + radius * (cos0 * dy + sin0 * (cosT1 * uy + sinT1 * vy));
+      const p01z = cz + radius * (cos0 * dz + sin0 * (cosT1 * uz + sinT1 * vz));
+
+      const p10x = cx + radius * (cos1 * dx + sin1 * (cosT0 * ux + sinT0 * vx));
+      const p10y = cy + radius * (cos1 * dy + sin1 * (cosT0 * uy + sinT0 * vy));
+      const p10z = cz + radius * (cos1 * dz + sin1 * (cosT0 * uz + sinT0 * vz));
+
+      const p11x = cx + radius * (cos1 * dx + sin1 * (cosT1 * ux + sinT1 * vx));
+      const p11y = cy + radius * (cos1 * dy + sin1 * (cosT1 * uy + sinT1 * vy));
+      const p11z = cz + radius * (cos1 * dz + sin1 * (cosT1 * uz + sinT1 * vz));
+
+      if (r === 0) {
+        triangles.push(p00x, p00y, p00z, p11x, p11y, p11z, p10x, p10y, p10z);
+      } else {
+        triangles.push(p00x, p00y, p00z, p01x, p01y, p01z, p11x, p11y, p11z);
+        triangles.push(p00x, p00y, p00z, p11x, p11y, p11z, p10x, p10y, p10z);
+      }
+    }
+  }
+}
+
+/**
  * Gera uma micro-esfera de contato 3D destacável (padrão Sphere contact odontológico).
  */
 function appendSphere(
@@ -389,36 +464,8 @@ function appendSphere(
   rings: number = 6,
   sectors: number = 8
 ) {
-  for (let r = 0; r < rings; r++) {
-    const phi0 = (Math.PI * r) / rings - Math.PI / 2;
-    const phi1 = (Math.PI * (r + 1)) / rings - Math.PI / 2;
-    const z0 = cz + radius * Math.sin(phi0);
-    const z1 = cz + radius * Math.sin(phi1);
-    const r0 = radius * Math.cos(phi0);
-    const r1 = radius * Math.cos(phi1);
-
-    for (let s = 0; s < sectors; s++) {
-      const theta0 = (2 * Math.PI * s) / sectors;
-      const theta1 = (2 * Math.PI * (s + 1)) / sectors;
-
-      const x00 = cx + r0 * Math.cos(theta0);
-      const y00 = cy + r0 * Math.sin(theta0);
-      const x01 = cx + r0 * Math.cos(theta1);
-      const y01 = cy + r0 * Math.sin(theta1);
-
-      const x10 = cx + r1 * Math.cos(theta0);
-      const y10 = cy + r1 * Math.sin(theta0);
-      const x11 = cx + r1 * Math.cos(theta1);
-      const y11 = cy + r1 * Math.sin(theta1);
-
-      if (r !== 0) {
-        triangles.push(x00, y00, z0, x01, y01, z0, x11, y11, z1);
-      }
-      if (r !== rings - 1) {
-        triangles.push(x00, y00, z0, x11, y11, z1, x10, y10, z1);
-      }
-    }
-  }
+  appendSphericalCap(triangles, cx, cy, cz, radius, 0, 0, 1, Math.max(3, Math.floor(rings / 2)), sectors);
+  appendSphericalCap(triangles, cx, cy, cz, radius, 0, 0, -1, Math.max(3, Math.floor(rings / 2)), sectors);
 }
 
 /**
@@ -707,8 +754,8 @@ export async function generateDentalSupports(
       // Região com gengiva/dentes acima: sobe na parede do zócalo até a metade da peça (ou até 0.8mm abaixo da gengiva)
       return Math.max(elevatedMinZ + 1.5, Math.min(minGingiva - 0.8, targetLateralHalfZ));
     }
-    // Canto posterior / quinas do zócalo (livre de dentes em cima): sobe até o topo da parede do modelo
-    return elevatedMinZ + Math.min(effectiveLocalH * 0.88, 28.0);
+    // Canto posterior / quinas do zócalo (livre de dentes em cima): sobe até a metade superior com margem segura do topo
+    return Math.min(elevatedMinZ + Math.min(effectiveLocalH * 0.70, 20.0), localMaxZ - 1.5);
   };
 
   // 4. Amostragem de Suportes Odontológicos: Embaixo e nas Laterais Inferiores
@@ -802,6 +849,8 @@ export async function generateDentalSupports(
   // 4b. SUPORTES LATERAIS CONTÍNUOS (Paredes laterais do zócalo / contorno perimetral completo)
   // Conectores sobem na lateral até o topo do zócalo atrás e descem acompanhando a gengiva na frente
   const pRad = cfg.pillarDiameter / 2;
+  const tipRad = cfg.tipDiameter / 2;
+  const baseRad = cfg.baseDiameter / 2;
   const lateralPillarOffset = pRad + 0.70; // Afasta a haste da parede lateral para não fundir
   const rawLateralCandidates: CandidatePoint[] = [];
 
@@ -940,13 +989,33 @@ export async function generateDentalSupports(
           continue;
         }
 
-        // Checagem de colisão da haste vertical com o modelo
-        // A haste vertical só existe entre Z = raftZ e Z = zStemMax.
-        // O modelo só existe acima de elevatedMinZ.
+        // Checagem de colisão da haste vertical e do braço com o modelo
+        // Usa a folga real cfg.modelClearance
         let collides = false;
-        const zStemMax = zContact - cfg.tipLength;
-        const clearance = pRad + 0.10;
+        const clearance = stemRadiusWithClearance;
 
+        // Calcula a posição do centro da ponta de contato da esfera/cone
+        const nLen3D = Math.hypot(cand.normal.nx, cand.normal.ny, cand.normal.nz) || 1;
+        const cnx = cand.normal.nx / nLen3D;
+        const cny = cand.normal.ny / nLen3D;
+        const cnz = cand.normal.nz / nLen3D;
+        const effPen = Math.min(tipRad * 0.70, Math.max(0.10, cfg.tipPenetration));
+        const offsetOut = tipRad - effPen;
+        const sCx = targetX + cnx * offsetOut;
+        const sCy = targetY + cny * offsetOut;
+        const sCz = zContact + cnz * offsetOut;
+
+        const hDist = Math.hypot(sCx - testPx, sCy - testPy);
+        // Garante inclinação do braço >= 45 graus (rise >= hDist * 0.95)
+        const requiredRise = hDist * 0.95;
+        const zStemMax = sCz - Math.max(cfg.tipLength, requiredRise);
+
+        // Se a haste vertical não tiver espaço para subir da balsa, o ângulo seria < 45° (overhang severo)
+        if (zStemMax < raftZ + cfg.baseLength) {
+          continue;
+        }
+
+        // 1. Checagem da haste vertical contra o modelo (folga real modelClearance)
         if (zStemMax > elevatedMinZ + 0.2) {
           const gc0 = Math.max(0, Math.floor((testPx - clearance - startX) / spatialCellSize));
           const gc1 = Math.min(gridCols - 1, Math.floor((testPx + clearance - startX) / spatialCellSize));
@@ -986,6 +1055,54 @@ export async function generateDentalSupports(
           }
         }
 
+        // 2. Checagem do braço conector inclinado em 3D contra saliências do modelo
+        if (!collides && hDist > 0.3) {
+          const checkSteps = [0.25, 0.50, 0.75];
+          for (const st of checkSteps) {
+            const bx = testPx + st * (sCx - testPx);
+            const by = testPy + st * (sCy - testPy);
+            const bz = zStemMax + st * (sCz - zStemMax);
+            const armRad = pRad + st * (tipRad - pRad);
+            const armClearance = armRad + cfg.modelClearance * 0.4;
+
+            const bgc0 = Math.max(0, Math.floor((bx - armClearance - startX) / spatialCellSize));
+            const bgc1 = Math.min(gridCols - 1, Math.floor((bx + armClearance - startX) / spatialCellSize));
+            const bgr0 = Math.max(0, Math.floor((by - armClearance - startY) / spatialCellSize));
+            const bgr1 = Math.min(gridRows - 1, Math.floor((by + armClearance - startY) / spatialCellSize));
+
+            for (let gr = bgr0; gr <= bgr1 && !collides; gr++) {
+              for (let gc = bgc0; gc <= bgc1 && !collides; gc++) {
+                const triList = spatialGrid[gr * gridCols + gc];
+                for (let k = 0; k < triList.length; k++) {
+                  const t = triList[k];
+                  const off = t * 9;
+                  const az = modelPositions[off + 2] + zShift;
+                  const bzT = modelPositions[off + 5] + zShift;
+                  const cz = modelPositions[off + 8] + zShift;
+                  const tMinZ = Math.min(az, bzT, cz);
+                  const tMaxZ = Math.max(az, bzT, cz);
+
+                  if (bz >= tMinZ - armClearance && bz <= tMaxZ + armClearance) {
+                    const ax = modelPositions[off];
+                    const ay = modelPositions[off + 1];
+                    const bxT = modelPositions[off + 3];
+                    const byT = modelPositions[off + 4];
+                    const cxT = modelPositions[off + 6];
+                    const cyT = modelPositions[off + 7];
+
+                    const d2D = distPointToTriangle2D(bx, by, ax, ay, bxT, byT, cxT, cyT);
+                    if (d2D < armClearance) {
+                      collides = true;
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+            if (collides) break;
+          }
+        }
+
         if (!collides) {
           bestPillarPos = { px: testPx, py: testPy };
           break; // Posição perfeita encontrada!
@@ -1006,6 +1123,7 @@ export async function generateDentalSupports(
       targetX,
       targetY,
       isLateral: true,
+      targetNormal: cand.normal,
     });
   }
 
@@ -1078,6 +1196,7 @@ export async function generateDentalSupports(
       zContact,
       height: zContact - raftZ,
       isLateral: false,
+      targetNormal: cand.normal,
     });
   }
 
@@ -1138,16 +1257,12 @@ export async function generateDentalSupports(
 
   // 7. Geração da Geometria 3D dos Suportes (Pilares de Precisão e Balsa com Chanfro)
   const supportTrianglesCoords: number[] = [];
-  const tipRad = cfg.tipDiameter / 2;
-  const baseRad = cfg.baseDiameter / 2;
 
   for (const pil of pillars) {
     const cx = pil.x;
     const cy = pil.y;
     const z0 = pil.zBase;
-    // Micro-penetração de ancoragem na peça: garante contato sólido conforme contact depth (0.40 mm)
-    const zTop = pil.zContact + cfg.tipPenetration;
-    const totalH = zTop - z0;
+    const totalH = pil.zContact - z0;
 
     const effBaseH = Math.min(cfg.baseLength, totalH * 0.20);
     const effTipH = Math.min(cfg.tipLength, Math.max(0.8, totalH - effBaseH - 0.5));
@@ -1156,7 +1271,7 @@ export async function generateDentalSupports(
     const zBaseEnd = z0 + effBaseH;
     const zStemEnd = zBaseEnd + effStemH;
 
-    // Pé cônico de fixação na balsa: baseRad -> pRad
+    // Pé cônico de fixação na balsa: baseRad -> pRad (anti-sobreposição)
     appendCylinderSection(supportTrianglesCoords, cx, cy, z0, baseRad, zBaseEnd, pRad);
     appendCap(supportTrianglesCoords, cx, cy, z0, baseRad, false);
 
@@ -1165,35 +1280,50 @@ export async function generateDentalSupports(
       appendCylinderSection(supportTrianglesCoords, cx, cy, zBaseEnd, pRad, zStemEnd, pRad);
     }
 
-    // Ponta conectando ao alvo (com forma de esfera destacável ou cone)
+    // Ponta conectando ao alvo
     const targetX = pil.targetX ?? cx;
     const targetY = pil.targetY ?? cy;
+    const tNorm = pil.targetNormal || { nx: 0, ny: 0, nz: -1 };
+    const nLen3D = Math.hypot(tNorm.nx, tNorm.ny, tNorm.nz) || 1;
+    const unx = tNorm.nx / nLen3D;
+    const uny = tNorm.ny / nLen3D;
+    const unz = tNorm.nz / nLen3D;
 
     if (cfg.tipShape === "SPHERE") {
-      const sphereZ = zTop - tipRad * 0.4;
-      // Haste superior cônica (top length ~3.00 mm) conectando na esfera
+      // Penetração real controlada: esfera de raio tipRad entra exatamente tipPenetration sem cratera
+      const effPen = Math.min(tipRad * 0.70, Math.max(0.10, cfg.tipPenetration));
+      const offsetOut = tipRad - effPen;
+      const sCx = targetX + unx * offsetOut;
+      const sCy = targetY + uny * offsetOut;
+      const sCz = pil.zContact + unz * offsetOut;
+
+      // Haste superior cônica conectando perfeitamente no centro da calota esférica
       appendConeFrustum3D(
         supportTrianglesCoords,
         cx,
         cy,
         zStemEnd,
         pRad,
-        targetX,
-        targetY,
-        sphereZ,
+        sCx,
+        sCy,
+        sCz,
         tipRad
       );
-      // Esfera de contato destacável no modelo (diâmetro 0.70 mm, contact depth 0.40 mm)
-      appendSphere(
+      // Calota esférica exterior fechando o topo em direção à superfície do modelo (zero faces internas)
+      appendSphericalCap(
         supportTrianglesCoords,
-        targetX,
-        targetY,
-        sphereZ,
+        sCx,
+        sCy,
+        sCz,
         tipRad,
-        6,
+        -unx,
+        -uny,
+        -unz,
+        4,
         8
       );
     } else {
+      const zTop = pil.zContact + Math.min(0.20, cfg.tipPenetration);
       appendConeFrustum3D(
         supportTrianglesCoords,
         cx,
@@ -1209,7 +1339,8 @@ export async function generateDentalSupports(
     }
   }
 
-  // Geometria da Balsa com Chanfro a 45°
+  // Geometria da Balsa com Chanfro Real a 45°
+  const chamfer = raftZ; // Para 45°, o avanço horizontal na base é igual à espessura da balsa (1.0 mm)
   for (let rj = 0; rj < raftRows; rj++) {
     for (let ri = 0; ri < raftCols; ri++) {
       if (!raftDilated[rj * raftCols + ri]) continue;
@@ -1219,34 +1350,73 @@ export async function generateDentalSupports(
       const y0 = startY + rj * raftGridCell;
       const y1 = y0 + raftGridCell;
 
-      // Face superior (Z = raftZ)
+      const isNorth = (rj === raftRows - 1 || !raftDilated[(rj + 1) * raftCols + ri]);
+      const isSouth = (rj === 0 || !raftDilated[(rj - 1) * raftCols + ri]);
+      const isEast  = (ri === raftCols - 1 || !raftDilated[rj * raftCols + (ri + 1)]);
+      const isWest  = (ri === 0 || !raftDilated[rj * raftCols + (ri - 1)]);
+
+      // Face superior plana (Z = raftZ)
       supportTrianglesCoords.push(x0, y0, raftZ, x1, y0, raftZ, x1, y1, raftZ);
       supportTrianglesCoords.push(x0, y0, raftZ, x1, y1, raftZ, x0, y1, raftZ);
 
-      // Face inferior (Z = 0)
+      // Face inferior plana da célula (Z = 0)
       supportTrianglesCoords.push(x0, y0, 0, x1, y1, 0, x1, y0, 0);
       supportTrianglesCoords.push(x0, y0, 0, x0, y1, 0, x1, y1, 0);
 
-      // Bordas com chanfro a 45° para remoção fácil na espátula
+      // Bordas com chanfro a 45° reais (rampa de espátula)
       // Norte (Y+)
-      if (rj === raftRows - 1 || !raftDilated[(rj + 1) * raftCols + ri]) {
-        supportTrianglesCoords.push(x0, y1, 0, x1, y1, 0, x1, y1, raftZ);
-        supportTrianglesCoords.push(x0, y1, 0, x1, y1, raftZ, x0, y1, raftZ);
+      if (isNorth) {
+        supportTrianglesCoords.push(x0, y1, raftZ, x1, y1, raftZ, x1, y1 + chamfer, 0);
+        supportTrianglesCoords.push(x0, y1, raftZ, x1, y1 + chamfer, 0, x0, y1 + chamfer, 0);
+        supportTrianglesCoords.push(x0, y1, 0, x1, y1 + chamfer, 0, x1, y1, 0);
+        supportTrianglesCoords.push(x0, y1, 0, x0, y1 + chamfer, 0, x1, y1 + chamfer, 0);
       }
       // Sul (Y-)
-      if (rj === 0 || !raftDilated[(rj - 1) * raftCols + ri]) {
-        supportTrianglesCoords.push(x0, y0, 0, x1, y0, raftZ, x1, y0, 0);
-        supportTrianglesCoords.push(x0, y0, 0, x0, y0, raftZ, x1, y0, raftZ);
+      if (isSouth) {
+        supportTrianglesCoords.push(x1, y0, raftZ, x0, y0, raftZ, x0, y0 - chamfer, 0);
+        supportTrianglesCoords.push(x1, y0, raftZ, x0, y0 - chamfer, 0, x1, y0 - chamfer, 0);
+        supportTrianglesCoords.push(x0, y0 - chamfer, 0, x0, y0, 0, x1, y0, 0);
+        supportTrianglesCoords.push(x0, y0 - chamfer, 0, x1, y0, 0, x1, y0 - chamfer, 0);
       }
       // Leste (X+)
-      if (ri === raftCols - 1 || !raftDilated[rj * raftCols + (ri + 1)]) {
-        supportTrianglesCoords.push(x1, y0, 0, x1, y1, 0, x1, y1, raftZ);
-        supportTrianglesCoords.push(x1, y0, 0, x1, y1, raftZ, x1, y0, raftZ);
+      if (isEast) {
+        supportTrianglesCoords.push(x1, y1, raftZ, x1, y0, raftZ, x1 + chamfer, y0, 0);
+        supportTrianglesCoords.push(x1, y1, raftZ, x1 + chamfer, y0, 0, x1 + chamfer, y1, 0);
+        supportTrianglesCoords.push(x1, y0, 0, x1 + chamfer, y1, 0, x1 + chamfer, y0, 0);
+        supportTrianglesCoords.push(x1, y0, 0, x1, y1, 0, x1 + chamfer, y1, 0);
       }
       // Oeste (X-)
-      if (ri === 0 || !raftDilated[rj * raftCols + (ri - 1)]) {
-        supportTrianglesCoords.push(x0, y0, 0, x0, y1, raftZ, x0, y1, 0);
-        supportTrianglesCoords.push(x0, y0, 0, x0, y0, raftZ, x0, y1, raftZ);
+      if (isWest) {
+        supportTrianglesCoords.push(x0, y0, raftZ, x0, y1, raftZ, x0 - chamfer, y1, 0);
+        supportTrianglesCoords.push(x0, y0, raftZ, x0 - chamfer, y1, 0, x0 - chamfer, y0, 0);
+        supportTrianglesCoords.push(x0 - chamfer, y0, 0, x0 - chamfer, y1, 0, x0, y1, 0);
+        supportTrianglesCoords.push(x0 - chamfer, y0, 0, x0, y1, 0, x0, y0, 0);
+      }
+
+      // Quinas chanfradas a 45°
+      if (isNorth && isEast) {
+        supportTrianglesCoords.push(x1, y1, raftZ, x1, y1 + chamfer, 0, x1 + chamfer, y1 + chamfer, 0);
+        supportTrianglesCoords.push(x1, y1, raftZ, x1 + chamfer, y1 + chamfer, 0, x1 + chamfer, y1, 0);
+        supportTrianglesCoords.push(x1, y1, 0, x1, y1 + chamfer, 0, x1 + chamfer, y1 + chamfer, 0);
+        supportTrianglesCoords.push(x1, y1, 0, x1 + chamfer, y1 + chamfer, 0, x1 + chamfer, y1, 0);
+      }
+      if (isNorth && isWest) {
+        supportTrianglesCoords.push(x0, y1, raftZ, x0 - chamfer, y1, 0, x0 - chamfer, y1 + chamfer, 0);
+        supportTrianglesCoords.push(x0, y1, raftZ, x0 - chamfer, y1 + chamfer, 0, x0, y1 + chamfer, 0);
+        supportTrianglesCoords.push(x0, y1, 0, x0 - chamfer, y1 + chamfer, 0, x0 - chamfer, y1, 0);
+        supportTrianglesCoords.push(x0, y1, 0, x0, y1 + chamfer, 0, x0 - chamfer, y1 + chamfer, 0);
+      }
+      if (isSouth && isEast) {
+        supportTrianglesCoords.push(x1, y0, raftZ, x1 + chamfer, y0, 0, x1 + chamfer, y0 - chamfer, 0);
+        supportTrianglesCoords.push(x1, y0, raftZ, x1 + chamfer, y0 - chamfer, 0, x1, y0 - chamfer, 0);
+        supportTrianglesCoords.push(x1, y0, 0, x1 + chamfer, y0 - chamfer, 0, x1 + chamfer, y0, 0);
+        supportTrianglesCoords.push(x1, y0, 0, x1, y0 - chamfer, 0, x1 + chamfer, y0 - chamfer, 0);
+      }
+      if (isSouth && isWest) {
+        supportTrianglesCoords.push(x0, y0, raftZ, x0, y0 - chamfer, 0, x0 - chamfer, y0 - chamfer, 0);
+        supportTrianglesCoords.push(x0, y0, raftZ, x0 - chamfer, y0 - chamfer, 0, x0 - chamfer, y0, 0);
+        supportTrianglesCoords.push(x0, y0, 0, x0 - chamfer, y0, 0, x0 - chamfer, y0 - chamfer, 0);
+        supportTrianglesCoords.push(x0, y0, 0, x0 - chamfer, y0 - chamfer, 0, x0, y0 - chamfer, 0);
       }
     }
   }
@@ -1305,6 +1475,32 @@ export async function generateDentalSupports(
     offset = writeTriangle(view, offset, norm.nx, norm.ny, norm.nz, ax, ay, az, bx, by, bz, cx, cy, cz);
   }
 
+  // Cálculo real do Bounding Box a partir de todos os triângulos finais gerados
+  let bMinX = Infinity, bMaxX = -Infinity;
+  let bMinY = Infinity, bMaxY = -Infinity;
+  let bMinZ = 0, bMaxZ = elevatedMaxZ;
+
+  for (let i = 0; i < supportTrianglesCoords.length; i += 3) {
+    const vx = supportTrianglesCoords[i];
+    const vy = supportTrianglesCoords[i + 1];
+    const vz = supportTrianglesCoords[i + 2];
+    if (vx < bMinX) bMinX = vx;
+    if (vx > bMaxX) bMaxX = vx;
+    if (vy < bMinY) bMinY = vy;
+    if (vy > bMaxY) bMaxY = vy;
+    if (vz > bMaxZ) bMaxZ = vz;
+  }
+  for (let i = 0; i < modelPositions.length; i += 3) {
+    const vx = modelPositions[i];
+    const vy = modelPositions[i + 1];
+    const vz = modelPositions[i + 2] + zShift;
+    if (vx < bMinX) bMinX = vx;
+    if (vx > bMaxX) bMaxX = vx;
+    if (vy < bMinY) bMinY = vy;
+    if (vy > bMaxY) bMaxY = vy;
+    if (vz > bMaxZ) bMaxZ = vz;
+  }
+
   // Consumo aproximado de resina (ml)
   const avgPillarVolumeMm3 = Math.PI * Math.pow(pRad, 2) * (cfg.elevationZ || 5) * 1.15;
   const totalPillarsVolumeMm3 = pillars.length * avgPillarVolumeMm3;
@@ -1322,15 +1518,15 @@ export async function generateDentalSupports(
     pillarCount: pillars.length,
     pillars,
     bounds: {
-      minX: Math.round((minX - cfg.raftMargin) * 10) / 10,
-      maxX: Math.round((maxX + cfg.raftMargin) * 10) / 10,
-      minY: Math.round((minY - cfg.raftMargin) * 10) / 10,
-      maxY: Math.round((maxY + cfg.raftMargin) * 10) / 10,
+      minX: Math.round(bMinX * 10) / 10,
+      maxX: Math.round(bMaxX * 10) / 10,
+      minY: Math.round(bMinY * 10) / 10,
+      maxY: Math.round(bMaxY * 10) / 10,
       minZ: 0,
-      maxZ: Math.round(elevatedMaxZ * 10) / 10,
-      width: Math.round((modelWidth + cfg.raftMargin * 2) * 10) / 10,
-      depth: Math.round((modelDepth + cfg.raftMargin * 2) * 10) / 10,
-      height: Math.round(elevatedMaxZ * 10) / 10,
+      maxZ: Math.round(bMaxZ * 10) / 10,
+      width: Math.round((bMaxX - bMinX) * 10) / 10,
+      depth: Math.round((bMaxY - bMinY) * 10) / 10,
+      height: Math.round(bMaxZ * 10) / 10,
     },
     estimatedResinMl,
     durationMs,

@@ -816,7 +816,11 @@ export default function MontagemPage() {
         }))
       );
       const fileName = `mesa-${(printer?.name || "chapa").replace(/\s+/g, "-").toLowerCase()}.stl`;
-      await savePendingMesh(buffer, fileName);
+      await savePendingMesh(buffer, fileName, {
+        plateW: Number(plateW),
+        plateD: Number(plateD),
+        printerName: printer?.name,
+      });
       router.push("/suportes");
     } catch (err: any) {
       toast.error(err?.message || "Falha ao preparar mesa para suportes.");

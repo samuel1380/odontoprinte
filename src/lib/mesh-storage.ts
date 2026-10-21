@@ -26,13 +26,33 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-export async function savePendingMesh(buffer: ArrayBuffer, fileName: string): Promise<void> {
+export interface PendingMeshMeta {
+  plateW?: number;
+  plateD?: number;
+  printerName?: string;
+}
+
+export async function savePendingMesh(
+  buffer: ArrayBuffer,
+  fileName: string,
+  meta?: PendingMeshMeta
+): Promise<void> {
   try {
     const db = await openDb();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, "readwrite");
       const store = tx.objectStore(STORE_NAME);
-      const req = store.put({ buffer, fileName, timestamp: Date.now() }, KEY_NAME);
+      const req = store.put(
+        {
+          buffer,
+          fileName,
+          plateW: meta?.plateW,
+          plateD: meta?.plateD,
+          printerName: meta?.printerName,
+          timestamp: Date.now(),
+        },
+        KEY_NAME
+      );
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error || new Error("Erro ao salvar arquivo localmente."));
     });
@@ -48,6 +68,9 @@ export async function savePendingMesh(buffer: ArrayBuffer, fileName: string): Pr
         }
         sessionStorage.setItem("odontoprint_pending_supports_mesh", btoa(binary));
         sessionStorage.setItem("odontoprint_pending_supports_name", fileName);
+        if (meta) {
+          sessionStorage.setItem("odontoprint_pending_supports_meta", JSON.stringify(meta));
+        }
       }
     } catch {
       // ignora se falhar
@@ -55,7 +78,13 @@ export async function savePendingMesh(buffer: ArrayBuffer, fileName: string): Pr
   }
 }
 
-export async function getPendingMesh(): Promise<{ buffer: ArrayBuffer; fileName: string } | null> {
+export async function getPendingMesh(): Promise<{
+  buffer: ArrayBuffer;
+  fileName: string;
+  plateW?: number;
+  plateD?: number;
+  printerName?: string;
+} | null> {
   try {
     const db = await openDb();
     const data = await new Promise<any>((resolve, reject) => {
@@ -69,7 +98,13 @@ export async function getPendingMesh(): Promise<{ buffer: ArrayBuffer; fileName:
     if (data && data.buffer) {
       // Limpa após leitura para liberar memória do navegador
       await clearPendingMesh();
-      return { buffer: data.buffer, fileName: data.fileName || "mesa-montada.stl" };
+      return {
+        buffer: data.buffer,
+        fileName: data.fileName || "mesa-montada.stl",
+        plateW: data.plateW,
+        plateD: data.plateD,
+        printerName: data.printerName,
+      };
     }
   } catch {
     // Fallback para sessionStorage
@@ -80,17 +115,30 @@ export async function getPendingMesh(): Promise<{ buffer: ArrayBuffer; fileName:
     if (typeof window !== "undefined") {
       const stored = sessionStorage.getItem("odontoprint_pending_supports_mesh");
       const storedName = sessionStorage.getItem("odontoprint_pending_supports_name");
+      const storedMeta = sessionStorage.getItem("odontoprint_pending_supports_meta");
       if (stored) {
         sessionStorage.removeItem("odontoprint_pending_supports_mesh");
         sessionStorage.removeItem("odontoprint_pending_supports_name");
+        sessionStorage.removeItem("odontoprint_pending_supports_meta");
         const binaryString = atob(stored);
         const bytes = new Uint8Array(binaryString.length);
         for (let i = 0; i < binaryString.length; i++) {
           bytes[i] = binaryString.charCodeAt(i);
         }
+        let parsedMeta: PendingMeshMeta = {};
+        if (storedMeta) {
+          try {
+            parsedMeta = JSON.parse(storedMeta);
+          } catch {
+            // ignora
+          }
+        }
         return {
           buffer: bytes.buffer,
           fileName: storedName || "mesa-montada.stl",
+          plateW: parsedMeta.plateW,
+          plateD: parsedMeta.plateD,
+          printerName: parsedMeta.printerName,
         };
       }
     }

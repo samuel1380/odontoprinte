@@ -336,4 +336,42 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
       }
     }
   });
+
+  it("gera balsa com chanfro de 45° real na borda perimetral para entrada de espátula", async () => {
+    const positions = createSampleModelPositions();
+    const result = await generateDentalSupports(positions, { raftThickness: 1.0 });
+
+    const view = new DataView(result.stlBuffer);
+    const triCount = view.getUint32(80, true);
+    let foundChamferTriangle = false;
+
+    // Varre triângulos do STL em busca de faces chanfradas a 45° (|nz| entre 0.50 e 0.85 com normal horizontal pronunciada)
+    for (let t = 0; t < triCount; t++) {
+      const off = 84 + t * 50;
+      const nz = view.getFloat32(off + 8, true);
+      const nx = view.getFloat32(off, true);
+      const ny = view.getFloat32(off + 4, true);
+
+      const hLen = Math.hypot(nx, ny);
+      // Face a 45 graus: hLen e |nz| são aproximadamente iguais (ratio entre 0.8 e 1.25)
+      if (hLen > 0.4 && Math.abs(nz) > 0.4 && Math.abs(hLen - Math.abs(nz)) < 0.25) {
+        foundChamferTriangle = true;
+        break;
+      }
+    }
+
+    expect(foundChamferTriangle).toBe(true);
+  });
+
+  it("calcula bounding box real refletindo a extensão exata da balsa chanfrada", async () => {
+    const positions = createSampleModelPositions();
+    const result = await generateDentalSupports(positions, { raftMargin: 2.0, raftThickness: 1.0 });
+
+    // O modelo original tem 30x30mm em X e Y.
+    // Com balsa e chanfro, a largura e profundidade reais devem ser maiores que 30mm
+    expect(result.bounds.width).toBeGreaterThanOrEqual(30.0);
+    expect(result.bounds.depth).toBeGreaterThanOrEqual(30.0);
+    expect(result.bounds.minZ).toBe(0);
+    expect(result.bounds.height).toBe(result.bounds.maxZ);
+  });
 });

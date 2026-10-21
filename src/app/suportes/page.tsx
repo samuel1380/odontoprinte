@@ -71,6 +71,7 @@ export default function SuportesPage() {
   const [zoom, setZoom] = useState<number>(1.0);
   const [xRay, setXRay] = useState<boolean>(false);
   const [islands, setIslands] = useState<DetectedIsland[]>([]);
+  const [plateMeta, setPlateMeta] = useState<{ plateW?: number; plateD?: number; printerName?: string } | null>(null);
 
   // Dimensões reais originais milimétricas do modelo (100% 1:1 sem redimensionamento)
   const modelDims = useMemo(() => {
@@ -199,6 +200,9 @@ export default function SuportesPage() {
     getPendingMesh()
       .then((data) => {
         if (!active || !data) return;
+        if (data.plateW && data.plateD) {
+          setPlateMeta({ plateW: data.plateW, plateD: data.plateD, printerName: data.printerName });
+        }
         parseStlTriangles(data.buffer)
           .then((parsed) => {
             if (!active) return;
@@ -937,6 +941,27 @@ export default function SuportesPage() {
                       {modelDims ? `${modelDims.w} mm × ${modelDims.d} mm (altura ${modelDims.h} mm)` : `${result.bounds.width} × ${result.bounds.depth} mm`}
                     </span>
                   </div>
+
+                  {plateMeta?.plateW && plateMeta?.plateD && (
+                    <div className="col-span-2">
+                      {result.bounds.width > plateMeta.plateW || result.bounds.depth > plateMeta.plateD ? (
+                        <div className="bg-rose-500/15 border border-rose-500/40 rounded-xl p-2.5 text-xs text-rose-300 space-y-1">
+                          <div className="font-bold flex items-center gap-1.5 text-rose-200">
+                            <AlertCircle className="w-4 h-4 text-rose-400" />
+                            Atenção: A balsa excede a chapa da impressora!
+                          </div>
+                          <p className="text-[10px] leading-relaxed text-rose-300/90">
+                            Balsa total: <strong>{result.bounds.width} × {result.bounds.depth} mm</strong>. Área da impressora {plateMeta.printerName || ""}: <strong>{plateMeta.plateW} × {plateMeta.plateD} mm</strong>.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-xl p-2 text-[10px] text-emerald-300 flex items-center justify-between">
+                          <span>Chapa ({plateMeta.printerName || "Impressora"}):</span>
+                          <strong>{result.bounds.width} × {result.bounds.depth} mm (Dentro da mesa de {plateMeta.plateW}×{plateMeta.plateD} mm)</strong>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-2 flex items-center justify-between border-t border-slate-800 text-[11px] text-slate-400">
