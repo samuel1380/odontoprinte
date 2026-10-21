@@ -21,6 +21,8 @@ export interface DentalSupportConfig {
   tipPenetration: number;
   /** Forma da parte de contato. Padrão: "SPHERE" (Esfera destacável odontológica) */
   tipShape?: "CONE" | "SPHERE";
+  /** Diâmetro do topo do cone da ponta (mm). Padrão: 0.60 mm (igual ao Halot Box) */
+  tipUpperDiameter?: number;
   /** Diâmetro do pé cônico na balsa (mm). Padrão: 2.2 mm */
   baseDiameter: number;
   /** Altura do pé cônico de reforço na balsa (mm). Padrão: 0.8 mm */
@@ -48,12 +50,13 @@ export interface DentalSupportConfig {
 }
 
 export const DEFAULT_DENTAL_SUPPORT_CONFIG: DentalSupportConfig = {
-  elevationZ: 3.5,
+  elevationZ: 6.0,
   pillarDiameter: 1.20,
   tipDiameter: 0.70,
   tipLength: 3.00,
   tipPenetration: 0.30,
   tipShape: "SPHERE",
+  tipUpperDiameter: 0.60,
   baseDiameter: 1.6,
   baseLength: 0.8,
   raftThickness: 1.5,
@@ -73,12 +76,13 @@ export const DENTAL_SUPPORT_PROFILES = {
     badge: "Recomendado",
     description: "Equilíbrio ideal de alta precisão para arcadas completas e modelos de trabalho. Firmeza excelente sem fusão de pilares e sem marcar.",
     config: {
-      elevationZ: 3.5,
+      elevationZ: 6.0,
       pillarDiameter: 1.20,
       tipDiameter: 0.70,
       tipLength: 3.00,
       tipPenetration: 0.30,
       tipShape: "SPHERE" as const,
+      tipUpperDiameter: 0.60,
       baseDiameter: 1.6,
       baseLength: 0.8,
       raftThickness: 1.5,
@@ -96,11 +100,12 @@ export const DENTAL_SUPPORT_PROFILES = {
     badge: "Precisão Fina",
     description: "Recomendado para detalhes delicados, facetas e troquéis. Remoção ultra suave e mínima marcação na peça.",
     config: {
-      elevationZ: 3.0,
+      elevationZ: 4.5,
       pillarDiameter: 1.0,
       tipDiameter: 0.50,
       tipLength: 1.1,
       tipPenetration: 0.08,
+      tipUpperDiameter: 0.50,
       baseDiameter: 1.8,
       baseLength: 0.6,
       raftThickness: 1.2,
@@ -118,11 +123,12 @@ export const DENTAL_SUPPORT_PROFILES = {
     badge: "Anti-Sucção Forte",
     description: "Para modelos maciços ou pesados que exigem sustentação estrutural máxima contra a sucção do filme FEP.",
     config: {
-      elevationZ: 4.0,
+      elevationZ: 7.0,
       pillarDiameter: 1.5,
       tipDiameter: 0.80,
       tipLength: 1.5,
       tipPenetration: 0.15,
+      tipUpperDiameter: 0.80,
       baseDiameter: 2.6,
       baseLength: 1.0,
       raftThickness: 1.8,
@@ -203,6 +209,11 @@ export interface SupportPillarInfo {
   targetY?: number;
   isLateral?: boolean;
   targetNormal?: { nx: number; ny: number; nz: number };
+  /**
+   * Altura (Z) onde começa o cone da ponta. O cone tem comprimento fixo
+   * (tipLength) como no Halot Box: a coluna inteira absorve a altura restante.
+   */
+  zKnee?: number;
 }
 
 export interface SupportGenerationResult {
@@ -323,7 +334,7 @@ function appendConeFrustum3D(
   y1: number,
   z1: number,
   r1: number,
-  segments: number = 8
+  segments: number = 20
 ) {
   const cos: number[] = [];
   const sin: number[] = [];
@@ -352,7 +363,7 @@ function appendConeFrustum3D(
 }
 
 /**
- * Gera um tronco de cone / cilindro vertical em malha poligonal de 8 lados.
+ * Gera um tronco de cone / cilindro vertical em malha poligonal arredondada.
  */
 function appendCylinderSection(
   triangles: number[],
@@ -362,7 +373,7 @@ function appendCylinderSection(
   r0: number,
   z1: number,
   r1: number,
-  segments: number = 8
+  segments: number = 20
 ) {
   appendConeFrustum3D(triangles, cx, cy, z0, r0, cx, cy, z1, r1, segments);
 }
@@ -377,7 +388,7 @@ function appendCap(
   z: number,
   radius: number,
   isTop: boolean,
-  segments: number = 8
+  segments: number = 20
 ) {
   for (let i = 0; i < segments; i++) {
     const next = (i + 1) % segments;
@@ -529,10 +540,10 @@ export function sampleSupportGeometry(p: SupportPillarInfo, cfg: DentalSupportCo
   const z0 = p.zBase;
   const totalH = p.zContact - z0;
   const effBaseH = Math.min(cfg.baseLength, totalH * 0.20);
-  const effTipH = Math.min(cfg.tipLength, Math.max(0.8, totalH - effBaseH - 0.5));
-  const effStemH = Math.max(0, totalH - effBaseH - effTipH);
+  const tipUpperRad = (cfg.tipUpperDiameter ?? 0.60) / 2;
   const zBaseEnd = z0 + effBaseH;
-  const zStemEnd = zBaseEnd + effStemH;
+  const zKnee = Math.max(zBaseEnd, p.zKnee ?? p.zContact - cfg.tipLength);
+  const zStemEnd = zKnee;
 
   const targetX = p.targetX ?? p.x;
   const targetY = p.targetY ?? p.y;
@@ -550,7 +561,7 @@ export function sampleSupportGeometry(p: SupportPillarInfo, cfg: DentalSupportCo
 
   const samples: SupportSample[] = [];
   appendSegmentSamples(samples, p.x, p.y, zBaseEnd, pRad, p.x, p.y, zStemEnd, pRad, 3);
-  appendSegmentSamples(samples, p.x, p.y, zStemEnd, pRad, sCx, sCy, sCz, tipRad, 4);
+  appendSegmentSamples(samples, p.x, p.y, zStemEnd, pRad, sCx, sCy, sCz, tipUpperRad, 4);
   samples.push({ x: sCx, y: sCy, z: sCz, r: tipRad });
   return samples;
 }
@@ -996,6 +1007,7 @@ export async function generateDentalSupports(
   // Conectores sobem na lateral até o topo do zócalo atrás e descem acompanhando a gengiva na frente
   const pRad = cfg.pillarDiameter / 2;
   const tipRad = cfg.tipDiameter / 2;
+  const tipUpperRad = (cfg.tipUpperDiameter ?? 0.60) / 2;
   const baseRad = cfg.baseDiameter / 2;
   // Afasta a haste da parede o suficiente para cumprir a folga real do modelo
   const lateralPillarOffset = pRad + Math.max(0.70, cfg.modelClearance) + 0.10;
@@ -1140,7 +1152,8 @@ export async function generateDentalSupports(
     // Tenta diferentes offsets de afastamento para a haste caso haja concavidade ou saliência na parede
     let bestPillarPos: { px: number; py: number } | null = null;
     let bestSamples: SupportSample[] | null = null;
-    const offsetMultipliers = [1.0, 1.12, 1.25, 1.4, 1.6, 1.85, 2.1];
+    let bestZKnee = 0;
+    const offsetMultipliers = [1.0, 1.1, 1.2, 1.3, 1.45, 1.6, 1.8];
 
     // Testa na direção da normal; se colidir (ex: normal invertida do CAD apontando para dentro),
     // testa na direção oposta (-1) para garantir haste sempre do lado de fora do modelo
@@ -1189,17 +1202,18 @@ export async function generateDentalSupports(
         const sCz = zContact + cnz * offsetOut;
 
         const hDist = Math.hypot(sCx - testPx, sCy - testPy);
-        // Garante inclinação do braço >= 45 graus (rise >= hDist * 0.95).
-        // A ponta é adaptativa (igual à geometria final): com elevação menor o
-        // suporte encurta e continua cabendo até perto do fundo do modelo.
+        // O cone da ponta tem comprimento FIXO (tipLength), igual ao Halot Box:
+        // a coluna sobe até o "joelho" e o cone vai do joelho até a esfera.
+        // Por isso a distância horizontal não pode passar de tipLength.
         const totalHeight = zContact - raftZ;
         const effBaseHeight = Math.min(cfg.baseLength, totalHeight * 0.20);
-        const effTipHeight = Math.min(cfg.tipLength, Math.max(0.8, totalHeight - effBaseHeight - 0.5));
-        const requiredRise = hDist * 0.95;
-        const zStemMax = sCz - Math.max(effTipHeight, requiredRise);
+        if (hDist > cfg.tipLength * 0.96) continue;
+        const zKnee = sCz - Math.sqrt(Math.max(0.05, cfg.tipLength * cfg.tipLength - hDist * hDist));
+        const zStemMax = zKnee;
 
-        // Se a haste vertical não tiver espaço para subir da balsa, o ângulo seria < 45° (overhang severo)
-        if (zStemMax < raftZ + effBaseHeight + 0.1) {
+        // Se a coluna vertical não tiver espaço para subir da balsa, o suporte
+        // não fecha (o cone ficaria abaixo da balsa).
+        if (zStemMax < raftZ + effBaseHeight + 0.2) {
           continue;
         }
 
@@ -1310,6 +1324,7 @@ export async function generateDentalSupports(
           targetY,
           isLateral: true,
           targetNormal: cand.normal,
+          zKnee,
         };
         const testSamples = sampleSupportGeometry(testPillar, cfg);
         let supportCollides = false;
@@ -1324,6 +1339,7 @@ export async function generateDentalSupports(
         if (!collides) {
           bestPillarPos = { px: testPx, py: testPy };
           bestSamples = testSamples;
+          bestZKnee = zKnee;
           break; // Posição perfeita encontrada!
         }
       }
@@ -1343,6 +1359,7 @@ export async function generateDentalSupports(
       targetY,
       isLateral: true,
       targetNormal: cand.normal,
+      zKnee: bestZKnee,
     };
     pillars.push(pillar);
     placedSamples.push(bestSamples);
@@ -1372,6 +1389,13 @@ export async function generateDentalSupports(
     if (tooClose) continue;
 
     let shaftCollidesWithModel = false;
+    // Coluna vertical: cone de comprimento fixo (tipLength) até a esfera
+    const bottomTipRad = cfg.tipDiameter / 2;
+    const bottomEffPen = Math.min(bottomTipRad, Math.max(0.05, cfg.tipPenetration));
+    const bottomOffsetOut = bottomTipRad - bottomEffPen;
+    const bottomNorm = cand.normal;
+    const bottomNz = bottomNorm.nz < 0 ? bottomNorm.nz : -Math.abs(bottomNorm.nz);
+    const zKnee = zContact + bottomNz * bottomOffsetOut - cfg.tipLength;
     const zStemMax = zContact - cfg.tipLength;
 
     const gc0 = Math.max(0, Math.floor((px - stemRadiusWithClearance - startX) / spatialCellSize));
@@ -1420,6 +1444,7 @@ export async function generateDentalSupports(
       height: zContact - raftZ,
       isLateral: false,
       targetNormal: cand.normal,
+      zKnee,
     };
     const bottomSamples = sampleSupportGeometry(bottomPillar, cfg);
     let supportCollides = false;
@@ -1510,20 +1535,11 @@ export async function generateDentalSupports(
     const totalH = pil.zContact - z0;
 
     const effBaseH = Math.min(cfg.baseLength, totalH * 0.20);
-    const effTipH = Math.min(cfg.tipLength, Math.max(0.8, totalH - effBaseH - 0.5));
-    const effStemH = Math.max(0, totalH - effBaseH - effTipH);
-
     const zBaseEnd = z0 + effBaseH;
-    const zStemEnd = zBaseEnd + effStemH;
 
     // Pé cônico de fixação na balsa: baseRad -> pRad (anti-sobreposição)
     appendCylinderSection(supportTrianglesCoords, cx, cy, z0, baseRad, zBaseEnd, pRad);
     appendCap(supportTrianglesCoords, cx, cy, z0, baseRad, false);
-
-    // Haste cilíndrica uniforme anti-fusão: pRad -> pRad (diâmetro 1.20 mm)
-    if (effStemH > 0.05) {
-      appendCylinderSection(supportTrianglesCoords, cx, cy, zBaseEnd, pRad, zStemEnd, pRad);
-    }
 
     // Ponta conectando ao alvo
     const targetX = pil.targetX ?? cx;
@@ -1534,6 +1550,11 @@ export async function generateDentalSupports(
     const uny = tNorm.ny / nLen3D;
     const unz = tNorm.nz / nLen3D;
 
+    // Ponto de origem do cone: a coluna (haste) sobe até o "joelho" e o cone
+    // de comprimento fixo (tipLength) segue até a esfera de contato.
+    const zKnee = Math.max(zBaseEnd, pil.zKnee ?? pil.zContact - cfg.tipLength);
+    const zStemEnd = zKnee;
+
     if (cfg.tipShape === "SPHERE") {
       // Penetração real controlada: esfera de raio tipRad entra exatamente tipPenetration sem cratera
       const effPen = Math.min(tipRad, Math.max(0.05, cfg.tipPenetration));
@@ -1542,7 +1563,12 @@ export async function generateDentalSupports(
       const sCy = targetY + uny * offsetOut;
       const sCz = pil.zContact + unz * offsetOut;
 
-      // Haste superior cônica conectando perfeitamente no centro da calota esférica
+      // Coluna cilíndrica redonda (1,20 mm) do pé até o joelho
+      if (zStemEnd - zBaseEnd > 0.05) {
+        appendCylinderSection(supportTrianglesCoords, cx, cy, zBaseEnd, pRad, zStemEnd, pRad);
+      }
+
+      // Cone da ponta: 1,20 mm -> 0,60 mm ao longo de tipLength (igual Halot Box)
       appendConeFrustum3D(
         supportTrianglesCoords,
         cx,
@@ -1552,7 +1578,7 @@ export async function generateDentalSupports(
         sCx,
         sCy,
         sCz,
-        tipRad
+        tipUpperRad
       );
       // Calota esférica exterior fechando o topo em direção à superfície do modelo (zero faces internas)
       appendSphericalCap(
@@ -1564,8 +1590,8 @@ export async function generateDentalSupports(
         -unx,
         -uny,
         -unz,
-        4,
-        8
+        6,
+        16
       );
     } else {
       const zTop = pil.zContact + Math.min(0.20, cfg.tipPenetration);

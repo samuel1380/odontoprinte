@@ -45,7 +45,7 @@ function createPerimeterModel(w = 40, d = 30, h = 8, ox = 0, oy = 0): Float32Arr
 
 describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)", () => {
   it("tem as medidas padrão corretas de suporte médio anti-falhas e anti-fusão", () => {
-    expect(DEFAULT_DENTAL_SUPPORT_CONFIG.elevationZ).toBe(3.5);
+    expect(DEFAULT_DENTAL_SUPPORT_CONFIG.elevationZ).toBe(6.0);
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.pillarDiameter).toBe(1.20);
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.tipDiameter).toBe(0.70);
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.tipLength).toBe(3.00);
@@ -53,6 +53,10 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.tipShape).toBe("SPHERE");
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.raftThickness).toBe(1.5);
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.supportSpacing).toBe(2.6);
+    // Receita "Column Support-Medium" do Halot Box:
+    expect(DEFAULT_DENTAL_SUPPORT_CONFIG.tipUpperDiameter).toBe(0.60);
+    expect(DEFAULT_DENTAL_SUPPORT_CONFIG.tipLength).toBe(3.00);
+    expect(DEFAULT_DENTAL_SUPPORT_CONFIG.pillarDiameter).toBe(1.20);
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.minSupportGap).toBe(0.40);
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.minPillarDistance).toBe(1.70);
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.modelClearance).toBeGreaterThanOrEqual(0.7);
@@ -556,6 +560,34 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
       expect(p.zBase).toBeCloseTo(1.5, 3);
       expect(p.zContact - p.zBase).toBeLessThanOrEqual(2.5);
     }
+  });
+
+  it("gera a coluna igual ao suporte Column do Halot Box (haste 1,20 + cone 3,00 -> 0,60 + esfera 0,70/0,30)", async () => {
+    // Parede vertical em X=0 (modelo do lado +X, normal externa -X)
+    const wall = new Float32Array([
+      0, 0, 0, 0, 0, 10, 0, 20, 10,
+      0, 0, 0, 0, 20, 10, 0, 20, 0,
+    ]);
+    const result = await generateDentalSupports(wall, { elevationZ: 6.0, raftThickness: 1.5 });
+    const p = result.pillars[0];
+    expect(p).toBeDefined();
+
+    const tipRad = DEFAULT_DENTAL_SUPPORT_CONFIG.tipDiameter / 2;
+    const offsetOut = tipRad - DEFAULT_DENTAL_SUPPORT_CONFIG.tipPenetration;
+    const sCx = (p.targetX ?? p.x) - offsetOut; // normal externa -X
+    const sCz = p.zContact;
+
+    const hDist = Math.abs(sCx - p.x);
+    const coneLen = Math.hypot(hDist, sCz - (p.zKnee ?? 0));
+    const angleDeg = (Math.atan2(sCz - (p.zKnee ?? 0), hDist) * 180) / Math.PI;
+
+    // Cone de comprimento fixo (Top Length 3,00 mm do Halot Box)
+    expect(coneLen).toBeCloseTo(3.0, 1);
+    // Ângulo com a plataforma próximo dos 60° configurados no Halot Box
+    expect(angleDeg).toBeGreaterThan(55);
+    expect(angleDeg).toBeLessThan(65);
+    // A coluna é robusta (não é uma lâmina): a haste sobe até o joelho do cone
+    expect((p.zKnee ?? 0) - p.zBase).toBeGreaterThan(0.5);
   });
 
   it("exporta o modelo em escala 1:1 (X/Y intactos, apenas deslocamento em Z)", async () => {
