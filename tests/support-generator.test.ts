@@ -3,11 +3,11 @@ import {
   generateDentalSupports,
   sampleSupportGeometry,
   minSupportClearance,
-  computeBaseProfile,
   DEFAULT_DENTAL_SUPPORT_CONFIG,
   DENTAL_SUPPORT_PROFILES,
   DENTAL_SUPPORT_CATEGORIES,
 } from "../src/lib/support-generator";
+import { buildRaftMesh } from "../src/lib/support-base";
 import { parseStlTriangles } from "../src/lib/plate-nesting";
 
 // Cria triângulos simples simulando a base de um modelo dentário (quadrado de 30x30mm na origem com triângulos inferiores)
@@ -105,7 +105,7 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     expect(DENTAL_SUPPORT_CATEGORIES.GUIDES.isConfigured).toBe(false);
   });
 
-  it("gera suportes, sapatas e buffer STL binário válido", async () => {
+  it("gera suportes, base contínua e buffer STL binário válido", async () => {
     const positions = createSampleModelPositions();
     const result = await generateDentalSupports(positions);
 
@@ -371,43 +371,128 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     }
   });
 
-  it("gera sapatas individuais com saia inclinada (sem balsa global)", async () => {
+  it("gera base contínua com topo alto, rampa de espátula e pés apoiados", async () => {
     const raftThickness = 1.5;
     const positions = createSampleModelPositions();
     const result = await generateDentalSupports(positions, { raftThickness });
-    const cfg = { ...DEFAULT_DENTAL_SUPPORT_CONFIG, raftThickness };
     expect(result.pillarCount).toBeGreaterThan(0);
 
-    // Cada pilar tem seu próprio pé: fundo em Z=0, topo em padH e saia
-    // inclinada que guia a espátula. Não existe mais uma balsa única.
-    const base = computeBaseProfile(cfg, cfg.elevationZ);
-    expect(base.padH).toBeGreaterThan(0);
-    expect(base.padBottomR).toBeGreaterThan(base.padTopR);
-    const slopeDeg =
-      (Math.atan2(base.padBottomR - base.padTopR, base.padH) * 180) / Math.PI;
-    expect(slopeDeg).toBeGreaterThan(30);
-    expect(slopeDeg).toBeLessThan(60);
+    // A base é única e contínua, com topo plano em raftThickness e perímetro
+    // descendo a 30° até a chapa (rampa de espátula).
+    expect(result.base).toBeDefined();
+    expect(result.base.height).toBeCloseTo(raftThickness, 5);
+    expect(result.baseHeight).toBeCloseTo(raftThickness, 5);
+    expect(result.base.chamfer).toBeCloseTo(raftThickness / Math.tan(Math.PI / 6), 5);
+    expect(result.base.triangles).toBeGreaterThan(0);
+    expect(result.base.volumeMl).toBeGreaterThan(0);
+    expect(result.base.loops.length).toBeGreaterThan(0);
+    expect(result.base.topBounds).not.toBeNull();
+    expect(result.base.bottomBounds).not.toBeNull();
 
+    // Todos os pés nascem no topo da base, nunca no fundo da chapa.
+    const footR = Math.max(0.2, DEFAULT_DENTAL_SUPPORT_CONFIG.baseDiameter / 2,
+      DEFAULT_DENTAL_SUPPORT_CONFIG.pillarDiameter / 2 + 0.02);
     for (const p of result.pillars) {
       expect(p.zBase).toBeCloseTo(result.baseHeight, 5);
-      expect(p.zBase).toBeGreaterThan(base.padH);
-      expect(p.zBase).toBeLessThan(cfg.elevationZ);
+      expect(p.zBase).toBeGreaterThan(0.4);
+      expect(p.zBase).toBeLessThan(DEFAULT_DENTAL_SUPPORT_CONFIG.elevationZ);
+      // O topo da base cobre todo o disco do pé cônico.
+      expect(p.x - footR).toBeGreaterThanOrEqual((result.base.topBounds?.minX ?? 0) - 1e-6);
+      expect(p.x + footR).toBeLessThanOrEqual((result.base.topBounds?.maxX ?? 0) + 1e-6);
+      expect(p.y - footR).toBeGreaterThanOrEqual((result.base.topBounds?.minY ?? 0) - 1e-6);
+      expect(p.y + footR).toBeLessThanOrEqual((result.base.topBounds?.maxY ?? 0) + 1e-6);
     }
 
-    // A caixa acompanha o modelo e as sapatas individuais (sem margem global
-    // de balsa): precisa continuar próxima do modelo de 30x30mm.
-    expect(result.bounds.width).toBeGreaterThanOrEqual(30);
-    expect(result.bounds.depth).toBeGreaterThanOrEqual(30);
-    expect(result.bounds.width).toBeLessThan(30 + 2 * (base.padBottomR + 3.0));
-    expect(result.bounds.depth).toBeLessThan(30 + 2 * (base.padBottomR + 3.0));
+    // O fundo é mais largo que o topo por causa do chanfro, mas continua
+    // próximo do modelo (margem da base + pé), sem explodir a caixa.
+    const top = result.base.topBounds!;
+    const bottom = result.base.bottomBounds!;
+    expect(top.maxX - top.minX).toBeGreaterThanOrEqual(30);
+    expect(top.maxY - top.minY).toBeGreaterThanOrEqual(30);
+    expect(bottom.minX).toBeLessThanOrEqual(top.minX);
+    expect(bottom.maxX).toBeGreaterThanOrEqual(top.maxX);
+    expect(bottom.minY).toBeLessThanOrEqual(top.minY);
+    expect(bottom.maxY).toBeGreaterThanOrEqual(top.maxY);
+    expect(top.maxX - top.minX).toBeLessThan(30 + 2 * (footR + 2 + 3));
+    expect(top.maxY - top.minY).toBeLessThan(30 + 2 * (footR + 2 + 3));
   });
 
-  it("calcula bounding box real do conjunto com sapatas individuais", async () => {
+  it("constrói base manifold em pegada côncava e limitada pela chapa", () => {
+    // Pegada em L: (0,0)-(20,0)-(20,8)-(8,8)-(8,20)-(0,20).
+    // A projeção usa apenas XY; não é necessário um STL fechado aqui.
+    const lFootprint = new Float32Array([
+      0, 0, 0, 20, 0, 0, 20, 8, 0,
+      0, 0, 0, 20, 8, 0, 8, 8, 0,
+      0, 20, 0, 0, 0, 0, 8, 8, 0,
+      8, 8, 0, 8, 20, 0, 0, 20, 0,
+    ]);
+    const raft = buildRaftMesh(lFootprint, [{ x: 4, y: 4 }, { x: 4, y: 15 }], {
+      topZ: 1.5,
+      margin: 2.0,
+      slopeDeg: 30,
+      supportFootRadius: 0.8,
+      plateWidth: 60,
+      plateDepth: 60,
+      cellSize: 1.0,
+    });
+
+    expect(raft.loops.length).toBeGreaterThan(0);
+    expect(raft.triangleCount).toBeGreaterThan(0);
+    expect(raft.topBounds).not.toBeNull();
+    expect(raft.bottomBounds).not.toBeNull();
+    expect(raft.topBounds!.minX).toBeGreaterThanOrEqual(-1e-6);
+    expect(raft.topBounds!.minY).toBeGreaterThanOrEqual(-1e-6);
+    expect(raft.bottomBounds!.minX).toBeGreaterThanOrEqual(-1e-6);
+    expect(raft.bottomBounds!.minY).toBeGreaterThanOrEqual(-1e-6);
+    expect(raft.bottomBounds!.maxX).toBeLessThanOrEqual(60 + 1e-6);
+    expect(raft.bottomBounds!.maxY).toBeLessThanOrEqual(60 + 1e-6);
+
+    const key = (x: number, y: number, z: number) =>
+      `${Math.round(x * 1e4)}_${Math.round(y * 1e4)}_${Math.round(z * 1e4)}`;
+    const edges = new Map<string, number>();
+    for (let i = 0; i < raft.coords.length; i += 9) {
+      const a = key(raft.coords[i], raft.coords[i + 1], raft.coords[i + 2]);
+      const b = key(raft.coords[i + 3], raft.coords[i + 4], raft.coords[i + 5]);
+      const c = key(raft.coords[i + 6], raft.coords[i + 7], raft.coords[i + 8]);
+      for (const [u, v] of [[a, b], [b, c], [c, a]] as const) {
+        const edge = u < v ? `${u}|${v}` : `${v}|${u}`;
+        edges.set(edge, (edges.get(edge) ?? 0) + 1);
+      }
+    }
+    expect(Array.from(edges.values()).filter((n) => n !== 2)).toEqual([]);
+  });
+
+  it("gera a rampa da base a 30° e mantém o fundo na chapa", async () => {
+    const positions = createSampleModelPositions();
+    const result = await generateDentalSupports(positions, { elevationZ: 6.0 });
+    const view = new DataView(result.stlBuffer);
+    const total = view.getUint32(80, true);
+    let ramps = 0;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    for (let t = 0; t < total; t++) {
+      const off = 84 + t * 50;
+      const zs = [0, 1, 2].map((k) => view.getFloat32(off + 20 + k * 12, true));
+      const nx = view.getFloat32(off, true);
+      const ny = view.getFloat32(off + 4, true);
+      const nz = view.getFloat32(off + 8, true);
+      minZ = Math.min(minZ, ...zs);
+      maxZ = Math.max(maxZ, ...zs);
+      if (Math.min(...zs) > 1e-3 || Math.max(...zs) < result.baseHeight - 1e-3) continue;
+      const slope = (Math.atan2(Math.hypot(nx, ny), Math.abs(nz)) * 180) / Math.PI;
+      if (Math.abs(slope - 30) < 0.5) ramps++;
+    }
+    expect(ramps).toBeGreaterThan(0);
+    expect(minZ).toBeCloseTo(0, 3);
+    expect(maxZ).toBeCloseTo(result.bounds.maxZ, 3);
+  });
+
+  it("calcula bounding box real do conjunto com base contínua", async () => {
     const positions = createSampleModelPositions();
     const result = await generateDentalSupports(positions, { raftThickness: 1.0 });
 
-    // O modelo original tem 30x30mm em X e Y; as sapatas podem se estender
-    // além do footprint, mas a caixa precisa começar na chapa (Z=0).
+    // O modelo original tem 30x30mm em X e Y; a base pode se estender além
+    // do footprint, mas a caixa precisa começar na chapa (Z=0).
     expect(result.bounds.width).toBeGreaterThanOrEqual(30.0);
     expect(result.bounds.depth).toBeGreaterThanOrEqual(30.0);
     expect(result.bounds.minZ).toBe(0);
@@ -504,7 +589,7 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
 
   it("não deixa nenhuma das quatro laterais sem suporte e cabe na chapa", async () => {
     // Mesa real: o modelo fica com a margem da chapa (3,5 mm) ao redor, e a
-    // sapatas/suportes precisam caber na área de impressão (sem reescala).
+    // base/suportes precisam caber na área de impressão (sem reescala).
     const offset = 3.5;
     const model = createPerimeterModel(40, 30, 8, offset, offset);
     const result = await generateDentalSupports(model, {
@@ -534,6 +619,11 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     expect(result.bounds.width).toBeLessThanOrEqual(192);
     expect(result.bounds.depth).toBeLessThanOrEqual(120);
     expect(result.bounds.height).toBeLessThanOrEqual(200);
+    expect(result.base.bottomBounds).not.toBeNull();
+    expect(result.base.bottomBounds!.minX).toBeGreaterThanOrEqual(-1e-6);
+    expect(result.base.bottomBounds!.minY).toBeGreaterThanOrEqual(-1e-6);
+    expect(result.base.bottomBounds!.maxX).toBeLessThanOrEqual(192 + 1e-6);
+    expect(result.base.bottomBounds!.maxY).toBeLessThanOrEqual(120 + 1e-6);
   });
 
   it("mantém a profundidade de contato em 0,30 mm (a ponta não entra demais no modelo)", async () => {
@@ -672,7 +762,7 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     const modelTriCount = Math.floor(positions.length / 9);
     const modelVerts = modelTriCount * 9;
 
-    // O parser normaliza XY pelo canto global (inclui sapatas); comparação justa
+    // O parser normaliza XY pelo canto global (inclui a base); comparação justa
     // é feita descontando essa translação rígida, sem qualquer escala.
     let inMinX = Infinity, inMinY = Infinity, exMinX = Infinity, exMinY = Infinity;
     for (let i = 0; i < modelVerts; i += 3) {

@@ -28,7 +28,6 @@ import {
 } from "lucide-react";
 import {
   generateDentalSupports,
-  computeBaseProfile,
   DENTAL_SUPPORT_PROFILES,
   DENTAL_SUPPORT_CATEGORIES,
   detectIslands,
@@ -213,8 +212,8 @@ export default function SuportesPage() {
           });
         }
         // NÃO normaliza XY: a mesa precisa continuar no sistema de coordenadas
-        // da chapa (origem 0,0) para que suportes e sapatas caibam exatamente na
-        // área de impressão e o fatiador não reescale a peça.
+        // da chapa (origem 0,0) para que a base e os suportes caibam exatamente
+        // na área de impressão e o fatiador não reescale a peça.
         parseStlTriangles(data.buffer, { normalizeXY: false })
           .then((parsed) => {
             if (!active) return;
@@ -296,7 +295,7 @@ export default function SuportesPage() {
       });
       setResult(res);
       toast.success(
-        `Suportes gerados com sucesso! (${res.pillarCount} suportes com sapatas individuais).`
+        `Suportes gerados com sucesso! (${res.pillarCount} suportes + base contínua de ${res.baseHeight.toFixed(1)} mm).`
       );
     } catch (err: any) {
       toast.error(err?.message || "Erro ao calcular suportes.");
@@ -305,7 +304,7 @@ export default function SuportesPage() {
     }
   };
 
-  // Baixa o STL final com suportes e sapatas individuais
+  // Baixa o STL final com base contínua e suportes
   const handleDownload = () => {
     if (!result) return;
     try {
@@ -460,8 +459,55 @@ export default function SuportesPage() {
       ctx.stroke();
     }
 
-    // 2. Função de desenho dos suportes: sapata individual + pé + haste +
-    // cone de topo + esfera de contato. Não existe mais balsa global.
+    // 2. Base contínua: topo plano, rampa de espátula e contorno limitado
+    // pela chapa. Desenhada antes do modelo para ficar por baixo dele.
+    const drawBase = () => {
+      if (!result || result.base.loops.length === 0) return;
+      const topZ = result.base.height;
+
+      // Faces da rampa (quads entre o topo e o fundo deslocado).
+      for (const loop of result.base.loops) {
+        for (let i = 0; i < loop.top.length; i++) {
+          const j = (i + 1) % loop.top.length;
+          const aTop = project(loop.top[i].x, loop.top[i].y, topZ);
+          const bTop = project(loop.top[j].x, loop.top[j].y, topZ);
+          const aBot = project(loop.bottom[i].x, loop.bottom[i].y, 0);
+          const bBot = project(loop.bottom[j].x, loop.bottom[j].y, 0);
+          ctx.beginPath();
+          ctx.moveTo(aTop.x, aTop.y);
+          ctx.lineTo(bTop.x, bTop.y);
+          ctx.lineTo(bBot.x, bBot.y);
+          ctx.lineTo(aBot.x, aBot.y);
+          ctx.closePath();
+          const light = 0.35 + 0.25 * Math.max(0, Math.sin(yaw + i * 0.15));
+          ctx.fillStyle = `rgba(${Math.round(120 + 45 * light)}, ${Math.round(53 + 25 * light)}, 15, 0.94)`;
+          ctx.fill();
+          ctx.strokeStyle = "rgba(245, 158, 11, 0.55)";
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
+        }
+      }
+
+      // Topo plano: até aqui o modelo e os pés dos suportes ficam apoiados.
+      // O preenchimento evenodd preserva eventuais furos internos do contorno.
+      ctx.beginPath();
+      for (const loop of result.base.loops) {
+        for (let i = 0; i < loop.top.length; i++) {
+          const pt = project(loop.top[i].x, loop.top[i].y, topZ);
+          if (i === 0) ctx.moveTo(pt.x, pt.y);
+          else ctx.lineTo(pt.x, pt.y);
+        }
+        ctx.closePath();
+      }
+      ctx.fillStyle = "rgba(180, 83, 9, 0.96)";
+      ctx.fill("evenodd");
+      ctx.strokeStyle = "#f59e0b";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    };
+
+    // 3. Função de desenho dos suportes: pé + haste + cone de topo + esfera
+    // de contato, todos nascendo no topo da base contínua.
     const drawSupports = () => {
       if (!result) return;
 
@@ -469,38 +515,20 @@ export default function SuportesPage() {
       const stemPx = Math.max(1.6, pRad * S * 0.7);
 
       for (const p of result.pillars) {
-        const bp = computeBaseProfile(config, p.zContact);
         const knee = p.zKnee ?? Math.max(p.zBase + 0.02, p.zContact - config.tipLength);
         const targetX = p.targetX ?? p.x;
         const targetY = p.targetY ?? p.y;
 
-        const ptPadBottom = project(p.x, p.y, 0);
-        const ptPadTop = project(p.x, p.y, bp.padH);
         const ptBase = project(p.x, p.y, p.zBase);
         const ptKnee = project(p.x, p.y, knee);
         const ptContact = project(targetX, targetY, p.zContact);
 
-        const padBottomPx = Math.max(2.8, bp.padBottomR * S * 0.55);
-        const padTopPx = Math.max(2.2, bp.padTopR * S * 0.55);
-
-        // Sapata individual: saia inclinada (rampa da espátula)
-        ctx.fillStyle = "rgba(180, 83, 9, 0.95)";
-        ctx.strokeStyle = "#f59e0b";
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(ptPadBottom.x - padBottomPx, ptPadBottom.y);
-        ctx.lineTo(ptPadTop.x - padTopPx, ptPadTop.y);
-        ctx.lineTo(ptPadTop.x + padTopPx, ptPadTop.y);
-        ctx.lineTo(ptPadBottom.x + padBottomPx, ptPadBottom.y);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-
-        // Pé cônico entre a sapata e a haste
+        // Pé cônico embutido no topo da base
+        const ptFootBottom = project(p.x, p.y, Math.max(0, p.zBase - 0.05));
         ctx.strokeStyle = "#b45309";
         ctx.lineWidth = stemPx * 2 + 1;
         ctx.beginPath();
-        ctx.moveTo(ptPadTop.x, ptPadTop.y);
+        ctx.moveTo(ptFootBottom.x, ptFootBottom.y);
         ctx.lineTo(ptBase.x, ptBase.y);
         ctx.stroke();
 
@@ -642,6 +670,7 @@ export default function SuportesPage() {
 
     // Ordem de desenho com prioridade para garantir total visibilidade dos suportes:
     // Modelo desenhado com iluminação anatômica, seguido pelos suportes e esferas de contato
+    drawBase();
     drawModel();
     drawSupports();
 
@@ -658,7 +687,7 @@ export default function SuportesPage() {
               Adicionar Suportes 3D
             </h1>
             <p className="text-xs text-slate-400 mt-0.5">
-              Sapatas individuais com saia de 30° e suportes calibrados para fatiamento odontológico, sem paliçada densa.
+              Base contínua com rampa de espátula a 30° e suportes calibrados para fatiamento odontológico, sem paliçada densa.
             </p>
           </div>
 
@@ -891,7 +920,7 @@ export default function SuportesPage() {
                     <Sparkles className="w-3.5 h-3.5" /> {DENTAL_SUPPORT_PROFILES[activeProfile].label}
                   </span>
                   <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-semibold border border-emerald-500/30">
-                    Sapatas Individuais
+                    Base Contínua
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-300 leading-relaxed">
@@ -905,7 +934,7 @@ export default function SuportesPage() {
                     <span>Amarração Lateral Estratégica Anti-Distorção</span>
                   </div>
                   <p className="text-[10px] text-slate-400 leading-normal">
-                    Anel de suportes na metade inferior das paredes do zócalo, com haste afastada e pé individual. Trava a peça contra deformação e sucção do FEP sem encostar em cúspides, dentes ou gengiva.
+                    Anel de suportes na metade inferior das paredes do zócalo, com haste afastada e pé apoiado na base contínua. Trava a peça contra deformação e sucção do FEP sem encostar em cúspides, dentes ou gengiva.
                   </p>
                 </div>
 
@@ -919,7 +948,7 @@ export default function SuportesPage() {
                   <div>Densidade da Malha: <strong className="text-cyan-300 font-mono">{config.supportDensityPercent ?? 75}%</strong></div>
                   <div>Ângulo de Overhang: <strong className="text-cyan-300 font-mono">{config.supportAngleDeg ?? 60}°</strong></div>
                   <div>Plataforma / Elevação: <strong className="text-white font-mono">{config.elevationZ.toFixed(2)} mm</strong></div>
-                  <div>Sapata (Base): <strong className="text-white font-mono">Ø {config.baseDiameter.toFixed(2)} mm</strong></div>
+                  <div>Base Contínua: <strong className="text-white font-mono">{config.raftThickness.toFixed(2)} mm / {config.raftSlopeDeg ?? 30}°</strong></div>
                 </div>
               </div>
 
@@ -946,15 +975,15 @@ export default function SuportesPage() {
 
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
-                    <span className="text-[10px] text-slate-500 block">Suportes & Sapatas</span>
+                    <span className="text-[10px] text-slate-500 block">Suportes + Base</span>
                     <span className="text-sm font-bold text-amber-300">{result.pillarCount} unidades</span>
                   </div>
                   <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
-                    <span className="text-[10px] text-slate-500 block">Consumo Suportes</span>
+                    <span className="text-[10px] text-slate-500 block">Consumo (base + suportes)</span>
                     <span className="text-sm font-bold text-cyan-300">~{result.estimatedResinMl} ml resina</span>
                   </div>
                   <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
-                    <span className="text-[10px] text-slate-500 block">Elevação / Pé</span>
+                    <span className="text-[10px] text-slate-500 block">Elevação / Base</span>
                     <span className="text-sm font-bold text-white">{result.elevationZ.toFixed(1)} mm <span className="text-[10px] text-slate-500 font-normal">/ {result.baseHeight.toFixed(1)} mm</span></span>
                   </div>
                   <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
@@ -989,7 +1018,7 @@ export default function SuportesPage() {
                             Conjunto: <strong>{result.bounds.width} × {result.bounds.depth} × {result.bounds.height} mm</strong>. Área da impressora {plateMeta.printerName || ""}: <strong>{plateMeta.plateW} × {plateMeta.plateD} × {plateMeta.plateH || "?"} mm</strong>.
                           </p>
                           <p className="text-[10px] leading-relaxed text-rose-300/90">
-                            Volte à Montagem e aumente a <strong>margem</strong> e o <strong>espaçamento (gap)</strong> entre os modelos para reservar espaço dos suportes e das sapatas.
+                            Volte à Montagem e aumente a <strong>margem</strong> e o <strong>espaçamento (gap)</strong> entre os modelos para reservar espaço da base e dos suportes.
                           </p>
                         </div>
                       ) : (
@@ -1196,7 +1225,7 @@ export default function SuportesPage() {
                   </span>
                   <span className="flex items-center gap-1.5 text-amber-300 font-medium">
                     <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-                    Suportes & Sapatas
+                    Suportes + Base
                   </span>
                   <span className="flex items-center gap-1.5 text-yellow-200 font-medium">
                     <span className="w-2.5 h-2.5 rounded-full bg-yellow-200 ring-1 ring-amber-600" />

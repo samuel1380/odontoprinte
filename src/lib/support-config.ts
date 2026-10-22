@@ -6,8 +6,8 @@
  * esfera de contato 0,70 mm com 0,30 mm de penetração, densidade 75% e
  * ângulo de suporte 60°.
  *
- * A base deixou de ser uma balsa única sob todo o modelo. Cada suporte tem a
- * sua própria sapata (base individual) com saia inclinada para a espátula.
+ * A base é contínua sob o modelo e os suportes: topo plano em `raftThickness`
+ * e perímetro em rampa de espátula (30° por padrão) até a chapa.
  */
 
 export interface DentalSupportConfig {
@@ -25,23 +25,17 @@ export interface DentalSupportConfig {
   tipShape?: "CONE" | "SPHERE";
   /** Diâmetro do topo do cone (mm). Padrão: 0,60 mm (Upper Diameter) */
   tipUpperDiameter?: number;
-  /** Diâmetro do pé cônico sobre a base individual (mm). Padrão: 1,6 mm */
+  /** Diâmetro do pé cônico apoiado sobre a base contínua (mm). Padrão: 1,6 mm */
   baseDiameter: number;
-  /** Altura do pé cônico sobre a base individual (mm). Padrão: 0,8 mm */
+  /** Altura do pé cônico sobre a base contínua (mm). Padrão: 0,8 mm */
   baseLength: number;
-  /**
-   * Referência de altura da sapata (mm). O motor v2 usa 40% deste valor,
-   * limitado entre 0,35 e 0,80 mm, como altura da saia individual.
-   */
+  /** Altura do topo da base contínua em relação à chapa (mm). Padrão: 1,5 mm */
   raftThickness: number;
-  /**
-   * @deprecated Reserva da balsa antiga. Mantida apenas para compatibilidade
-   * dos perfis/UI; as sapatas individuais usam baseDiameter + saia.
-   */
+  /** Margem da base além do modelo e dos pés dos suportes (mm). Padrão: 2,0 mm */
   raftMargin: number;
   /**
-   * Inclinação da saia da sapata em relação à chapa (graus). Padrão: 30°.
-   * É a rampa que guia a espátula para soltar a base da mesa.
+   * Inclinação da rampa de espátula da base em relação à chapa (graus).
+   * Padrão: 30°. O topo fica alto e o perímetro desce até Z=0.
    */
   raftSlopeDeg?: number;
   /** Espaçamento da malha de suportes a 75% de densidade (mm). Padrão: 2,6 mm */
@@ -98,7 +92,7 @@ export const DENTAL_SUPPORT_PROFILES = {
     label: "Suporte Médio (Padrão Ouro)",
     badge: "Recomendado",
     description:
-      "Motor por overhang com anel lateral inferior e bases individuais. Firmeza excelente sem paliçada densa e sem marcar dentes/gengiva.",
+      "Motor por overhang com anel lateral inferior e base contínua com rampa de espátula a 30°. Firmeza excelente sem marcar dentes/gengiva.",
     config: {
       elevationZ: 6.0,
       pillarDiameter: 1.20,
@@ -127,7 +121,7 @@ export const DENTAL_SUPPORT_PROFILES = {
     label: "Suporte Fino (Alta Precisão)",
     badge: "Precisão Fina",
     description:
-      "Indicado para detalhes delicados, facetas e troquéis. Malha mais densa, haste fina e remoção ultra suave.",
+      "Indicado para detalhes delicados, facetas e troquéis. Base contínua fina com rampa de espátula, malha densa e remoção ultra suave.",
     config: {
       elevationZ: 4.5,
       pillarDiameter: 1.0,
@@ -156,7 +150,7 @@ export const DENTAL_SUPPORT_PROFILES = {
     label: "Suporte Grosso (Reforçado)",
     badge: "Anti-Sucção Forte",
     description:
-      "Para modelos maciços ou pesados. Bases maiores, haste reforçada e malha mais espaçada para máxima estabilidade.",
+      "Para modelos maciços ou pesados. Base contínua reforçada, haste grossa e malha mais espaçada para máxima estabilidade.",
     config: {
       elevationZ: 7.0,
       pillarDiameter: 1.5,
@@ -216,7 +210,7 @@ export const DENTAL_SUPPORT_CATEGORIES: Record<DentalSupportCategoryId, DentalSu
     name: "Modelos Dentários",
     label: "Modelos Odontológicos (Zócalos & Arcadas)",
     description:
-      "Motor por overhang com anel lateral inferior, sapatas individuais e contato esférico calibrado para modelos de trabalho e arcadas.",
+      "Motor por overhang com anel lateral inferior, base contínua com rampa de espátula e contato esférico calibrado para modelos de trabalho e arcadas.",
     badge: "Configurado",
     isConfigured: true,
   },
@@ -253,7 +247,7 @@ export interface SupportPillarInfo {
   /** Centro da haste (para suporte lateral fica fora da parede). */
   x: number;
   y: number;
-  /** Altura do início da coluna (topo do pé cônico da sapata). */
+  /** Altura do início da coluna (topo do pé cônico, sobre a base contínua). */
   zBase: number;
   /** Altura do ponto de contato no modelo. */
   zContact: number;
@@ -269,12 +263,37 @@ export interface SupportPillarInfo {
   zKnee?: number;
 }
 
+export interface SupportBaseLoop {
+  top: Array<{ x: number; y: number }>;
+  bottom: Array<{ x: number; y: number }>;
+}
+
+export interface SupportBaseBounds2D {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
+
+export interface SupportBaseInfo {
+  /** Altura do topo plano da base (mm). */
+  height: number;
+  /** Avanço horizontal da rampa de espátula (mm). */
+  chamfer: number;
+  /** Contornos do topo e do fundo (para a prévia 3D). */
+  loops: SupportBaseLoop[];
+  topBounds: SupportBaseBounds2D | null;
+  bottomBounds: SupportBaseBounds2D | null;
+  triangles: number;
+  volumeMl: number;
+}
+
 export interface SupportGenerationResult {
-  /** Buffer binário do STL final (modelo elevado + suportes + sapatas). */
+  /** Buffer binário do STL final (modelo elevado + base + suportes). */
   stlBuffer: ArrayBuffer;
   /** Triângulos do STL final. */
   totalTriangles: number;
-  /** Triângulos exclusivos dos suportes e sapatas. */
+  /** Triângulos exclusivos da base e dos suportes. */
   supportTriangles: number;
   /** Quantidade de suportes gerados. */
   pillarCount: number;
@@ -282,9 +301,11 @@ export interface SupportGenerationResult {
   pillars: SupportPillarInfo[];
   /** Elevação Z efetivamente usada (pode ser reduzida para caber na chapa). */
   elevationZ: number;
-  /** Altura do topo da base individual (sapata + pé) em mm. */
+  /** Altura do topo plano da base contínua (mm). */
   baseHeight: number;
-  /** Bounding box final (mm), incluindo sapatas. */
+  /** Geometria resumida da base contínua (contornos para a prévia). */
+  base: SupportBaseInfo;
+  /** Bounding box final (mm), incluindo a base contínua. */
   bounds: {
     minX: number;
     maxX: number;
@@ -302,7 +323,7 @@ export interface SupportGenerationResult {
     depth: number;
     height: number;
   };
-  /** Volume estimado de resina dos suportes + sapatas (ml). */
+  /** Volume estimado de resina da base + suportes (ml). */
   estimatedResinMl: number;
   /** Tempo de cálculo em milissegundos. */
   durationMs: number;

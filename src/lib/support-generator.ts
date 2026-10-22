@@ -1,8 +1,8 @@
 /**
  * OdontoPrint — API pública dos suportes.
  *
- * O motor antigo (paliçada contínua + balsa única) foi substituído pelo
- * `support-engine.ts` (overhang + anel lateral inferior + sapatas individuais).
+ * O motor antigo (paliçada contínua) foi substituído pelo `support-engine.ts`
+ * (overhang + anel lateral inferior + base contínua com rampa de espátula).
  * Este arquivo mantém o caminho de importação usado pela UI e pelos testes.
  */
 

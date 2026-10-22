@@ -1440,7 +1440,7 @@ export default function MontagemPage() {
                     {copied ? "Copiado!" : "Copiar posições"}
                   </Button>
                   <p className="text-[10px] text-slate-500">
-                    O STL sai com as peças na posição e encostadas na mesa. Use "Adicionar Suportes 3D" para aplicar balsa e suportes médios automáticos.
+                    O STL sai com as peças na posição e encostadas na mesa. Use "Adicionar Suportes 3D" para aplicar base contínua e suportes médios automáticos.
                   </p>
                 </div>
               </div>

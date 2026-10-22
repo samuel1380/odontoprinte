@@ -14,8 +14,9 @@
  *    fora na faixa inferior do modelo (40%, limitada a 14 mm). É uma malha
  *    espaçada (mesma densidade dos overhangs), não uma paliçada contínua.
  *
- * Cada suporte recebe uma SAPATA INDIVIDUAL com saia a 30° (rampa de
- * espátula). Não existe mais balsa única sob todo o modelo.
+ * 3. BASE CONTÍNUA: projeção XY do modelo + pés dos suportes, margem e
+ *    contorno com rampa de espátula a 30°. O topo fica em `baseTopZ` e recebe
+ *    os pés cônicos; o perímetro desce até a chapa para a espátula soltar.
  */
 
 import {
@@ -26,7 +27,6 @@ import {
 } from "./support-config";
 import {
   appendSupportMesh,
-  computeBaseProfile,
   computeNormal,
   computeTipProfile,
   distPointToTriangle2D,
@@ -40,6 +40,7 @@ import {
   writeTriangle,
   type SupportSample,
 } from "./support-geometry";
+import { buildRaftMesh } from "./support-base";
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -117,6 +118,14 @@ export async function generateDentalSupports(
   const elevatedMinZ = elevationZ;
   const elevatedMaxZ = maxZ + zShift;
 
+  // Topo da base contínua: a base nasce em Z=0, sobe até baseTopZ e recebe
+  // uma rampa de espátula no perímetro. Nunca encosta no modelo.
+  const baseTopZ = clamp(
+    cfg.raftThickness,
+    0.4,
+    Math.max(0.4, elevationZ - 0.25)
+  );
+
   const padFitsPlate = (x: number, y: number, padR: number): boolean => {
     if (plateW !== null && (x - padR < 0 || x + padR > plateW)) return false;
     if (plateD !== null && (y - padR < 0 || y + padR > plateD)) return false;
@@ -127,6 +136,7 @@ export async function generateDentalSupports(
   // 2. Parâmetros de malha
   // ---------------------------------------------------------------------------
   const pRad = Math.max(0.2, cfg.pillarDiameter / 2);
+  const footR = Math.max(0.2, cfg.baseDiameter / 2, pRad + 0.02);
   const density = clamp(cfg.supportDensityPercent ?? 75, 25, 150);
   const minPillarDist = Math.max(1.2, cfg.minPillarDistance || 1.7);
   const minSupportGap = Math.max(0.2, cfg.minSupportGap ?? 0.4);
@@ -147,12 +157,10 @@ export async function generateDentalSupports(
     elevatedMinZ +
     Math.min(Math.max(3.0, modelH * 0.5) + 0.25, 15.25);
 
-  const baseProfile = computeBaseProfile(cfg, elevatedMinZ);
-
   // ---------------------------------------------------------------------------
   // 3. Índice espacial + normais dos triângulos
   // ---------------------------------------------------------------------------
-  const gridMargin = Math.max(6.0, baseProfile.padBottomR + 2.0);
+  const gridMargin = Math.max(6.0, footR + 2.0);
   const startX = minX - gridMargin;
   const endX = maxX + gridMargin;
   const startY = minY - gridMargin;
@@ -547,10 +555,11 @@ export async function generateDentalSupports(
     pillar: SupportPillarInfo,
     checkSamples: boolean
   ): boolean => {
-    const base = computeBaseProfile(cfg, pillar.zContact);
-    if (pillar.zContact - base.zBase < 0.45) return false;
-    if (tipTooShort(base, pillar, cfg)) return false;
-    if (!padFitsPlate(pillar.x, pillar.y, base.padBottomR)) return false;
+    pillar.zBase = baseTopZ;
+    pillar.height = pillar.zContact - baseTopZ;
+    if (pillar.zContact - baseTopZ < 0.45) return false;
+    if (tipTooShort(pillar, cfg)) return false;
+    if (!padFitsPlate(pillar.x, pillar.y, footR)) return false;
 
     for (let i = 0; i < pillars.length; i++) {
       const other = pillars[i];
@@ -578,11 +587,10 @@ export async function generateDentalSupports(
   // 6a. Overhangs (base principal de sustentação)
   for (let i = 0; i < bottomCandidates.length; i++) {
     const c = bottomCandidates[i];
-    const base = computeBaseProfile(cfg, c.z);
     const normal = { nx: 0, ny: 0, nz: -1 };
     const tip = computeTipProfile(cfg, c.x, c.y, c.z, normal);
     const knee = Math.max(
-      base.zBase + 0.02,
+      baseTopZ + 0.02,
       Math.min(tip.sCz - cfg.tipLength, tip.zConnection - 0.02)
     );
 
@@ -590,9 +598,9 @@ export async function generateDentalSupports(
       {
         x: c.x,
         y: c.y,
-        zBase: base.zBase,
+        zBase: baseTopZ,
         zContact: c.z,
-        height: c.z - base.zBase,
+        height: c.z - baseTopZ,
         isLateral: false,
         targetNormal: normal,
         zKnee: knee,
@@ -612,8 +620,12 @@ export async function generateDentalSupports(
 
     const ux = c.nx / hLen;
     const uy = c.ny / hLen;
-    const base = computeBaseProfile(cfg, c.z);
-    if (tipTooShort(base, { x: c.x, y: c.y, zBase: base.zBase, zContact: c.z, height: 0 }, cfg)) {
+    if (
+      tipTooShort(
+        { x: c.x, y: c.y, zBase: baseTopZ, zContact: c.z, height: c.z - baseTopZ },
+        cfg
+      )
+    ) {
       continue;
     }
 
@@ -655,12 +667,12 @@ export async function generateDentalSupports(
         tip.sCz -
         Math.sqrt(Math.max(0.04, cfg.tipLength * cfg.tipLength - hDist * hDist));
       const knee = Math.max(
-        base.zBase + 0.02,
+        baseTopZ + 0.02,
         Math.min(desiredKnee, tip.zConnection - 0.02)
       );
 
       // A haste precisa estar em espaço aberto em toda a faixa que ocupa.
-      const probeLow = base.zBase + 0.05;
+      const probeLow = baseTopZ + 0.05;
       const probeHigh = Math.max(probeLow + 0.1, knee - 0.05);
       if (!isOpenSpaceProbe(stemX, stemY, probeLow)) continue;
       if (!isOpenSpaceProbe(stemX, stemY, probeHigh)) continue;
@@ -671,7 +683,7 @@ export async function generateDentalSupports(
           stemX,
           stemY,
           pRad + Math.max(0.55, cfg.modelClearance),
-          base.zBase,
+          baseTopZ,
           knee
         )
       ) {
@@ -681,9 +693,9 @@ export async function generateDentalSupports(
       const pillar: SupportPillarInfo = {
         x: stemX,
         y: stemY,
-        zBase: base.zBase,
+        zBase: baseTopZ,
         zContact: c.z,
-        height: c.z - base.zBase,
+        height: c.z - baseTopZ,
         targetX: c.x,
         targetY: c.y,
         isLateral: true,
@@ -711,12 +723,11 @@ export async function generateDentalSupports(
       if (!hit) continue;
       if (!isOpenSpaceProbe(point.x, point.y, hit.z - 0.45)) continue;
 
-      const base = computeBaseProfile(cfg, hit.z);
-      if (hit.z - base.zBase < 0.45) continue;
+      if (hit.z - baseTopZ < 0.45) continue;
       const normal = { nx: 0, ny: 0, nz: -1 };
       const tip = computeTipProfile(cfg, point.x, point.y, hit.z, normal);
       const knee = Math.max(
-        base.zBase + 0.02,
+        baseTopZ + 0.02,
         Math.min(tip.sCz - cfg.tipLength, tip.zConnection - 0.02)
       );
 
@@ -724,9 +735,9 @@ export async function generateDentalSupports(
         {
           x: point.x,
           y: point.y,
-          zBase: base.zBase,
+          zBase: baseTopZ,
           zContact: hit.z,
-          height: hit.z - base.zBase,
+          height: hit.z - baseTopZ,
           isLateral: false,
           targetNormal: normal,
           zKnee: knee,
@@ -737,9 +748,26 @@ export async function generateDentalSupports(
   }
 
   // ---------------------------------------------------------------------------
-  // 7. Malha final (modelo + suportes)
+  // 7. Base contínua + malha final (modelo + base + suportes)
   // ---------------------------------------------------------------------------
-  const supportCoords: number[] = [];
+  // A base é construída DEPOIS dos pilares: assim ela cobre a projeção do
+  // modelo e também cada pé cônico, inclusive os suportes laterais. O topo da
+  // base é plano em `baseTopZ` e o perímetro desce a 30° até a chapa.
+  const raft = buildRaftMesh(
+    modelPositions,
+    pillars.map((p) => ({ x: p.x, y: p.y })),
+    {
+      topZ: baseTopZ,
+      margin: cfg.raftMargin,
+      slopeDeg: cfg.raftSlopeDeg ?? 30,
+      supportFootRadius: footR,
+      plateWidth: plateW ?? undefined,
+      plateDepth: plateD ?? undefined,
+      cellSize: 1.0,
+    }
+  );
+
+  const supportCoords: number[] = [...raft.coords];
   const builtPillars: SupportPillarInfo[] = [];
 
   for (let i = 0; i < pillars.length; i++) {
@@ -756,7 +784,7 @@ export async function generateDentalSupports(
   const buffer = new ArrayBuffer(84 + totalTriCount * 50);
   const view = new DataView(buffer);
 
-  const headerText = `OdontoPrint Support Engine v2 (${builtPillars.length} suportes, sapatas individuais)`;
+  const headerText = `OdontoPrint Support Engine v2 (${builtPillars.length} suportes, base continua 30 graus)`;
   for (let i = 0; i < Math.min(80, headerText.length); i++) {
     view.setUint8(i, headerText.charCodeAt(i));
   }
@@ -870,7 +898,7 @@ export async function generateDentalSupports(
   }
   const estimatedResinMl = Math.max(
     0,
-    Math.round((supportVolumeMm3 / 1000) * 100) / 100
+    Math.round(((supportVolumeMm3 + raft.volumeMm3) / 1000) * 100) / 100
   );
 
   const durationMs = Math.round(performance.now() - t0);
@@ -882,7 +910,16 @@ export async function generateDentalSupports(
     pillarCount: builtPillars.length,
     pillars: builtPillars,
     elevationZ,
-    baseHeight: baseProfile.zBase,
+    baseHeight: baseTopZ,
+    base: {
+      height: baseTopZ,
+      chamfer: raft.chamfer,
+      loops: raft.loops,
+      topBounds: raft.topBounds,
+      bottomBounds: raft.bottomBounds,
+      triangles: raft.triangleCount,
+      volumeMl: Math.round((raft.volumeMm3 / 1000) * 100) / 100,
+    },
     bounds: {
       minX: Math.round(bMinX * 10) / 10,
       maxX: Math.round(bMaxX * 10) / 10,

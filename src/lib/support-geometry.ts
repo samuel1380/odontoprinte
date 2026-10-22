@@ -3,8 +3,7 @@
  *
  * Cada suporte é um sólido fechado (manifold) construído como:
  *
- *   sapata individual (tronco de cone + saia a 30°)
- *     + pé cônico de reforço
+ *   pé cônico embutido no topo da base contínua
  *       + coluna cilíndrica
  *         + cone do topo (sheared frustum)
  *           + calota esférica de contato
@@ -30,6 +29,13 @@ export interface BaseProfile {
   zBase: number;
 }
 
+export interface SupportFootProfile {
+  footBaseR: number;
+  footH: number;
+  footStartZ: number;
+  footTopZ: number;
+}
+
 export interface TipProfile {
   radius: number;
   connectionRadius: number;
@@ -48,6 +54,10 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+/**
+ * @deprecated Perfil da sapata individual do motor antigo. A base contínua
+ * usa `computeFootProfile`, que é um pé cônico apoiado diretamente no raft.
+ */
 export function computeBaseProfile(
   cfg: DentalSupportConfig,
   zContact: number
@@ -64,6 +74,28 @@ export function computeBaseProfile(
   const zBase = padH + pedestalH;
 
   return { padH, padTopR, padBottomR, pedestalH, zBase };
+}
+
+export function computeFootProfile(
+  cfg: DentalSupportConfig,
+  zBase: number,
+  zContact: number
+): SupportFootProfile {
+  const pRad = Math.max(0.2, cfg.pillarDiameter / 2);
+  const footBaseR = Math.max(cfg.baseDiameter / 2, pRad + 0.02);
+  const available = Math.max(0, zContact - zBase);
+  const footH = clamp(
+    Math.min(cfg.baseLength, available * 0.2),
+    0.15,
+    Math.max(0.15, cfg.baseLength)
+  );
+  const footStartZ = Math.max(0, zBase - 0.05);
+  return {
+    footBaseR,
+    footH,
+    footStartZ,
+    footTopZ: footStartZ + footH,
+  };
 }
 
 export function computeTipProfile(
@@ -286,12 +318,11 @@ function appendSphereCap(
 export function resolveKnee(
   p: SupportPillarInfo,
   cfg: DentalSupportConfig,
-  base: BaseProfile,
   tip: TipProfile
 ): number {
   const desired = p.zKnee ?? tip.sCz - cfg.tipLength;
   return Math.max(
-    base.zBase + 0.02,
+    p.zBase + 0.02,
     Math.min(desired, tip.zConnection - 0.02)
   );
 }
@@ -306,47 +337,34 @@ export function appendSupportMesh(
   cfg: DentalSupportConfig
 ): boolean {
   const pRad = Math.max(0.2, cfg.pillarDiameter / 2);
-  const base = computeBaseProfile(cfg, p.zContact);
-  if (tipTooShort(base, p, cfg)) return false;
+  if (tipTooShort(p, cfg)) return false;
 
   const targetX = p.targetX ?? p.x;
   const targetY = p.targetY ?? p.y;
   const normal = p.targetNormal ?? { nx: 0, ny: 0, nz: -1 };
   const tip = computeTipProfile(cfg, targetX, targetY, p.zContact, normal);
-  if (tip.zConnection <= base.zBase + 0.02) return false;
+  if (tip.zConnection <= p.zBase + 0.02) return false;
 
-  const knee = resolveKnee(p, cfg, base, tip);
+  const knee = resolveKnee(p, cfg, tip);
+  const foot = computeFootProfile(cfg, p.zBase, p.zContact);
 
-  // Sapata individual: fundo + saia inclinada (rampa da espátula)
-  appendBottomCap(out, p.x, p.y, 0, base.padBottomR);
+  // Pé cônico apoiado e embutido 0,05 mm na base contínua.
+  appendBottomCap(out, p.x, p.y, foot.footStartZ, foot.footBaseR);
   appendFrustum(
     out,
     p.x,
     p.y,
-    0,
-    base.padBottomR,
+    foot.footStartZ,
+    foot.footBaseR,
     p.x,
     p.y,
-    base.padH,
-    base.padTopR
-  );
-
-  // Pé cônico de reforço
-  appendFrustum(
-    out,
-    p.x,
-    p.y,
-    base.padH,
-    base.padTopR,
-    p.x,
-    p.y,
-    base.zBase,
+    foot.footTopZ,
     pRad
   );
 
-  // Coluna (quando sobra altura)
-  if (knee > base.zBase + 1e-4) {
-    appendFrustum(out, p.x, p.y, base.zBase, pRad, p.x, p.y, knee, pRad);
+  // Coluna (quando sobra altura entre o pé e o joelho).
+  if (knee > foot.footTopZ + 1e-4) {
+    appendFrustum(out, p.x, p.y, foot.footTopZ, pRad, p.x, p.y, knee, pRad);
   }
 
   // Braço/cone até a esfera de contato
@@ -377,7 +395,6 @@ export function appendSupportMesh(
 }
 
 export function tipTooShort(
-  base: BaseProfile,
   p: SupportPillarInfo,
   cfg: DentalSupportConfig
 ): boolean {
@@ -385,7 +402,7 @@ export function tipTooShort(
   const targetY = p.targetY ?? p.y;
   const normal = p.targetNormal ?? { nx: 0, ny: 0, nz: -1 };
   const tip = computeTipProfile(cfg, targetX, targetY, p.zContact, normal);
-  return tip.zConnection <= base.zBase + 0.08;
+  return tip.zConnection <= p.zBase + 0.08;
 }
 
 export interface SupportSample {
@@ -419,35 +436,38 @@ function appendSegmentSamples(
 }
 
 /**
- * Amostra a superfície acima da sapata (coluna, braço e ponta) para detectar
- * fusão/sobreposição entre suportes. A sapata é omitida de propósito: as
- * sapatas podem se tocar no fundo sem comprometer a impressão.
+ * Amostra a superfície acima do pé (coluna, braço e ponta) para detectar
+ * fusão/sobreposição entre suportes. O pé é omitido de propósito: ele fica
+ * embutido na base contínua e não compromete a impressão.
  */
 export function sampleSupportGeometry(
   p: SupportPillarInfo,
   cfg: DentalSupportConfig
 ): SupportSample[] {
   const pRad = Math.max(0.2, cfg.pillarDiameter / 2);
-  const base = computeBaseProfile(cfg, p.zContact);
   const targetX = p.targetX ?? p.x;
   const targetY = p.targetY ?? p.y;
   const normal = p.targetNormal ?? { nx: 0, ny: 0, nz: -1 };
   const tip = computeTipProfile(cfg, targetX, targetY, p.zContact, normal);
-  const knee = resolveKnee(p, cfg, base, tip);
+  const knee = resolveKnee(p, cfg, tip);
+  const foot = computeFootProfile(cfg, p.zBase, p.zContact);
 
   const samples: SupportSample[] = [];
-  appendSegmentSamples(
-    samples,
-    p.x,
-    p.y,
-    base.zBase,
-    pRad,
-    p.x,
-    p.y,
-    knee,
-    pRad,
-    3
-  );
+  const columnStart = Math.max(p.zBase, foot.footTopZ);
+  if (knee > columnStart + 1e-4) {
+    appendSegmentSamples(
+      samples,
+      p.x,
+      p.y,
+      columnStart,
+      pRad,
+      p.x,
+      p.y,
+      knee,
+      pRad,
+      3
+    );
+  }
   appendSegmentSamples(
     samples,
     p.x,
@@ -484,23 +504,18 @@ export function estimateSupportVolumeMm3(
   cfg: DentalSupportConfig
 ): number {
   const pRad = Math.max(0.2, cfg.pillarDiameter / 2);
-  const base = computeBaseProfile(cfg, p.zContact);
   const targetX = p.targetX ?? p.x;
   const targetY = p.targetY ?? p.y;
   const normal = p.targetNormal ?? { nx: 0, ny: 0, nz: -1 };
   const tip = computeTipProfile(cfg, targetX, targetY, p.zContact, normal);
-  const knee = resolveKnee(p, cfg, base, tip);
+  const knee = resolveKnee(p, cfg, tip);
+  const foot = computeFootProfile(cfg, p.zBase, p.zContact);
 
   const frustumVolume = (r0: number, r1: number, h: number) =>
     (Math.PI * h * (r0 * r0 + r0 * r1 + r1 * r1)) / 3;
 
-  const pad = frustumVolume(base.padBottomR, base.padTopR, base.padH);
-  const pedestal = frustumVolume(
-    base.padTopR,
-    pRad,
-    Math.max(0, base.zBase - base.padH)
-  );
-  const column = Math.PI * pRad * pRad * Math.max(0, knee - base.zBase);
+  const footVolume = frustumVolume(foot.footBaseR, pRad, foot.footH);
+  const column = Math.PI * pRad * pRad * Math.max(0, knee - foot.footTopZ);
   const cone = frustumVolume(
     pRad,
     tip.connectionRadius,
@@ -510,7 +525,7 @@ export function estimateSupportVolumeMm3(
   const cap =
     (Math.PI * capHeight * capHeight * (3 * tip.radius - capHeight)) / 3;
 
-  return pad + pedestal + column + cone + Math.max(0, cap);
+  return footVolume + column + cone + Math.max(0, cap);
 }
 
 export function pointInTriangle2D(
