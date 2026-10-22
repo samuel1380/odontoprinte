@@ -776,15 +776,23 @@ export async function generateDentalSupports(
   const raftCols = Math.max(1, Math.ceil((endX - startX) / raftGridCell));
   const raftRows = Math.max(1, Math.ceil((endY - startY) / raftGridCell));
   const raftOccupied = new Uint8Array(raftCols * raftRows);
+  const triMinZ = new Float32Array(triCount);
+  const triMaxZ = new Float32Array(triCount);
 
   for (let t = 0; t < triCount; t++) {
     const off = t * 9;
     const ax = modelPositions[off];
     const ay = modelPositions[off + 1];
+    const az = modelPositions[off + 2] + zShift;
     const bx = modelPositions[off + 3];
     const by = modelPositions[off + 4];
+    const bz = modelPositions[off + 5] + zShift;
     const cx = modelPositions[off + 6];
     const cy = modelPositions[off + 7];
+    const cz = modelPositions[off + 8] + zShift;
+
+    triMinZ[t] = Math.min(az, bz, cz);
+    triMaxZ[t] = Math.max(az, bz, cz);
 
     const tMinX = Math.min(ax, bx, cx);
     const tMaxX = Math.max(ax, bx, cx);
@@ -819,6 +827,103 @@ export async function generateDentalSupports(
       }
     }
   }
+
+  const triRayStamp = new Uint32Array(triCount);
+  let rayStampId = 0;
+
+  const rayHitsModelAtZ = (
+    ox: number,
+    oy: number,
+    z: number,
+    dirX: number,
+    dirY: number
+  ): boolean => {
+    const dLen = Math.hypot(dirX, dirY);
+    if (dLen < 1e-9) return false;
+    const dx = dirX / dLen;
+    const dy = dirY / dLen;
+
+    let cellI = Math.floor((ox - startX) / spatialCellSize);
+    let cellJ = Math.floor((oy - startY) / spatialCellSize);
+    if (cellI < 0 || cellI >= gridCols || cellJ < 0 || cellJ >= gridRows) return false;
+
+    const stepI = dx >= 0 ? 1 : -1;
+    const stepJ = dy >= 0 ? 1 : -1;
+    const tDeltaI = Math.abs(dx) > 1e-12 ? spatialCellSize / Math.abs(dx) : Infinity;
+    const tDeltaJ = Math.abs(dy) > 1e-12 ? spatialCellSize / Math.abs(dy) : Infinity;
+    const boundaryX = startX + (cellI + (stepI > 0 ? 1 : 0)) * spatialCellSize;
+    const boundaryY = startY + (cellJ + (stepJ > 0 ? 1 : 0)) * spatialCellSize;
+    let tMaxI = Math.abs(dx) > 1e-12 ? (boundaryX - ox) / dx : Infinity;
+    let tMaxJ = Math.abs(dy) > 1e-12 ? (boundaryY - oy) / dy : Infinity;
+
+    rayStampId++;
+    const maxSteps = gridCols + gridRows + 4;
+
+    for (let step = 0; step < maxSteps; step++) {
+      const triList = spatialGrid[cellJ * gridCols + cellI];
+      for (let k = 0; k < triList.length; k++) {
+        const tri = triList[k];
+        if (triMinZ[tri] > z + 1e-4 || triMaxZ[tri] < z - 1e-4) continue;
+        if (triRayStamp[tri] === rayStampId) continue;
+        triRayStamp[tri] = rayStampId;
+
+        const off = tri * 9;
+        const ax = modelPositions[off];
+        const ay = modelPositions[off + 1];
+        const az = modelPositions[off + 2] + zShift;
+        const bx = modelPositions[off + 3];
+        const by = modelPositions[off + 4];
+        const bz = modelPositions[off + 5] + zShift;
+        const cx = modelPositions[off + 6];
+        const cy = modelPositions[off + 7];
+        const cz = modelPositions[off + 8] + zShift;
+
+        const e1x = bx - ax, e1y = by - ay, e1z = bz - az;
+        const e2x = cx - ax, e2y = cy - ay, e2z = cz - az;
+        const hx = dy * e2z;
+        const hy = -dx * e2z;
+        const hz = dx * e2y - dy * e2x;
+        const det = e1x * hx + e1y * hy + e1z * hz;
+        if (Math.abs(det) < 1e-9) continue;
+        const inv = 1 / det;
+        const sx = ox - ax, sy = oy - ay, sz = z - az;
+        const u = inv * (sx * hx + sy * hy + sz * hz);
+        if (u < -1e-6 || u > 1 + 1e-6) continue;
+        const qx = sy * e1z - sz * e1y;
+        const qy = sz * e1x - sx * e1z;
+        const qz = sx * e1y - sy * e1x;
+        const v = inv * (dx * qx + dy * qy);
+        if (v < -1e-6 || u + v > 1 + 1e-6) continue;
+        const hitT = inv * (e2x * qx + e2y * qy + e2z * qz);
+        if (hitT > 1e-4) return true;
+      }
+
+      if (tMaxI < tMaxJ) {
+        cellI += stepI;
+        if (cellI < 0 || cellI >= gridCols) return false;
+        tMaxI += tDeltaI;
+      } else {
+        cellJ += stepJ;
+        if (cellJ < 0 || cellJ >= gridRows) return false;
+        tMaxJ += tDeltaJ;
+      }
+    }
+    return false;
+  };
+
+  const isOpenSpaceProbe = (px: number, py: number, pz: number): boolean => {
+    if (pz <= elevatedMinZ + 1e-3) return true;
+    if (px < minX || px > maxX || py < minY || py > maxY) return true;
+    let escapes = 0;
+    for (let k = 0; k < 8; k++) {
+      const a = (Math.PI * 2 * k) / 8;
+      if (!rayHitsModelAtZ(px, py, pz, Math.cos(a), Math.sin(a))) {
+        escapes++;
+        if (escapes >= 2) return true;
+      }
+    }
+    return false;
+  };
 
   // 3b. Mapeamento Anatômico da Margem Gengival / Oclusal e Altura Local dos Modelos
   // Permite que em mesas com múltiplos modelos (altos e baixos), cada peça tenha
@@ -1118,6 +1223,27 @@ export async function generateDentalSupports(
   const latSpacing = Math.max(1.30, userConfig.lateralPillarSpacing ?? 1.45);
   const latSpacingSq = latSpacing * latSpacing;
   const filteredLateralCandidates: CandidatePoint[] = [];
+  const raftZ = cfg.raftThickness;
+
+  // Modelos ocos têm uma casca interna idêntica à externa. Sem este filtro o
+  // gerador trata as paredes da cavidade como paredes externas e coloca a
+  // haste/braço dentro do vazio do modelo. A sonda só aceita a face cujo lado
+  // de fora é espaço aberto (a haste consegue chegar até a borda do modelo).
+  const lateralProbeOpen = (cand: CandidatePoint): boolean => {
+    const tx = cand.targetX ?? cand.x;
+    const ty = cand.targetY ?? cand.y;
+    const nLen = Math.hypot(cand.normal.nx, cand.normal.ny) || 1;
+    const ux = cand.normal.nx / nLen;
+    const uy = cand.normal.ny / nLen;
+    const zNear = Math.max(elevatedMinZ + 0.2, cand.zContact - 0.35);
+    const zFar = Math.max(elevatedMinZ + 0.2, cand.zContact - Math.max(1.0, cfg.tipLength));
+    for (const dir of [1, -1]) {
+      const px = tx + ux * lateralPillarOffset * dir;
+      const py = ty + uy * lateralPillarOffset * dir;
+      if (isOpenSpaceProbe(px, py, zNear) && isOpenSpaceProbe(px, py, zFar)) return true;
+    }
+    return false;
+  };
 
   for (const cand of orderedLateralCandidates) {
     let tooClose = false;
@@ -1130,14 +1256,13 @@ export async function generateDentalSupports(
         break;
       }
     }
-    if (!tooClose) {
+    if (!tooClose && lateralProbeOpen(cand)) {
       filteredLateralCandidates.push(cand);
     }
   }
 
   // 5. Filtro de Segurança Anti-Fusão de Suportes (Pilar com Pilar e Pilar com Modelo)
   const pillars: SupportPillarInfo[] = [];
-  const raftZ = cfg.raftThickness;
   const minPillarDist = Math.max(1.65, cfg.minPillarDistance || 1.70);
   const minPillarDistSq = minPillarDist * minPillarDist;
   const stemRadiusWithClearance = pRad + cfg.modelClearance;
@@ -1397,6 +1522,11 @@ export async function generateDentalSupports(
       }
     }
     if (tooClose) continue;
+
+    // A face inferior também pode ser o teto de uma cavidade interna. Se a
+    // sonda logo abaixo do contato não tem passagem aberta para fora, o pilar
+    // ficaria dentro do modelo oco: descarta.
+    if (!isOpenSpaceProbe(px, py, zContact - 0.45)) continue;
 
     let shaftCollidesWithModel = false;
     // Coluna vertical: cone de comprimento fixo (tipLength) até a esfera

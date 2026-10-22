@@ -640,4 +640,64 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
       expect(exported.positions[i + 2]).toBeCloseTo(positions[i + 2] + elevationZ, 3);
     }
   });
+
+  it("não coloca conectores dentro de modelos ocos (cavidade interna)", async () => {
+    // Caixa oca aberta embaixo: casca externa, casca interna e teto sólido.
+    // A cavidade é o vazio entre as duas cascas; nenhum pilar pode entrar nela.
+    const x0 = 3.5, y0 = 3.5, w = 40, d = 30, h = 12, wall = 2.0;
+    const x1 = x0 + w, y1 = y0 + d;
+    const ix0 = x0 + wall, iy0 = y0 + wall, ix1 = x1 - wall, iy1 = y1 - wall;
+    const iz = h - wall;
+    const tris: number[] = [];
+    const quad = (
+      ax: number, ay: number, az: number,
+      bx: number, by: number, bz: number,
+      cx: number, cy: number, cz: number,
+      dx: number, dy: number, dz: number
+    ) => {
+      tris.push(ax, ay, az, bx, by, bz, cx, cy, cz);
+      tris.push(ax, ay, az, cx, cy, cz, dx, dy, dz);
+    };
+
+    // Casca externa (normais para fora) + tampa superior
+    quad(x0, y0, 0, x1, y0, 0, x1, y0, h, x0, y0, h);
+    quad(x1, y1, 0, x0, y1, 0, x0, y1, h, x1, y1, h);
+    quad(x0, y1, 0, x0, y0, 0, x0, y0, h, x0, y1, h);
+    quad(x1, y0, 0, x1, y1, 0, x1, y1, h, x1, y0, h);
+    quad(x0, y0, h, x1, y0, h, x1, y1, h, x0, y1, h);
+
+    // Casca interna (normais para dentro da cavidade, aberta embaixo) + teto
+    quad(ix0, iy0, 0, ix0, iy0, iz, ix1, iy0, iz, ix1, iy0, 0);
+    quad(ix1, iy1, 0, ix1, iy1, iz, ix0, iy1, iz, ix0, iy1, 0);
+    quad(ix0, iy1, 0, ix0, iy1, iz, ix0, iy0, iz, ix0, iy0, 0);
+    quad(ix1, iy0, 0, ix1, iy0, iz, ix1, iy1, iz, ix1, iy1, 0);
+    quad(ix0, iy0, iz, ix0, iy1, iz, ix1, iy1, iz, ix1, iy0, iz);
+
+    const elevationZ = 6.0;
+    const result = await generateDentalSupports(new Float32Array(tris), {
+      elevationZ,
+      plateWidth: 192,
+      plateDepth: 120,
+      plateHeight: 200,
+    });
+
+    const lateral = result.pillars.filter((p) => p.isLateral);
+    expect(lateral.length).toBeGreaterThan(10);
+
+    const insideCavity = (x: number, y: number, z: number): boolean => {
+      const modelZ = z - elevationZ;
+      return (
+        x > ix0 + 0.05 && x < ix1 - 0.05 &&
+        y > iy0 + 0.05 && y < iy1 - 0.05 &&
+        modelZ > 0.05 && modelZ < iz - 0.05
+      );
+    };
+
+    for (const p of result.pillars) {
+      expect(insideCavity(p.x, p.y, p.zContact)).toBe(false);
+      if (p.targetX !== undefined && p.targetY !== undefined) {
+        expect(insideCavity(p.targetX, p.targetY, p.zContact)).toBe(false);
+      }
+    }
+  });
 });
