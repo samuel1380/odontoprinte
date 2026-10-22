@@ -3,6 +3,7 @@ import {
   generateDentalSupports,
   sampleSupportGeometry,
   minSupportClearance,
+  computeBaseProfile,
   DEFAULT_DENTAL_SUPPORT_CONFIG,
   DENTAL_SUPPORT_PROFILES,
   DENTAL_SUPPORT_CATEGORIES,
@@ -74,6 +75,12 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     expect(DENTAL_SUPPORT_PROFILES.MEDIUM.config.tipLength).toBe(3.00);
     expect(DENTAL_SUPPORT_PROFILES.MEDIUM.config.tipPenetration).toBe(0.30);
     expect(DENTAL_SUPPORT_PROFILES.MEDIUM.config.tipShape).toBe("SPHERE");
+    expect(DENTAL_SUPPORT_PROFILES.MEDIUM.config.supportDensityPercent).toBe(75);
+    expect(DENTAL_SUPPORT_PROFILES.MEDIUM.config.supportAngleDeg).toBe(60);
+    expect(DENTAL_SUPPORT_PROFILES.FINE.config.supportDensityPercent).toBe(80);
+    expect(DENTAL_SUPPORT_PROFILES.FINE.config.supportAngleDeg).toBe(55);
+    expect(DENTAL_SUPPORT_PROFILES.HEAVY.config.supportDensityPercent).toBe(70);
+    expect(DENTAL_SUPPORT_PROFILES.HEAVY.config.supportAngleDeg).toBe(65);
     expect(DENTAL_SUPPORT_PROFILES.HEAVY.config.pillarDiameter).toBe(1.5);
 
     // Retrocompatibilidade
@@ -98,7 +105,7 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     expect(DENTAL_SUPPORT_CATEGORIES.GUIDES.isConfigured).toBe(false);
   });
 
-  it("gera suportes, balsa e buffer STL binário válido", async () => {
+  it("gera suportes, sapatas e buffer STL binário válido", async () => {
     const positions = createSampleModelPositions();
     const result = await generateDentalSupports(positions);
 
@@ -234,7 +241,7 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     }
   });
 
-  it("gera quantidade expressiva de suportes na lateral formando paliçada contínua perimetral", async () => {
+  it("gera cobertura lateral expressiva no perímetro do zócalo", async () => {
     // Modelo com perímetro retangular de 40mm x 30mm com paredes laterais
     const tris: number[] = [
       // Base inferior (Z=0)
@@ -258,7 +265,7 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
 
     const lateralPillars = result.pillars.filter((p) => p.isLateral || p.targetX !== undefined);
 
-    // Deve gerar grande quantidade de suportes na lateral (paliçada densa sem vazios)
+    // Deve gerar boa quantidade de suportes no perímetro, sem paliçada densa
     expect(lateralPillars.length).toBeGreaterThanOrEqual(30);
 
     // Deve ter suportes nas 4 paredes (X mín/máx e Y mín/máx)
@@ -364,56 +371,43 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     }
   });
 
-  it("gera balsa com rampa de espátula a 30° na borda perimetral (igual Halot Box)", async () => {
-    const raftThickness = 1.0;
+  it("gera sapatas individuais com saia inclinada (sem balsa global)", async () => {
+    const raftThickness = 1.5;
     const positions = createSampleModelPositions();
     const result = await generateDentalSupports(positions, { raftThickness });
+    const cfg = { ...DEFAULT_DENTAL_SUPPORT_CONFIG, raftThickness };
+    expect(result.pillarCount).toBeGreaterThan(0);
 
-    const view = new DataView(result.stlBuffer);
-    const triCount = view.getUint32(80, true);
-    let rampSlopeDeg: number | null = null;
+    // Cada pilar tem seu próprio pé: fundo em Z=0, topo em padH e saia
+    // inclinada que guia a espátula. Não existe mais uma balsa única.
+    const base = computeBaseProfile(cfg, cfg.elevationZ);
+    expect(base.padH).toBeGreaterThan(0);
+    expect(base.padBottomR).toBeGreaterThan(base.padTopR);
+    const slopeDeg =
+      (Math.atan2(base.padBottomR - base.padTopR, base.padH) * 180) / Math.PI;
+    expect(slopeDeg).toBeGreaterThan(30);
+    expect(slopeDeg).toBeLessThan(60);
 
-    // Procura um triângulo que liga o topo da balsa (Z = raftThickness) ao
-    // fundo (Z = 0): é a parede inclinada que guia a espátula.
-    for (let t = 0; t < triCount && rampSlopeDeg === null; t++) {
-      const off = 84 + t * 50;
-      const nx = view.getFloat32(off, true);
-      const ny = view.getFloat32(off + 4, true);
-      const nz = view.getFloat32(off + 8, true);
-      const hLen = Math.hypot(nx, ny);
-      // Só as rampas das bordas (normais alinhadas a X ou Y). As quinas em
-      // miter têm componente diagonal e não servem para medir o ângulo.
-      if (hLen < 0.3 || Math.min(Math.abs(nx), Math.abs(ny)) > 1e-3) continue;
-
-      let hasTop = false;
-      let hasBottom = false;
-      for (let k = 0; k < 3; k++) {
-        const z = view.getFloat32(off + 20 + k * 12, true);
-        if (Math.abs(z - raftThickness) < 1e-3) hasTop = true;
-        if (Math.abs(z) < 1e-3) hasBottom = true;
-      }
-      if (!hasTop || !hasBottom) continue;
-
-      // A normal da rampa fica a 30° da vertical quando a parede faz 30° com a chapa.
-      const slopeDeg = (Math.atan2(hLen, Math.abs(nz)) * 180) / Math.PI;
-      if (slopeDeg > 5 && slopeDeg < 60) rampSlopeDeg = slopeDeg;
+    for (const p of result.pillars) {
+      expect(p.zBase).toBeCloseTo(result.baseHeight, 5);
+      expect(p.zBase).toBeGreaterThan(base.padH);
+      expect(p.zBase).toBeLessThan(cfg.elevationZ);
     }
 
-    expect(rampSlopeDeg).not.toBeNull();
-    expect(rampSlopeDeg!).toBeGreaterThan(25);
-    expect(rampSlopeDeg!).toBeLessThan(35);
-
-    // Avanço horizontal da rampa = espessura / tan(30°) ≈ 1.73 × espessura.
-    expect(result.bounds.width).toBeGreaterThan(30 + 2 * 1.5);
-    expect(result.bounds.depth).toBeGreaterThan(30 + 2 * 1.5);
+    // A caixa acompanha o modelo e as sapatas individuais (sem margem global
+    // de balsa): precisa continuar próxima do modelo de 30x30mm.
+    expect(result.bounds.width).toBeGreaterThanOrEqual(30);
+    expect(result.bounds.depth).toBeGreaterThanOrEqual(30);
+    expect(result.bounds.width).toBeLessThan(30 + 2 * (base.padBottomR + 3.0));
+    expect(result.bounds.depth).toBeLessThan(30 + 2 * (base.padBottomR + 3.0));
   });
 
-  it("calcula bounding box real refletindo a extensão exata da balsa chanfrada", async () => {
+  it("calcula bounding box real do conjunto com sapatas individuais", async () => {
     const positions = createSampleModelPositions();
-    const result = await generateDentalSupports(positions, { raftMargin: 2.0, raftThickness: 1.0 });
+    const result = await generateDentalSupports(positions, { raftThickness: 1.0 });
 
-    // O modelo original tem 30x30mm em X e Y.
-    // Com balsa e chanfro, a largura e profundidade reais devem ser maiores que 30mm
+    // O modelo original tem 30x30mm em X e Y; as sapatas podem se estender
+    // além do footprint, mas a caixa precisa começar na chapa (Z=0).
     expect(result.bounds.width).toBeGreaterThanOrEqual(30.0);
     expect(result.bounds.depth).toBeGreaterThanOrEqual(30.0);
     expect(result.bounds.minZ).toBe(0);
@@ -436,6 +430,61 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     }
   });
 
+  it("gera anel lateral em todos os perfis (Fino, Médio e Grosso)", async () => {
+    const positions = createPerimeterModel(40, 30, 10);
+    for (const id of ["FINE", "MEDIUM", "HEAVY"] as const) {
+      const result = await generateDentalSupports(positions, {
+        ...DENTAL_SUPPORT_PROFILES[id].config,
+      });
+      const lateral = result.pillars.filter((p) => p.isLateral);
+      expect(lateral.length, `perfil ${id} sem suportes laterais`).toBeGreaterThan(0);
+    }
+  });
+
+  it("gera malha fechada e manifold (cada aresta compartilhada por 2 triângulos)", async () => {
+    // Caixa fechada 20x20x10 mm: base + 4 paredes + topo.
+    const w = 20, d = 20, h = 10;
+    const box = new Float32Array([
+      // base (Z=0, normal -Z)
+      0, 0, 0, 0, d, 0, w, d, 0,
+      0, 0, 0, w, d, 0, w, 0, 0,
+      // topo (Z=h, normal +Z)
+      0, 0, h, w, d, h, 0, d, h,
+      0, 0, h, w, 0, h, w, d, h,
+      // parede Y=0
+      0, 0, 0, w, 0, h, w, 0, 0,
+      0, 0, 0, 0, 0, h, w, 0, h,
+      // parede Y=d
+      0, d, 0, w, d, 0, w, d, h,
+      0, d, 0, w, d, h, 0, d, h,
+      // parede X=0
+      0, 0, 0, 0, d, 0, 0, d, h,
+      0, 0, 0, 0, d, h, 0, 0, h,
+      // parede X=w
+      w, 0, 0, w, 0, h, w, d, h,
+      w, 0, 0, w, d, h, w, d, 0,
+    ]);
+    const result = await generateDentalSupports(box, { elevationZ: 6.0 });
+    expect(result.pillarCount).toBeGreaterThan(0);
+
+    const parsed = await parseStlTriangles(result.stlBuffer);
+    const pos = parsed.positions;
+    const key = (x: number, y: number, z: number) =>
+      `${Math.round(x * 1e4)}_${Math.round(y * 1e4)}_${Math.round(z * 1e4)}`;
+    const edges = new Map<string, number>();
+    for (let t = 0; t < pos.length; t += 9) {
+      const a = key(pos[t], pos[t + 1], pos[t + 2]);
+      const b = key(pos[t + 3], pos[t + 4], pos[t + 5]);
+      const c = key(pos[t + 6], pos[t + 7], pos[t + 8]);
+      for (const [u, v] of [[a, b], [b, c], [c, a]] as const) {
+        const edge = u < v ? `${u}|${v}` : `${v}|${u}`;
+        edges.set(edge, (edges.get(edge) ?? 0) + 1);
+      }
+    }
+    const openEdges = Array.from(edges.values()).filter((n) => n !== 2);
+    expect(openEdges.length).toBe(0);
+  });
+
   it("mantém o conjunto dentro da chapa quando há margem disponível", async () => {
     const plateW = 60;
     const plateD = 50;
@@ -455,7 +504,7 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
 
   it("não deixa nenhuma das quatro laterais sem suporte e cabe na chapa", async () => {
     // Mesa real: o modelo fica com a margem da chapa (3,5 mm) ao redor, e a
-    // balsa/suportes precisam caber na área de impressão (sem reescala).
+    // sapatas/suportes precisam caber na área de impressão (sem reescala).
     const offset = 3.5;
     const model = createPerimeterModel(40, 30, 8, offset, offset);
     const result = await generateDentalSupports(model, {
@@ -503,7 +552,7 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
       for (let k = 0; k < 3; k++) {
         const x = view.getFloat32(off + 12 + k * 12, true);
         const z = view.getFloat32(off + 20 + k * 12, true);
-        // ignora a balsa (z <= 1): mede só a ponta de contato
+        // ignora a base (z <= 1): mede só a ponta de contato
         if (z > 1.5 && x > deepest) deepest = x;
       }
     }
@@ -559,7 +608,7 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     expect(minGap).toBeLessThan(3.5);
   });
 
-  it("mantém a base do modelo perto da balsa (apoio curto e rígido)", async () => {
+  it("mantém a base do modelo perto da plataforma (apoio curto e rígido)", async () => {
     // Quanto menor a elevação, menos "ponte" a base precisa fazer:
     // é o que evita a deformação/ondulação no fundo impresso.
     const w = 40, d = 30, h = 12;
@@ -575,8 +624,9 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     const bottom = result.pillars.filter((p) => !p.isLateral);
     expect(bottom.length).toBeGreaterThan(0);
     for (const p of bottom) {
-      // pé do suporte na balsa (1,5) e ponta na base do modelo (3,5)
-      expect(p.zBase).toBeCloseTo(1.5, 3);
+      // pé apoiado no fundo (Z=0), topo do pé curto e ponta na base do modelo
+      expect(p.zBase).toBeCloseTo(result.baseHeight, 5);
+      expect(p.zBase).toBeLessThan(2.0);
       expect(p.zContact - p.zBase).toBeLessThanOrEqual(2.5);
     }
   });
@@ -622,7 +672,7 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     const modelTriCount = Math.floor(positions.length / 9);
     const modelVerts = modelTriCount * 9;
 
-    // O parser normaliza XY pelo canto global (inclui balsa); comparação justa
+    // O parser normaliza XY pelo canto global (inclui sapatas); comparação justa
     // é feita descontando essa translação rígida, sem qualquer escala.
     let inMinX = Infinity, inMinY = Infinity, exMinX = Infinity, exMinY = Infinity;
     for (let i = 0; i < modelVerts; i += 3) {
