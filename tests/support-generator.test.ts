@@ -44,6 +44,46 @@ function createPerimeterModel(w = 40, d = 30, h = 8, ox = 0, oy = 0): Float32Arr
   ]);
 }
 
+function addBox(
+  tris: number[],
+  x0: number, x1: number,
+  y0: number, y1: number,
+  z0: number, z1: number
+): void {
+  const quad = (
+    a: [number, number, number], b: [number, number, number],
+    c: [number, number, number], d: [number, number, number]
+  ) => tris.push(...a, ...b, ...c, ...a, ...c, ...d);
+
+  quad([x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]);
+  quad([x1, y1, z0], [x0, y1, z0], [x0, y1, z1], [x1, y1, z1]);
+  quad([x0, y1, z0], [x0, y0, z0], [x0, y0, z1], [x0, y1, z1]);
+  quad([x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1]);
+  quad([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]);
+  quad([x0, y1, z0], [x1, y1, z0], [x1, y0, z0], [x0, y0, z0]);
+}
+
+// Modelo com reentrância interna: o vão x=10..30, y=0..12 é aberto na frente
+// e embaixo, mas tem teto em z=8. Suportes sob esse teto ficam dentro do
+// envelope do modelo.
+function createNotchedModel(): Float32Array {
+  const tris: number[] = [];
+  addBox(tris, 0, 10, 0, 12, 0, 8);
+  addBox(tris, 30, 40, 0, 12, 0, 8);
+  addBox(tris, 0, 40, 12, 20, 0, 8);
+  addBox(tris, 0, 40, 0, 20, 8, 12);
+  return new Float32Array(tris);
+}
+
+// Parede fechada com uma prateleira saliente em z=6..6.5, y=-1..0. Um suporte
+// lateral na parede acima da prateleira teria o braço atravessando a prateleira.
+function createShelfWallModel(): Float32Array {
+  const tris: number[] = [];
+  addBox(tris, 0, 30, 0, 3, 0, 16);
+  addBox(tris, 5, 25, -1, 0, 6, 6.5);
+  return new Float32Array(tris);
+}
+
 describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)", () => {
   it("tem as medidas padrão corretas de suporte médio anti-falhas e anti-fusão", () => {
     expect(DEFAULT_DENTAL_SUPPORT_CONFIG.elevationZ).toBe(6.0);
@@ -342,6 +382,54 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
         expect(d).toBeGreaterThanOrEqual(1.64);
       }
     }
+  });
+
+  it("não coloca suportes dentro de reentrância interna do modelo", async () => {
+    const result = await generateDentalSupports(createNotchedModel(), {
+      elevationZ: 6.0,
+    });
+
+    expect(result.pillarCount).toBeGreaterThan(0);
+
+    const insideNotch = result.pillars.filter((p) => {
+      if (p.x <= 10 || p.x >= 30 || p.y >= 12) return false;
+      const rawZ = p.zContact - 6.0;
+      return p.isLateral ? rawZ < 8.0 : rawZ > 7.5 && rawZ < 8.5;
+    });
+    expect(insideNotch).toHaveLength(0);
+
+    // Ainda deve apoiar a base externa fora da reentrância.
+    expect(
+      result.pillars.some(
+        (p) =>
+          !p.isLateral &&
+          (p.x < 10 || p.x > 30 || p.y > 12) &&
+          p.zContact < 7.0
+      )
+    ).toBe(true);
+  });
+
+  it("rejeita braços laterais que atravessam uma prateleira do modelo", async () => {
+    const result = await generateDentalSupports(createShelfWallModel(), {
+      elevationZ: 6.0,
+      minPillarDistance: 0.1,
+      minSupportGap: 0.01,
+    });
+
+    const wallSupportsAboveShelf = result.pillars.filter((p) => {
+      if (!p.isLateral) return false;
+      const tx = p.targetX ?? p.x;
+      const ty = p.targetY ?? p.y;
+      return tx > 5 && tx < 25 && Math.abs(ty) < 0.3 && p.zContact > 13.5;
+    });
+    expect(wallSupportsAboveShelf).toHaveLength(0);
+
+    // A prateleira em si continua recebendo suporte pela borda externa.
+    expect(
+      result.pillars.some(
+        (p) => p.isLateral && Math.abs((p.targetY ?? p.y) + 1) < 0.1
+      )
+    ).toBe(true);
   });
 
   it("gera suportes com ponta esférica de 0.70mm, profundidade 0.30mm, topo 3.00mm e haste 1.20mm sem fusão", async () => {
