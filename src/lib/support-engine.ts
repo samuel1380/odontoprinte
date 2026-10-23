@@ -469,8 +469,9 @@ export async function generateDentalSupports(
       // overhangs e ficam fora; faces com |nz| >= cos(ângulo) entram.
       if (Math.abs(hit.nz) < minAbsNz) continue;
 
-      // Teto de cavidade interna de modelo oco: a sonda horizontal não escapa.
-      if (!isOpenSpaceProbe(px, py, hit.z - 0.45, 5)) continue;
+      // Teto de cavidade/reentrância interna: a sonda horizontal não escapa
+      // o suficiente. O limite 4 mantém apoios externos que passam rente.
+      if (!isOpenSpaceProbe(px, py, hit.z - 0.45, 4)) continue;
 
       bottomCandidates.push({
         x: px,
@@ -561,8 +562,8 @@ export async function generateDentalSupports(
    * Verifica se a haste/braço de um suporte atravessa o modelo.
    *
    * A coluna vertical é testada com folga real. No braço inclinado, o
-   * centroide é amostrado até perto da ponta; a folga lateral só é exigida
-   * na metade inferior, porque a região do cone/esfera encosta no modelo de
+   * centroide é amostrado até perto da ponta; o raio do cone só é exigido na
+   * metade inferior, porque a região do cone/esfera encosta no modelo de
    * propósito (penetração de 0,30 mm).
    */
   const supportPathHitsModel = (
@@ -602,13 +603,14 @@ export async function generateDentalSupports(
       const pz = knee + armDz * t;
 
       // Centro do braço dentro do modelo: sempre inválido.
-      if (!isOpenSpaceProbe(px, py, pz, t <= 0.5 ? 5 : 2)) return true;
+      if (!isOpenSpaceProbe(px, py, pz)) return true;
 
-      // Longe da ponta, exige folga para o raio do cone não encostar em
-      // outra parede. Perto da ponta, o contato é intencional.
+      // Na metade inferior do braço, exige apenas o raio do próprio cone.
+      // Sem folga extra, para não descartar apoios laterais/traseiros que
+      // passam rente a paredes sem atravessá-las.
       if (t <= 0.5) {
         const localR =
-          pRad + (tip.connectionRadius - pRad) * t + 0.05;
+          pRad + (tip.connectionRadius - pRad) * t;
         if (
           stemCollidesWithModel(
             px,
@@ -756,8 +758,8 @@ export async function generateDentalSupports(
       // A haste precisa estar em espaço aberto em toda a faixa que ocupa.
       const probeLow = baseTopZ + 0.05;
       const probeHigh = Math.max(probeLow + 0.1, knee - 0.05);
-      if (!isOpenSpaceProbe(stemX, stemY, probeLow, 5)) continue;
-      if (!isOpenSpaceProbe(stemX, stemY, probeHigh, 5)) continue;
+      if (!isOpenSpaceProbe(stemX, stemY, probeLow, 3)) continue;
+      if (!isOpenSpaceProbe(stemX, stemY, probeHigh, 3)) continue;
 
       // A haste não pode atravessar outra parede do modelo.
       if (
@@ -803,7 +805,7 @@ export async function generateDentalSupports(
     for (const point of fallbackPoints) {
       const hit = lowestHitAt(point.x, point.y);
       if (!hit) continue;
-      if (!isOpenSpaceProbe(point.x, point.y, hit.z - 0.45, 5)) continue;
+      if (!isOpenSpaceProbe(point.x, point.y, hit.z - 0.45, 4)) continue;
 
       if (hit.z - baseTopZ < 0.45) continue;
       const normal = { nx: 0, ny: 0, nz: -1 };

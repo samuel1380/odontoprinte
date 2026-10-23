@@ -398,13 +398,18 @@ describe("SupportGenerator (Motor de Suportes Odontológicos de Alta Precisão)"
     });
     expect(insideNotch).toHaveLength(0);
 
-    // Ainda deve apoiar a base externa fora da reentrância.
+    // Ainda deve apoiar a base externa e a parede traseira fora da reentrância.
     expect(
       result.pillars.some(
         (p) =>
           !p.isLateral &&
           (p.x < 10 || p.x > 30 || p.y > 12) &&
           p.zContact < 7.0
+      )
+    ).toBe(true);
+    expect(
+      result.pillars.some(
+        (p) => p.isLateral && (p.targetY ?? p.y) > 12
       )
     ).toBe(true);
   });
