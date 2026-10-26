@@ -112,13 +112,16 @@ export function buildRaftMesh(
   let modelMaxX = -Infinity;
   let modelMinY = Infinity;
   let modelMaxY = -Infinity;
+  let modelMinZ = Infinity;
   for (let i = 0; i < modelPositions.length; i += 3) {
     const x = modelPositions[i];
     const y = modelPositions[i + 1];
+    const z = modelPositions[i + 2];
     if (x < modelMinX) modelMinX = x;
     if (x > modelMaxX) modelMaxX = x;
     if (y < modelMinY) modelMinY = y;
     if (y > modelMaxY) modelMaxY = y;
+    if (z < modelMinZ) modelMinZ = z;
   }
 
   let footprintMinX = modelMinX;
@@ -173,11 +176,19 @@ export function buildRaftMesh(
     return insidePlate(x0, y0, x0 + cell, y0 + cell, plateW, plateD);
   };
 
-  // Projeção do modelo: mesma ideia da balsa antiga, mas sem depender do
-  // winding das normais.
+  // Projeção do modelo: quando há suportes (modelo elevado), projeta apenas
+  // a faixa inferior do modelo (zócalo/borda de apoio até 2,5 mm acima do fundo),
+  // mantendo o vão central de arcadas ocas aberto (igual ao Halot Box na foto).
+  const maxProjectZ = supports.length > 0 ? modelMinZ + 2.5 : Infinity;
   const triCount = Math.floor(modelPositions.length / 9);
+
   for (let t = 0; t < triCount; t++) {
     const off = t * 9;
+    const az = modelPositions[off + 2];
+    const bz = modelPositions[off + 5];
+    const cz = modelPositions[off + 8];
+    if (Math.min(az, bz, cz) > maxProjectZ) continue;
+
     const ax = modelPositions[off];
     const ay = modelPositions[off + 1];
     const bx = modelPositions[off + 3];
@@ -210,15 +221,35 @@ export function buildRaftMesh(
     }
   }
 
-  // Dilatação de margem. Usa distância de Chebyshev (como a balsa antiga):
-  // o contorno fica ligeiramente retangular, mas a base fica contínua e
-  // sempre cobre o modelo e os pés.
+  // Marca os discos dos pés dos suportes com raio circular
+  const footCells = Math.max(1, Math.ceil(footR / cell));
+  const footCellsSq = footCells * footCells;
+  for (const p of supports) {
+    const ci = Math.floor((p.x - startX) / cell);
+    const cj = Math.floor((p.y - startY) / cell);
+    for (let dj = -footCells; dj <= footCells; dj++) {
+      for (let di = -footCells; di <= footCells; di++) {
+        if (di * di + dj * dj > footCellsSq) continue;
+        const ri = ci + di;
+        const rj = cj + dj;
+        if (ri < 0 || ri >= cols || rj < 0 || rj >= rows) continue;
+        if (!cellInsidePlate(ri, rj)) continue;
+        occupied[rj * cols + ri] = 1;
+      }
+    }
+  }
+
+  // Dilatação de margem usando distância EUCLIDIANA CIRCULAR:
+  // gera o contorno lobado com curvas suaves contornando cada suporte (estilo Halot Box),
+  // sem criar blocos maciços retangulares retos difíceis de descolar com espátula.
+  const maxDilateSq = dilateCells * dilateCells;
   const dilated = new Uint8Array(cols * rows);
   for (let rj = 0; rj < rows; rj++) {
     for (let ri = 0; ri < cols; ri++) {
       if (!occupied[rj * cols + ri]) continue;
       for (let dj = -dilateCells; dj <= dilateCells; dj++) {
         for (let di = -dilateCells; di <= dilateCells; di++) {
+          if (di * di + dj * dj > maxDilateSq) continue;
           const nri = ri + di;
           const nrj = rj + dj;
           if (nri < 0 || nri >= cols || nrj < 0 || nrj >= rows) continue;
@@ -229,35 +260,23 @@ export function buildRaftMesh(
     }
   }
 
-  // Fallback: se algum pé cair fora da projeção já dilatada (por exemplo em
-  // uma cavidade ou com margem 0), completa só a área necessária. Com a
-  // margem padrão isso não altera o contorno, evitando degraus por suporte.
+  // Garante que todo pé de suporte esteja 100% coberto pelo topo da base
   const pointCovered = (px: number, py: number): boolean => {
     const ri = Math.floor((px - startX) / cell);
     const rj = Math.floor((py - startY) / cell);
     if (ri < 0 || ri >= cols || rj < 0 || rj >= rows) return false;
     return dilated[rj * cols + ri] === 1;
   };
-  const supportMarkCells = Math.max(1, Math.ceil(footR / cell));
-  const diag = footR / Math.SQRT2;
-  for (const p of supports) {
-    const probes = [
-      [p.x, p.y],
-      [p.x + footR, p.y],
-      [p.x - footR, p.y],
-      [p.x, p.y + footR],
-      [p.x, p.y - footR],
-      [p.x + diag, p.y + diag],
-      [p.x - diag, p.y + diag],
-      [p.x + diag, p.y - diag],
-      [p.x - diag, p.y - diag],
-    ];
-    if (probes.every(([px, py]) => pointCovered(px, py))) continue;
 
+  const supportMarkCells = Math.max(1, Math.ceil(footR / cell));
+  const supportMarkSq = supportMarkCells * supportMarkCells;
+  for (const p of supports) {
+    if (pointCovered(p.x, p.y)) continue;
     const ci = Math.floor((p.x - startX) / cell);
     const cj = Math.floor((p.y - startY) / cell);
     for (let dj = -supportMarkCells; dj <= supportMarkCells; dj++) {
       for (let di = -supportMarkCells; di <= supportMarkCells; di++) {
+        if (di * di + dj * dj > supportMarkSq) continue;
         const ri = ci + di;
         const rj = cj + dj;
         if (ri < 0 || ri >= cols || rj < 0 || rj >= rows) continue;
