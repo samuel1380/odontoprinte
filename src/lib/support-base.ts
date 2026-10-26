@@ -86,7 +86,7 @@ export function buildRaftMesh(
   supports: Array<{ x: number; y: number }>,
   options: RaftMeshOptions
 ): RaftMeshResult {
-  const cell = Math.max(0.6, options.cellSize ?? 1.0);
+  const cell = Math.max(0.4, options.cellSize ?? 1.0);
   const topZ = Math.max(0.3, options.topZ);
   const slopeDeg = clamp(options.slopeDeg ?? 30, 10, 80);
   const chamfer = topZ / Math.tan((slopeDeg * Math.PI) / 180);

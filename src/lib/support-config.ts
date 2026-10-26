@@ -29,13 +29,13 @@ export interface DentalSupportConfig {
   baseDiameter: number;
   /** Altura do pé cônico sobre a base contínua (mm). Padrão: 0,8 mm */
   baseLength: number;
-  /** Altura do topo da base contínua em relação à chapa (mm). Padrão: 1,5 mm */
+  /** Altura do topo da base contínua em relação à chapa (mm). Padrão: 0,9 mm (fina e flexível para espátula) */
   raftThickness: number;
   /** Margem da base além do modelo e dos pés dos suportes (mm). Padrão: 2,0 mm */
   raftMargin: number;
   /**
    * Inclinação da rampa de espátula da base em relação à chapa (graus).
-   * Padrão: 30°. O topo fica alto e o perímetro desce até Z=0.
+   * Padrão: 35°. Rampa contínua que permite a entrada limpa da espátula.
    */
   raftSlopeDeg?: number;
   /** Espaçamento da malha de suportes a 75% de densidade (mm). Padrão: 2,6 mm */
@@ -53,6 +53,10 @@ export interface DentalSupportConfig {
   supportAngleDeg?: number;
   /** Densidade da malha de suportes (%). Padrão: 75% */
   supportDensityPercent?: number;
+  /** Ativa barras de travamento estrutural (cross-bracing) entre pilares vizinhos. */
+  crossBracingEnabled?: boolean;
+  /** Diâmetro das barras de travamento estrutural (mm). Padrão: 0,80 mm. */
+  crossBraceDiameter?: number;
   /** Altura útil da chapa (mm). Usada para caber a elevação + modelo no volume. */
   plateHeight?: number;
   /** Folga de ar mínima entre as superfícies de dois suportes (mm). Padrão: 0,40 mm */
@@ -71,8 +75,8 @@ export const DEFAULT_DENTAL_SUPPORT_CONFIG: DentalSupportConfig = {
   tipPenetration: 0.30,
   tipShape: "SPHERE",
   tipUpperDiameter: 0.60,
-  baseDiameter: 1.6,
-  baseLength: 0.8,
+  baseDiameter: 1.8,
+  baseLength: 0.5,
   raftThickness: 1.5,
   raftMargin: 2.0,
   raftSlopeDeg: 30,
@@ -83,6 +87,8 @@ export const DEFAULT_DENTAL_SUPPORT_CONFIG: DentalSupportConfig = {
   supportAngleDeg: 60,
   supportDensityPercent: 75,
   minSupportGap: 0.40,
+  crossBracingEnabled: true,
+  crossBraceDiameter: 0.80,
 };
 
 export const DENTAL_SUPPORT_PROFILES = {
@@ -92,7 +98,7 @@ export const DENTAL_SUPPORT_PROFILES = {
     label: "Suporte Médio (Padrão Ouro)",
     badge: "Recomendado",
     description:
-      "Motor por overhang com anel lateral inferior e base contínua com rampa de espátula a 30°. Firmeza excelente sem marcar dentes/gengiva.",
+      "Réplica do Halot Box Column Support-Medium: ângulo a 60°, travamento estrutural entre pilares e base contínua com rampa de espátula a 30°.",
     config: {
       elevationZ: 6.0,
       pillarDiameter: 1.20,
@@ -101,8 +107,8 @@ export const DENTAL_SUPPORT_PROFILES = {
       tipPenetration: 0.30,
       tipShape: "SPHERE" as const,
       tipUpperDiameter: 0.60,
-      baseDiameter: 1.6,
-      baseLength: 0.8,
+      baseDiameter: 1.8,
+      baseLength: 0.5,
       raftThickness: 1.5,
       raftMargin: 2.0,
       raftSlopeDeg: 30,
@@ -113,6 +119,8 @@ export const DENTAL_SUPPORT_PROFILES = {
       supportAngleDeg: 60,
       supportDensityPercent: 75,
       minSupportGap: 0.40,
+      crossBracingEnabled: true,
+      crossBraceDiameter: 0.80,
     },
   },
   FINE: {
@@ -132,9 +140,9 @@ export const DENTAL_SUPPORT_PROFILES = {
       tipUpperDiameter: 0.50,
       baseDiameter: 1.8,
       baseLength: 0.6,
-      raftThickness: 1.2,
+      raftThickness: 0.75,
       raftMargin: 1.8,
-      raftSlopeDeg: 30,
+      raftSlopeDeg: 35,
       supportSpacing: 2.2,
       minPillarDistance: 2.0,
       modelClearance: 0.70,
@@ -142,6 +150,8 @@ export const DENTAL_SUPPORT_PROFILES = {
       supportAngleDeg: 55,
       supportDensityPercent: 80,
       minSupportGap: 0.40,
+      crossBracingEnabled: true,
+      crossBraceDiameter: 0.70,
     },
   },
   HEAVY: {
@@ -161,9 +171,9 @@ export const DENTAL_SUPPORT_PROFILES = {
       tipUpperDiameter: 0.80,
       baseDiameter: 2.6,
       baseLength: 1.0,
-      raftThickness: 1.8,
+      raftThickness: 1.1,
       raftMargin: 2.6,
-      raftSlopeDeg: 30,
+      raftSlopeDeg: 35,
       supportSpacing: 3.0,
       minPillarDistance: 2.8,
       modelClearance: 1.0,
@@ -171,6 +181,8 @@ export const DENTAL_SUPPORT_PROFILES = {
       supportAngleDeg: 65,
       supportDensityPercent: 70,
       minSupportGap: 0.40,
+      crossBracingEnabled: true,
+      crossBraceDiameter: 0.90,
     },
   },
   // Retrocompatibilidade transparente

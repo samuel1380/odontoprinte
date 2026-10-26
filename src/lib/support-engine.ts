@@ -26,6 +26,7 @@ import {
   type SupportPillarInfo,
 } from "./support-config";
 import {
+  appendCylinderBetween,
   appendSupportMesh,
   computeNormal,
   computeTipProfile,
@@ -740,28 +741,42 @@ export async function generateDentalSupports(
 
     const normal = { nx: ux * side, ny: uy * side, nz: 0 };
 
-    for (let m = 0; m < offsetMultipliers.length; m++) {
-      const lateralOffset = lateralOffsetBase * offsetMultipliers[m];
-      const stemX = c.x + ux * side * lateralOffset;
-      const stemY = c.y + uy * side * lateralOffset;
-      const tip = computeTipProfile(cfg, c.x, c.y, c.z, normal);
-      const hDist = lateralOffset - tip.offsetOut;
+    const angleRad = ((cfg.supportAngleDeg ?? 60.0) * Math.PI) / 180;
+    const tanAngle = Math.tan(angleRad);
+    const cosAngle = Math.cos(angleRad);
+    const scaleMultipliers = [1.0, 1.25, 1.5];
 
-      const desiredKnee =
-        tip.sCz -
-        Math.sqrt(Math.max(0.04, cfg.tipLength * cfg.tipLength - hDist * hDist));
+    for (let m = 0; m < scaleMultipliers.length; m++) {
+      const mult = scaleMultipliers[m];
+      const tip = computeTipProfile(cfg, c.x, c.y, c.z, normal);
+
+      const minH = Math.max(0.2, lateralOffsetBase * mult - tip.offsetOut);
+      let hDist = Math.max(minH, cfg.tipLength * mult * cosAngle);
+      let dz = hDist * tanAngle;
+
+      // Se o ponto de contato for baixo na parede, ajusta a altura mantendo a folga
+      if (tip.sCz - dz < baseTopZ + 0.15) {
+        dz = Math.max(0.35, tip.sCz - (baseTopZ + 0.15));
+        hDist = Math.max(minH, dz / tanAngle);
+      }
+
+      const desiredKnee = tip.sCz - dz;
       const knee = Math.max(
         baseTopZ + 0.02,
         Math.min(desiredKnee, tip.zConnection - 0.02)
       );
 
-      // A haste precisa estar em espaço aberto em toda a faixa que ocupa.
+      const lateralOffset = hDist + tip.offsetOut;
+      const stemX = c.x + ux * side * lateralOffset;
+      const stemY = c.y + uy * side * lateralOffset;
+
+      // A haste precisa estar em espaço livre externo (exige 3 direções para bloquear reentrâncias)
       const probeLow = baseTopZ + 0.05;
       const probeHigh = Math.max(probeLow + 0.1, knee - 0.05);
       if (!isOpenSpaceProbe(stemX, stemY, probeLow, 3)) continue;
       if (!isOpenSpaceProbe(stemX, stemY, probeHigh, 3)) continue;
 
-      // A haste não pode atravessar outra parede do modelo.
+      // A haste não pode colidir com o modelo
       if (
         stemCollidesWithModel(
           stemX,
@@ -860,6 +875,70 @@ export async function generateDentalSupports(
       builtPillars.push(pillars[i]);
     } else {
       supportCoords.length = before;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 7b. Travamento Estrutural Anti-Distorção (Cross-Bracing entre pilares)
+  // ---------------------------------------------------------------------------
+  // Como no Halot Box (Foto 3): barras horizontais conectando pilares adjacentes
+  // travam a estrutura como uma treliça rígida, impedindo que as hastes fletem
+  // ou vibrem durante a sucção e subida/descida do FEP.
+  if (cfg.crossBracingEnabled !== false && builtPillars.length > 1) {
+    const braceR = (cfg.crossBraceDiameter ?? 0.80) / 2;
+    const connectedPillars = new Set<number>();
+
+    for (let i = 0; i < builtPillars.length; i++) {
+      if (connectedPillars.has(i)) continue;
+      const p1 = builtPillars[i];
+      const p1Knee = p1.zKnee ?? p1.zContact;
+      const p1H = p1Knee - baseTopZ;
+      if (p1H < 1.8) continue; // Haste vertical curta demais para travar
+
+      let bestJ = -1;
+      let bestDist = Infinity;
+
+      for (let j = i + 1; j < builtPillars.length; j++) {
+        if (connectedPillars.has(j)) continue;
+        const p2 = builtPillars[j];
+        const p2Knee = p2.zKnee ?? p2.zContact;
+        const p2H = p2Knee - baseTopZ;
+        if (p2H < 1.8) continue;
+
+        const d = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+        if (d >= minPillarDist - 0.1 && d <= 4.5 && d < bestDist) {
+          bestDist = d;
+          bestJ = j;
+        }
+      }
+
+      if (bestJ !== -1) {
+        const p2 = builtPillars[bestJ];
+        const p2Knee = p2.zKnee ?? p2.zContact;
+        const minKnee = Math.min(p1Knee, p2Knee);
+        const zBrace = baseTopZ + (minKnee - baseTopZ) * 0.55;
+
+        const mx = (p1.x + p2.x) * 0.5;
+        const my = (p1.y + p2.y) * 0.5;
+        if (
+          !stemCollidesWithModel(mx, my, braceR + 0.15, zBrace - 0.1, zBrace + 0.1) &&
+          isOpenSpaceProbe(mx, my, zBrace, 2)
+        ) {
+          appendCylinderBetween(
+            supportCoords,
+            p1.x,
+            p1.y,
+            zBrace,
+            p2.x,
+            p2.y,
+            zBrace,
+            braceR,
+            12
+          );
+          connectedPillars.add(i);
+          connectedPillars.add(bestJ);
+        }
+      }
     }
   }
 

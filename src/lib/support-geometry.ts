@@ -594,3 +594,96 @@ export function distPointToTriangle2D(
   const d3 = distPointToSegmentSq(px, py, cx, cy, ax, ay);
   return Math.sqrt(Math.min(d1, d2, d3));
 }
+
+/**
+ * Adiciona um cilindro fechado e manifold (2 triângulos por aresta) entre dois
+ * pontos no espaço 3D. Usado para barras de travamento estrutural (cross-bracing)
+ * entre pilares vizinhos, eliminando a vibração e flexão na sucção do FEP.
+ */
+export function appendCylinderBetween(
+  out: number[],
+  x0: number,
+  y0: number,
+  z0: number,
+  x1: number,
+  y1: number,
+  z1: number,
+  radius: number,
+  segments = 12
+): void {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const dz = z1 - z0;
+  const len = Math.hypot(dx, dy, dz);
+  if (len < 1e-4) return;
+
+  const ux = dx / len;
+  const uy = dy / len;
+  const uz = dz / len;
+
+  let px = 0;
+  let py = 0;
+  let pz = 1;
+  if (Math.abs(uz) > 0.9) {
+    px = 1;
+    py = 0;
+    pz = 0;
+  }
+
+  // v1 = (u x p) / ||u x p||
+  let v1x = uy * pz - uz * py;
+  let v1y = uz * px - ux * pz;
+  let v1z = ux * py - uy * px;
+  const v1Len = Math.hypot(v1x, v1y, v1z) || 1;
+  v1x /= v1Len;
+  v1y /= v1Len;
+  v1z /= v1Len;
+
+  // v2 = u x v1
+  const v2x = uy * v1z - uz * v1y;
+  const v2y = uz * v1x - ux * v1z;
+  const v2z = ux * v1y - uy * v1x;
+
+  const ring0: Array<{ x: number; y: number; z: number }> = [];
+  const ring1: Array<{ x: number; y: number; z: number }> = [];
+
+  for (let i = 0; i < segments; i++) {
+    const angle = (2 * Math.PI * i) / segments;
+    const c = Math.cos(angle) * radius;
+    const s = Math.sin(angle) * radius;
+    const ox = v1x * c + v2x * s;
+    const oy = v1y * c + v2y * s;
+    const oz = v1z * c + v2z * s;
+
+    ring0.push({ x: x0 + ox, y: y0 + oy, z: z0 + oz });
+    ring1.push({ x: x1 + ox, y: y1 + oy, z: z1 + oz });
+  }
+
+  for (let i = 0; i < segments; i++) {
+    const j = (i + 1) % segments;
+    // Quad lateral (2 triângulos, normais para fora)
+    out.push(
+      ring0[i].x, ring0[i].y, ring0[i].z,
+      ring0[j].x, ring0[j].y, ring0[j].z,
+      ring1[j].x, ring1[j].y, ring1[j].z
+    );
+    out.push(
+      ring0[i].x, ring0[i].y, ring0[i].z,
+      ring1[j].x, ring1[j].y, ring1[j].z,
+      ring1[i].x, ring1[i].y, ring1[i].z
+    );
+    // Tampa 0 (em A, normal em -u)
+    out.push(
+      x0, y0, z0,
+      ring0[j].x, ring0[j].y, ring0[j].z,
+      ring0[i].x, ring0[i].y, ring0[i].z
+    );
+    // Tampa 1 (em B, normal em +u)
+    out.push(
+      x1, y1, z1,
+      ring1[i].x, ring1[i].y, ring1[i].z,
+      ring1[j].x, ring1[j].y, ring1[j].z
+    );
+  }
+}
+
